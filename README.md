@@ -29,7 +29,7 @@ Native macOS menu bar app for push-to-talk voice-to-text. Hold the Fn key, speak
 ## Install
 
 ```sh
-git clone https://github.com/torsten/OpenWritr.git
+git clone https://github.com/trsdn/OpenWritr.git
 cd OpenWritr
 swift build -c release
 .build/release/OpenWritr
