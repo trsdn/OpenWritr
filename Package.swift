@@ -10,10 +10,16 @@ let package = Package(
         .package(url: "https://github.com/FluidInference/FluidAudio.git", from: "0.7.9")
     ],
     targets: [
+        .target(
+            name: "ObjCExceptionCatcher",
+            path: "Sources/ObjCExceptionCatcher",
+            publicHeadersPath: "include"
+        ),
         .executableTarget(
             name: "OpenWritr",
             dependencies: [
-                .product(name: "FluidAudio", package: "FluidAudio")
+                .product(name: "FluidAudio", package: "FluidAudio"),
+                "ObjCExceptionCatcher"
             ],
             resources: [
                 .copy("Resources")

@@ -5,10 +5,13 @@ final class HotkeyManager {
     var onRecordingStarted: (@Sendable () -> Void)?
     var onRecordingStopped: (@Sendable () -> Void)?
 
+    // Read from callback thread — use atomic-like access via nonisolated context
+    nonisolated(unsafe) var activeFlag: UInt64 = 0x800000 // Fn key default
+
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
     private var contextPtr: UnsafeMutablePointer<HotkeyContext>?
-    private var isFnPressed = false
+    private var isKeyPressed = false
 
     func start() {
         let eventMask: CGEventMask = (1 << CGEventType.flagsChanged.rawValue)
@@ -53,14 +56,13 @@ final class HotkeyManager {
     }
 
     fileprivate func handleFlagsChanged(_ flags: CGEventFlags) {
-        let fnFlag: UInt64 = 0x800000
-        let fnIsDown = (flags.rawValue & fnFlag) != 0
+        let keyIsDown = (flags.rawValue & activeFlag) != 0
 
-        if fnIsDown && !isFnPressed {
-            isFnPressed = true
+        if keyIsDown && !isKeyPressed {
+            isKeyPressed = true
             onRecordingStarted?()
-        } else if !fnIsDown && isFnPressed {
-            isFnPressed = false
+        } else if !keyIsDown && isKeyPressed {
+            isKeyPressed = false
             onRecordingStopped?()
         }
     }
