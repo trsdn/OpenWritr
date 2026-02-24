@@ -28,7 +28,9 @@ Native macOS menu bar app for push-to-talk voice-to-text. Hold the Fn key, speak
 | Model | NVIDIA Parakeet TDT 0.6B v3 |
 | Inference | Apple Neural Engine via CoreML |
 | Runtime memory | ~38 MB physical |
-| Binary size | 6.6 MB (release) |
+| Peak memory | ~48 MB physical |
+| App bundle | 7.9 MB |
+| Download (zip) | 3.2 MB |
 | Model size | ~460 MB (downloaded on first launch) |
 | Languages | 25 (English, German, French, Spanish, and more) |
 | Data sent to cloud | None |
