@@ -18,56 +18,41 @@ struct MenuBarView: View {
 
     @ViewBuilder
     private var statusSection: some View {
-        HStack {
-            statusIcon
-            Text(statusText)
-                .font(.headline)
-        }
-        .padding(.horizontal, 4)
-    }
-
-    private var statusIcon: some View {
-        Group {
-            switch viewModel.state {
-            case .idle, .ready:
-                Image(systemName: "mic")
-                    .foregroundStyle(.secondary)
-            case .downloading(let progress):
-                ProgressView(value: progress)
-                    .frame(width: 16)
-            case .listening:
-                Image(systemName: "mic.fill")
-                    .foregroundStyle(.red)
-            case .transcribing:
-                ProgressView()
-                    .controlSize(.small)
-            case .error:
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.orange)
-            }
-        }
+        Text(statusText)
+            .font(.headline)
+            .padding(.horizontal, 4)
     }
 
     private var statusText: String {
         switch viewModel.state {
         case .idle:
-            return "Initializing..."
+            return "Initializing…"
+        case .loading:
+            return "Loading Model…"
         case .downloading(let progress):
-            return "Downloading model (\(Int(progress * 100))%)"
+            return "Downloading Model (\(Int(progress * 100))%)…"
         case .ready:
-            return "Ready — Hold Fn to speak"
+            return "Ready — Hold 🌐 to Speak"
         case .listening:
-            return "Listening..."
+            return "Listening…"
         case .transcribing:
-            return "Transcribing..."
+            return "Transcribing…"
         case .error(let msg):
             return "Error: \(msg)"
         }
     }
 
+    private var isReady: Bool {
+        if case .ready = viewModel.state { return true }
+        return false
+    }
+
     @ViewBuilder
     private var settingsSection: some View {
-        Toggle("Auto-paste", isOn: $viewModel.autoPasteEnabled)
-        Toggle("Sound effects", isOn: $viewModel.soundEnabled)
+        Toggle("Auto-Paste", isOn: $viewModel.autoPasteEnabled)
+            .disabled(!isReady)
+        Toggle("Sound Effects", isOn: $viewModel.soundEnabled)
+            .disabled(!isReady)
+        Toggle("Launch at Login", isOn: $viewModel.launchAtLogin)
     }
 }

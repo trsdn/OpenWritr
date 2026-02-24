@@ -13,8 +13,8 @@
     <key>LSUIElement</key>
     <true/>
     <key>NSMicrophoneUsageDescription</key>
-    <string>OpenWritr needs microphone access to transcribe your speech to text.</string>
+    <string>Microphone access is needed to convert your speech to text.</string>
     <key>NSAccessibilityUsageDescription</key>
-    <string>OpenWritr needs Accessibility access to detect the Fn key for push-to-talk and to paste transcribed text into other apps.</string>
+    <string>Accessibility access is needed to detect the Fn key for push-to-talk and to paste transcribed text into other apps.</string>
 </dict>
 </plist>

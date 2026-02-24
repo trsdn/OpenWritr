@@ -1,0 +1,962 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenWritr — Voice to Text, Instantly</title>
+<meta name="description" content="Native macOS menu bar app for push-to-talk speech-to-text. Completely local, blazing fast, powered by Apple Neural Engine.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,300;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+:root {
+  --bg: #07090e;
+  --bg-raised: #0d1117;
+  --bg-surface: #151b26;
+  --border: #1e2a3a;
+  --text: #e2e8f0;
+  --text-dim: #7a8ba0;
+  --text-faint: #4a5568;
+  --accent: #3ecfff;
+  --accent-glow: rgba(62,207,255,.15);
+  --accent-deep: #1a7a9e;
+  --red: #ff4d4d;
+  --red-glow: rgba(255,77,77,.2);
+  --green: #34d399;
+  --radius: 12px;
+  --font: 'DM Sans', -apple-system, sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+/* ---- Noise overlay ---- */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.03'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* ---- Ambient glow ---- */
+.glow-top {
+  position: absolute;
+  top: -220px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 800px;
+  height: 500px;
+  background: radial-gradient(ellipse, var(--accent-glow) 0%, transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ---- Container ---- */
+.wrap {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 0 24px;
+  position: relative;
+  z-index: 1;
+}
+
+/* ---- Nav ---- */
+nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  padding: 16px 24px;
+  display: flex;
+  justify-content: center;
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  background: rgba(7,9,14,.7);
+  border-bottom: 1px solid rgba(30,42,58,.5);
+}
+
+nav .inner {
+  max-width: 1080px;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 600;
+  font-size: 1.05rem;
+  letter-spacing: -.02em;
+  text-decoration: none;
+  color: var(--text);
+}
+
+.logo-mark {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-deep) 100%);
+  display: grid;
+  place-items: center;
+}
+
+.logo-mark svg { width: 16px; height: 16px; }
+
+nav a {
+  color: var(--text-dim);
+  text-decoration: none;
+  font-size: .875rem;
+  font-weight: 400;
+  transition: color .2s;
+}
+nav a:hover { color: var(--text); }
+
+.nav-links { display: flex; gap: 28px; align-items: center; }
+
+.btn-nav {
+  padding: 7px 16px;
+  border-radius: 8px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  color: var(--text) !important;
+  font-weight: 500;
+  transition: border-color .2s, background .2s;
+}
+.btn-nav:hover {
+  border-color: var(--accent);
+  background: rgba(62,207,255,.06);
+}
+
+/* ---- Hero ---- */
+.hero {
+  padding: 160px 0 100px;
+  text-align: center;
+  position: relative;
+}
+
+.hero-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 14px 5px 8px;
+  border-radius: 100px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  font-size: .8rem;
+  color: var(--text-dim);
+  margin-bottom: 32px;
+  animation: fadeUp .8s ease both;
+}
+
+.hero-badge .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 8px var(--green);
+  animation: pulse-dot 2s ease infinite;
+}
+
+@keyframes pulse-dot {
+  0%,100% { opacity: 1; }
+  50% { opacity: .4; }
+}
+
+h1 {
+  font-size: clamp(2.8rem, 6vw, 4.2rem);
+  font-weight: 700;
+  letter-spacing: -.04em;
+  line-height: 1.08;
+  margin-bottom: 20px;
+  animation: fadeUp .8s ease .1s both;
+}
+
+h1 .accent {
+  background: linear-gradient(135deg, var(--accent) 20%, #a78bfa 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.hero-sub {
+  font-size: 1.15rem;
+  color: var(--text-dim);
+  max-width: 540px;
+  margin: 0 auto 40px;
+  line-height: 1.7;
+  animation: fadeUp .8s ease .2s both;
+}
+
+.hero-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  animation: fadeUp .8s ease .3s both;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 24px;
+  border-radius: 10px;
+  font-family: var(--font);
+  font-size: .925rem;
+  font-weight: 500;
+  text-decoration: none;
+  transition: all .25s;
+  cursor: pointer;
+  border: none;
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: var(--bg);
+  box-shadow: 0 0 20px var(--accent-glow), inset 0 1px 0 rgba(255,255,255,.2);
+}
+.btn-primary:hover {
+  box-shadow: 0 0 40px rgba(62,207,255,.3), inset 0 1px 0 rgba(255,255,255,.2);
+  transform: translateY(-1px);
+}
+
+.btn-secondary {
+  background: var(--bg-surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+.btn-secondary:hover {
+  border-color: var(--text-faint);
+  transform: translateY(-1px);
+}
+
+/* ---- Mockup ---- */
+.mockup {
+  margin: 60px auto 0;
+  max-width: 680px;
+  animation: fadeUp .8s ease .45s both;
+}
+
+.menubar-mock {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow:
+    0 4px 40px rgba(0,0,0,.4),
+    0 0 80px var(--accent-glow);
+}
+
+.menubar-top {
+  height: 32px;
+  background: rgba(255,255,255,.03);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  gap: 8px;
+}
+
+.dot-row { display: flex; gap: 6px; }
+.dot-row span {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+}
+.dot-row .r { background: #ff5f57; }
+.dot-row .y { background: #febc2e; }
+.dot-row .g { background: #28c840; }
+
+.menubar-top .title {
+  flex: 1;
+  text-align: center;
+  font-size: .75rem;
+  color: var(--text-faint);
+  letter-spacing: .02em;
+}
+
+.menubar-body {
+  padding: 32px 28px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+
+.pill-overlay {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 28px;
+  border-radius: 100px;
+  background: rgba(255,255,255,.06);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255,255,255,.08);
+}
+
+.rec-dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: var(--red);
+  box-shadow: 0 0 12px var(--red-glow);
+  animation: pulse-dot 1.2s ease infinite;
+}
+
+.pill-overlay span {
+  font-size: .9rem;
+  font-weight: 500;
+  color: var(--text);
+  letter-spacing: .01em;
+}
+
+.waveform {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  height: 40px;
+}
+
+.waveform .bar {
+  width: 3px;
+  border-radius: 3px;
+  background: var(--accent);
+  animation: wave 1s ease-in-out infinite;
+  opacity: .7;
+}
+
+@keyframes wave {
+  0%,100% { height: 8px; opacity: .3; }
+  50% { height: 100%; opacity: .9; }
+}
+
+.mock-text {
+  font-family: var(--mono);
+  font-size: .85rem;
+  color: var(--accent);
+  opacity: .8;
+  overflow: hidden;
+  white-space: nowrap;
+  border-right: 2px solid var(--accent);
+  animation: typing 3s steps(44) 1s both, blink .6s step-end infinite;
+  max-width: 0;
+}
+
+@keyframes typing { to { max-width: 100%; } }
+@keyframes blink { 50% { border-color: transparent; } }
+
+/* ---- Sections ---- */
+section { padding: 100px 0; }
+
+.section-label {
+  font-family: var(--mono);
+  font-size: .75rem;
+  font-weight: 500;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: .12em;
+  margin-bottom: 12px;
+}
+
+h2 {
+  font-size: clamp(1.8rem, 4vw, 2.4rem);
+  font-weight: 700;
+  letter-spacing: -.03em;
+  line-height: 1.15;
+  margin-bottom: 16px;
+}
+
+.section-desc {
+  color: var(--text-dim);
+  max-width: 520px;
+  font-size: 1.05rem;
+  line-height: 1.7;
+  margin-bottom: 48px;
+}
+
+/* ---- Features Grid ---- */
+.features-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.feature {
+  background: var(--bg-raised);
+  padding: 32px 28px;
+  transition: background .3s;
+}
+.feature:hover { background: var(--bg-surface); }
+
+.feature-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 16px;
+  font-size: 1.2rem;
+}
+
+.fi-blue { background: rgba(62,207,255,.1); color: var(--accent); }
+.fi-red { background: rgba(255,77,77,.1); color: var(--red); }
+.fi-green { background: rgba(52,211,153,.1); color: var(--green); }
+.fi-purple { background: rgba(167,139,250,.1); color: #a78bfa; }
+.fi-amber { background: rgba(251,191,36,.1); color: #fbbf24; }
+.fi-teal { background: rgba(45,212,191,.1); color: #2dd4bf; }
+
+.feature h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: -.01em;
+  margin-bottom: 8px;
+}
+
+.feature p {
+  font-size: .875rem;
+  color: var(--text-dim);
+  line-height: 1.6;
+}
+
+/* ---- How It Works ---- */
+.steps {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 32px;
+}
+
+.step {
+  position: relative;
+  padding: 32px 28px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  transition: border-color .3s;
+}
+.step:hover { border-color: var(--accent-deep); }
+
+.step-num {
+  font-family: var(--mono);
+  font-size: .7rem;
+  font-weight: 500;
+  color: var(--accent);
+  background: rgba(62,207,255,.08);
+  padding: 4px 10px;
+  border-radius: 6px;
+  display: inline-block;
+  margin-bottom: 16px;
+}
+
+.step h3 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: 8px;
+  letter-spacing: -.01em;
+}
+
+.step p {
+  font-size: .875rem;
+  color: var(--text-dim);
+  line-height: 1.6;
+}
+
+.step-connector {
+  display: none;
+}
+
+/* ---- Benchmark ---- */
+.benchmark {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 48px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 32px;
+  text-align: center;
+}
+
+.stat-val {
+  font-size: 2.4rem;
+  font-weight: 700;
+  letter-spacing: -.03em;
+  margin-bottom: 4px;
+  background: linear-gradient(180deg, var(--text) 40%, var(--text-dim) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.stat-label {
+  font-size: .8rem;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+
+/* ---- Tech Stack ---- */
+.stack-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.stack-item {
+  background: var(--bg-raised);
+  padding: 24px 28px;
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  transition: background .3s;
+}
+.stack-item:hover { background: var(--bg-surface); }
+
+.stack-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: rgba(62,207,255,.06);
+  border: 1px solid var(--border);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  font-size: .95rem;
+}
+
+.stack-item h4 {
+  font-size: .925rem;
+  font-weight: 600;
+  margin-bottom: 3px;
+  letter-spacing: -.01em;
+}
+
+.stack-item p {
+  font-size: .8rem;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+
+/* ---- Install ---- */
+.install-block {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.install-header {
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: .8rem;
+  color: var(--text-faint);
+}
+
+.install-header .circle {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--green);
+}
+
+.install-body {
+  padding: 24px 28px;
+}
+
+.install-body pre {
+  font-family: var(--mono);
+  font-size: .875rem;
+  line-height: 1.8;
+  color: var(--text-dim);
+  overflow-x: auto;
+}
+
+.install-body pre .cmd { color: var(--text); }
+.install-body pre .comment { color: var(--text-faint); }
+.install-body pre .accent { color: var(--accent); }
+
+/* ---- Footer ---- */
+footer {
+  padding: 60px 0;
+  border-top: 1px solid var(--border);
+  text-align: center;
+}
+
+footer p {
+  font-size: .85rem;
+  color: var(--text-faint);
+  line-height: 1.8;
+}
+
+footer a {
+  color: var(--text-dim);
+  text-decoration: none;
+  transition: color .2s;
+}
+footer a:hover { color: var(--accent); }
+
+.footer-links {
+  display: flex;
+  justify-content: center;
+  gap: 24px;
+  margin-bottom: 16px;
+}
+
+/* ---- Animations ---- */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.reveal {
+  opacity: 0;
+  transform: translateY(24px);
+  transition: opacity .7s ease, transform .7s ease;
+}
+.reveal.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ---- Responsive ---- */
+@media (max-width: 768px) {
+  .features-grid { grid-template-columns: 1fr; }
+  .steps { grid-template-columns: 1fr; }
+  .benchmark { grid-template-columns: repeat(2, 1fr); }
+  .stack-grid { grid-template-columns: 1fr; }
+  .nav-links a:not(.btn-nav) { display: none; }
+  .hero { padding: 130px 0 60px; }
+  .benchmark { padding: 32px 20px; }
+}
+
+@media (max-width: 480px) {
+  .hero-actions { flex-direction: column; align-items: center; }
+}
+</style>
+</head>
+<body>
+
+<div class="glow-top"></div>
+
+<!-- Nav -->
+<nav>
+  <div class="inner">
+    <a href="#" class="logo">
+      <div class="logo-mark">
+        <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
+          <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+          <line x1="12" x2="12" y1="19" y2="22"/>
+        </svg>
+      </div>
+      OpenWritr
+    </a>
+    <div class="nav-links">
+      <a href="#features">Features</a>
+      <a href="#how">How It Works</a>
+      <a href="#install">Install</a>
+      <a href="https://github.com/torsten/OpenWritr" class="btn-nav">GitHub</a>
+    </div>
+  </div>
+</nav>
+
+<!-- Hero -->
+<section class="hero">
+  <div class="wrap">
+    <div class="hero-badge">
+      <span class="dot"></span>
+      macOS &middot; Apple Silicon &middot; Completely Offline
+    </div>
+    <h1>Your voice.<br><span class="accent">Instant text.</span></h1>
+    <p class="hero-sub">
+      Native macOS menu bar app that turns speech into text in under a second.
+      Push to talk, release to paste. No cloud, no latency, no compromise.
+    </p>
+    <div class="hero-actions">
+      <a href="#install" class="btn btn-primary">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+        Get Started
+      </a>
+      <a href="https://github.com/torsten/OpenWritr" class="btn btn-secondary">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12Z"/></svg>
+        View Source
+      </a>
+    </div>
+
+    <!-- Mockup -->
+    <div class="mockup">
+      <div class="menubar-mock">
+        <div class="menubar-top">
+          <div class="dot-row">
+            <span class="r"></span><span class="y"></span><span class="g"></span>
+          </div>
+          <span class="title">OpenWritr</span>
+          <div style="width:42px"></div>
+        </div>
+        <div class="menubar-body">
+          <div class="pill-overlay">
+            <div class="rec-dot"></div>
+            <span>Listening...</span>
+          </div>
+          <div class="waveform" id="waveform"></div>
+          <div class="mock-text">The quick brown fox jumps over the lazy dog</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Benchmark -->
+<section>
+  <div class="wrap">
+    <div class="benchmark reveal">
+      <div>
+        <div class="stat-val">&lt;1s</div>
+        <div class="stat-label">End-to-end latency</div>
+      </div>
+      <div>
+        <div class="stat-val">190&times;</div>
+        <div class="stat-label">Realtime factor</div>
+      </div>
+      <div>
+        <div class="stat-val">25</div>
+        <div class="stat-label">Languages</div>
+      </div>
+      <div>
+        <div class="stat-val">0 B</div>
+        <div class="stat-label">Data sent to cloud</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Features -->
+<section id="features">
+  <div class="wrap">
+    <div class="section-label reveal">Features</div>
+    <h2 class="reveal">Built for speed<br>and nothing else</h2>
+    <p class="section-desc reveal">
+      No browser. No Electron. No Python runtime. Just native Swift talking directly
+      to the Apple Neural Engine. Every millisecond matters.
+    </p>
+    <div class="features-grid reveal">
+      <div class="feature">
+        <div class="feature-icon fi-red">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>
+        </div>
+        <h3>Push to Talk</h3>
+        <p>Hold the Fn key to record, release to transcribe. Natural as a walkie-talkie. No clicking, no UI.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon fi-blue">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/></svg>
+        </div>
+        <h3>Auto-Paste</h3>
+        <p>Text appears at your cursor in whatever app is focused. TextEdit, browser, terminal, Slack&mdash;anywhere.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon fi-green">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/></svg>
+        </div>
+        <h3>100% Local</h3>
+        <p>Everything runs on-device via CoreML. Your audio never leaves your machine. No account, no API key, no internet.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon fi-purple">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="m16 12-4-4-4 4"/><path d="M12 16V8"/></svg>
+        </div>
+        <h3>Neural Engine</h3>
+        <p>The encoder runs on Apple&rsquo;s dedicated Neural Engine via CoreML. 190&times; realtime on M-series chips.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon fi-amber">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+        </div>
+        <h3>Invisible Until Needed</h3>
+        <p>Lives in your menu bar. No dock icon, no window. A translucent overlay appears only while recording.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon fi-teal">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+        </div>
+        <h3>25 Languages</h3>
+        <p>Powered by NVIDIA Parakeet TDT v3 supporting English, German, French, Spanish, and 21 more European languages.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- How It Works -->
+<section id="how">
+  <div class="wrap">
+    <div class="section-label reveal">How It Works</div>
+    <h2 class="reveal">Three steps.<br>Under one second.</h2>
+    <p class="section-desc reveal">
+      The entire pipeline&mdash;from microphone to pasted text&mdash;completes
+      before you finish lifting your finger.
+    </p>
+    <div class="steps">
+      <div class="step reveal">
+        <span class="step-num">01</span>
+        <h3>Hold Fn</h3>
+        <p>Press and hold the Fn (Globe) key. The mic activates instantly&mdash;audio streams into a 16kHz buffer via AVAudioEngine. A floating pill overlay confirms you&rsquo;re recording.</p>
+      </div>
+      <div class="step reveal">
+        <span class="step-num">02</span>
+        <h3>Release</h3>
+        <p>Let go of Fn. The audio buffer is passed to the Parakeet TDT model running on the Neural Engine via CoreML. Transcription finishes in milliseconds.</p>
+      </div>
+      <div class="step reveal">
+        <span class="step-num">03</span>
+        <h3>Pasted</h3>
+        <p>The transcribed text is placed on the clipboard and a Cmd+V is simulated. Text appears at your cursor. Your original clipboard is silently restored.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Tech Stack -->
+<section id="tech">
+  <div class="wrap">
+    <div class="section-label reveal">Under the Hood</div>
+    <h2 class="reveal">Built on proven<br>foundations</h2>
+    <p class="section-desc reveal">
+      OpenWritr stands on the shoulders of exceptional open-source work.
+    </p>
+    <div class="stack-grid reveal">
+      <div class="stack-item">
+        <div class="stack-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>
+        </div>
+        <div>
+          <h4>FluidAudio</h4>
+          <p>CoreML-optimized speech recognition framework by FluidInference. Provides the Parakeet TDT 0.6b v3 model compiled for Apple Neural Engine with ~190&times; realtime performance.</p>
+        </div>
+      </div>
+      <div class="stack-item">
+        <div class="stack-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
+        </div>
+        <div>
+          <h4>NVIDIA Parakeet TDT v3</h4>
+          <p>State-of-the-art 600M parameter ASR model using Token-and-Duration Transducer architecture. Non-autoregressive decoding for minimum latency. 25 European languages.</p>
+        </div>
+      </div>
+      <div class="stack-item">
+        <div class="stack-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round"><path d="M12 20a8 8 0 1 0 0-16 8 8 0 0 0 0 16Z"/><path d="M12 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z"/><path d="M12 2v2"/><path d="M12 22v-2"/><path d="m17 20.66-1-1.73"/><path d="M11 10.27 7 3.34"/></svg>
+        </div>
+        <div>
+          <h4>Apple CoreML &amp; Neural Engine</h4>
+          <p>Hardware-accelerated inference on Apple Silicon&rsquo;s dedicated Neural Engine. The encoder model runs entirely on the ANE for maximum throughput and minimal power draw.</p>
+        </div>
+      </div>
+      <div class="stack-item">
+        <div class="stack-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round"><path d="M17 6.1H3"/><path d="M21 12.1H3"/><path d="M15.1 18H3"/></svg>
+        </div>
+        <div>
+          <h4>Swift 6 &amp; SwiftUI</h4>
+          <p>Pure native implementation with strict concurrency safety. MenuBarExtra for the system tray, AVAudioEngine for low-latency capture, CGEventTap for global hotkeys.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Install -->
+<section id="install">
+  <div class="wrap">
+    <div class="section-label reveal">Get Started</div>
+    <h2 class="reveal">Up and running<br>in 30 seconds</h2>
+    <p class="section-desc reveal">
+      Requires macOS 14+ and Apple Silicon. The ASR model (~460 MB) downloads
+      automatically on first launch.
+    </p>
+    <div class="install-block reveal">
+      <div class="install-header">
+        <span class="circle"></span>
+        Terminal
+      </div>
+      <div class="install-body">
+<pre><span class="comment"># Clone and build</span>
+<span class="cmd">git clone https://github.com/torsten/OpenWritr.git</span>
+<span class="cmd">cd OpenWritr</span>
+<span class="cmd">swift build -c release</span>
+
+<span class="comment"># Run</span>
+<span class="cmd">.build/release/OpenWritr</span>
+
+<span class="comment"># Grant Microphone + Accessibility permissions when prompted</span>
+<span class="comment"># Hold <span class="accent">Fn</span> to speak, release to paste</span></pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Footer -->
+<footer>
+  <div class="wrap">
+    <div class="footer-links">
+      <a href="https://github.com/torsten/OpenWritr">GitHub</a>
+      <a href="https://github.com/torsten/OpenWritr/issues">Issues</a>
+      <a href="https://github.com/FluidInference/FluidAudio">FluidAudio</a>
+    </div>
+    <p>
+      OpenWritr is open source. Built with
+      <a href="https://github.com/FluidInference/FluidAudio">FluidAudio</a>
+      and <a href="https://huggingface.co/FluidInference/parakeet-tdt-0.6b-v3-coreml">Parakeet TDT v3</a>.
+    </p>
+    <p style="margin-top:4px;font-size:.78rem;">
+      MIT License &middot; &copy; 2026
+    </p>
+  </div>
+</footer>
+
+<script>
+// Generate waveform bars
+const wf = document.getElementById('waveform');
+for (let i = 0; i < 40; i++) {
+  const bar = document.createElement('div');
+  bar.className = 'bar';
+  bar.style.animationDelay = `${(Math.sin(i * .4) * .5 + .5) * .8}s`;
+  bar.style.height = `${Math.random() * 24 + 8}px`;
+  wf.appendChild(bar);
+}
+
+// Scroll reveal
+const obs = new IntersectionObserver((entries) => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      e.target.classList.add('visible');
+      obs.unobserve(e.target);
+    }
+  });
+}, { threshold: 0.15 });
+
+document.querySelectorAll('.reveal').forEach(el => obs.observe(el));
+</script>
+</body>
+</html>

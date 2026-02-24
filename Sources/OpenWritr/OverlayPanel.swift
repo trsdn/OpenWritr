@@ -43,11 +43,11 @@ final class OverlayPanel {
         panel.contentView = hostingView
         self.hostingView = hostingView
 
-        // Position at top-center of main screen
+        // Position at top-center of main screen, respecting safe area (notch)
         if let screen = NSScreen.main {
-            let screenFrame = screen.visibleFrame
-            let x = screenFrame.midX - 120
-            let y = screenFrame.maxY - 80
+            let safeFrame = screen.visibleFrame
+            let x = safeFrame.midX - 120
+            let y = safeFrame.maxY - 56
             panel.setFrameOrigin(NSPoint(x: x, y: y))
         }
 
@@ -89,10 +89,10 @@ private struct OverlayContentView: View {
     private var text: some View {
         switch state {
         case .listening:
-            Text("Listening...")
+            Text("Listening…")
                 .font(.system(size: 13, weight: .medium))
         case .transcribing:
-            Text("Transcribing...")
+            Text("Transcribing…")
                 .font(.system(size: 13, weight: .medium))
         case .done:
             Text("Done")

@@ -1,8 +1,10 @@
 import SwiftUI
 import Combine
+import ServiceManagement
 
 enum AppState: Sendable {
     case idle
+    case loading
     case downloading(progress: Double)
     case ready
     case listening
@@ -17,6 +19,19 @@ final class AppViewModel {
     var lastTranscription: String = ""
     var soundEnabled: Bool = true
     var autoPasteEnabled: Bool = true
+    var launchAtLogin: Bool = SMAppService.mainApp.status == .enabled {
+        didSet {
+            do {
+                if launchAtLogin {
+                    try SMAppService.mainApp.register()
+                } else {
+                    try SMAppService.mainApp.unregister()
+                }
+            } catch {
+                launchAtLogin = SMAppService.mainApp.status == .enabled
+            }
+        }
+    }
     let transcriptionManager = TranscriptionManager()
     let audioEngine = AudioEngine()
     let hotkeyManager = HotkeyManager()
@@ -29,11 +44,14 @@ final class AppViewModel {
         audioEngine.prepare()
         permissionsManager.requestAccessibilityAccess()
 
-        state = .downloading(progress: 0)
+        state = .loading
         do {
             try await transcriptionManager.loadModels { [weak self] progress in
                 Task { @MainActor in
-                    self?.state = .downloading(progress: progress)
+                    // Only show download progress if actually downloading (progress < 1.0)
+                    if progress < 1.0 {
+                        self?.state = .downloading(progress: progress)
+                    }
                 }
             }
             state = .ready
@@ -137,6 +155,8 @@ struct OpenWritrApp: App {
                     .foregroundStyle(.red)
             case .transcribing:
                 Image(systemName: "ellipsis.circle")
+            case .loading:
+                Image(systemName: "circle.dashed")
             case .downloading:
                 Image(systemName: "arrow.down.circle")
             case .error:
