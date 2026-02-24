@@ -47,7 +47,13 @@ swift build -c release
 .build/release/OpenWritr
 ```
 
-On first launch, grant **Microphone** and **Accessibility** permissions when prompted. The Parakeet model downloads automatically (~460 MB).
+The app is not code-signed. On first launch, remove the quarantine attribute:
+
+```sh
+xattr -cr /Applications/OpenWritr.app
+```
+
+Then grant **Microphone** and **Accessibility** permissions when prompted. The Parakeet model downloads automatically (~460 MB).
 
 ## Architecture
 
