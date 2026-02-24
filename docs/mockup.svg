@@ -1,0 +1,142 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 840 440" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0d1117"/>
+      <stop offset="100%" stop-color="#07090e"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#3ecfff"/>
+      <stop offset="100%" stop-color="#1a7a9e"/>
+    </linearGradient>
+    <linearGradient id="pill-bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="rgba(255,255,255,0.08)"/>
+      <stop offset="100%" stop-color="rgba(255,255,255,0.03)"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="12" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="glow-sm">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="shadow">
+      <feDropShadow dx="0" dy="4" stdDeviation="20" flood-color="#000" flood-opacity="0.5"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="840" height="440" rx="16" fill="url(#bg)"/>
+
+  <!-- Ambient glow -->
+  <ellipse cx="420" cy="60" rx="300" ry="180" fill="#3ecfff" opacity="0.04"/>
+
+  <!-- ===== Menu Bar ===== -->
+  <rect x="40" y="30" width="760" height="28" rx="6" fill="#1c1c1e" opacity="0.9"/>
+  <!-- Apple logo area -->
+  <text x="56" y="49" font-family="-apple-system, SF Pro, Helvetica" font-size="14" fill="#e2e8f0" opacity="0.8">&#xF8FF;</text>
+  <!-- App menus -->
+  <text x="80" y="49" font-family="-apple-system, SF Pro, Helvetica" font-size="12" font-weight="600" fill="#e2e8f0" opacity="0.9">OpenWritr</text>
+  <text x="160" y="49" font-family="-apple-system, SF Pro, Helvetica" font-size="12" fill="#e2e8f0" opacity="0.5">File</text>
+  <text x="192" y="49" font-family="-apple-system, SF Pro, Helvetica" font-size="12" fill="#e2e8f0" opacity="0.5">Edit</text>
+  <text x="224" y="49" font-family="-apple-system, SF Pro, Helvetica" font-size="12" fill="#e2e8f0" opacity="0.5">View</text>
+
+  <!-- Right side menu bar items -->
+  <text x="720" y="49" font-family="-apple-system, SF Pro, Helvetica" font-size="12" fill="#e2e8f0" opacity="0.5">3:42 PM</text>
+  <!-- Mic icon (active/recording) -->
+  <g transform="translate(694, 36)">
+    <path d="M6 1a2.5 2.5 0 0 0-2.5 2.5v5a2.5 2.5 0 0 0 5 0v-5A2.5 2.5 0 0 0 6 1Z" fill="#ff4d4d"/>
+    <path d="M10.5 7.5v1a4.5 4.5 0 0 1-9 0v-1" stroke="#ff4d4d" stroke-width="1.2" stroke-linecap="round" fill="none"/>
+    <line x1="6" y1="13" x2="6" y2="15" stroke="#ff4d4d" stroke-width="1.2" stroke-linecap="round"/>
+  </g>
+
+  <!-- ===== Floating Overlay Pill ===== -->
+  <g filter="shadow" transform="translate(290, 80)">
+    <rect width="260" height="52" rx="26" fill="#1e2a3a" opacity="0.85"/>
+    <rect width="260" height="52" rx="26" fill="url(#pill-bg)" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
+    <!-- Recording dot -->
+    <circle cx="32" cy="26" r="5" fill="#ff4d4d" filter="glow-sm">
+      <animate attributeName="opacity" values="1;0.3;1" dur="1.5s" repeatCount="indefinite"/>
+    </circle>
+    <!-- Listening text -->
+    <text x="50" y="31" font-family="-apple-system, SF Pro, Helvetica" font-size="15" font-weight="500" fill="#e2e8f0">Listening…</text>
+  </g>
+
+  <!-- ===== Text Editor Window ===== -->
+  <g filter="shadow" transform="translate(90, 160)">
+    <!-- Window chrome -->
+    <rect width="660" height="250" rx="10" fill="#151b26" stroke="#1e2a3a" stroke-width="1"/>
+    <!-- Title bar -->
+    <rect width="660" height="36" rx="10" fill="#1a1f2e"/>
+    <rect x="0" y="26" width="660" height="10" fill="#1a1f2e"/>
+    <!-- Traffic lights -->
+    <circle cx="20" cy="18" r="6" fill="#ff5f57"/>
+    <circle cx="38" cy="18" r="6" fill="#febc2e"/>
+    <circle cx="56" cy="18" r="6" fill="#28c840"/>
+    <!-- Window title -->
+    <text x="330" y="23" font-family="-apple-system, SF Pro, Helvetica" font-size="12" fill="#7a8ba0" text-anchor="middle">Untitled.txt</text>
+
+    <!-- Editor content -->
+    <rect x="0" y="36" width="660" height="214" rx="0" fill="#0d1117"/>
+    <rect x="0" y="36" width="40" height="214" fill="#0f1419"/>
+
+    <!-- Line numbers -->
+    <text x="28" y="62" font-family="SF Mono, Menlo, monospace" font-size="12" fill="#4a5568" text-anchor="end">1</text>
+    <text x="28" y="82" font-family="SF Mono, Menlo, monospace" font-size="12" fill="#4a5568" text-anchor="end">2</text>
+    <text x="28" y="102" font-family="SF Mono, Menlo, monospace" font-size="12" fill="#4a5568" text-anchor="end">3</text>
+    <text x="28" y="122" font-family="SF Mono, Menlo, monospace" font-size="12" fill="#4a5568" text-anchor="end">4</text>
+    <text x="28" y="142" font-family="SF Mono, Menlo, monospace" font-size="12" fill="#4a5568" text-anchor="end">5</text>
+    <text x="28" y="162" font-family="SF Mono, Menlo, monospace" font-size="12" fill="#4a5568" text-anchor="end">6</text>
+    <text x="28" y="182" font-family="SF Mono, Menlo, monospace" font-size="12" fill="#4a5568" text-anchor="end">7</text>
+
+    <!-- Existing text -->
+    <text x="52" y="62" font-family="SF Mono, Menlo, monospace" font-size="13" fill="#7a8ba0">Meeting notes — Feb 24, 2026</text>
+    <text x="52" y="82" font-family="SF Mono, Menlo, monospace" font-size="13" fill="#7a8ba0"></text>
+    <text x="52" y="102" font-family="SF Mono, Menlo, monospace" font-size="13" fill="#7a8ba0">Attendees: Sarah, Mike, Alex</text>
+    <text x="52" y="122" font-family="SF Mono, Menlo, monospace" font-size="13" fill="#7a8ba0"></text>
+    <text x="52" y="142" font-family="SF Mono, Menlo, monospace" font-size="13" fill="#7a8ba0">Action items from last week were all completed.</text>
+
+    <!-- Transcribed text appearing (highlighted) -->
+    <rect x="48" y="153" width="520" height="20" rx="3" fill="#3ecfff" opacity="0.06"/>
+    <text x="52" y="168" font-family="SF Mono, Menlo, monospace" font-size="13" fill="#3ecfff">We need to ship the new feature by end of sprint.</text>
+
+    <!-- Cursor blinking -->
+    <rect x="502" y="155" width="2" height="16" fill="#3ecfff">
+      <animate attributeName="opacity" values="1;0;1" dur="1s" repeatCount="indefinite"/>
+    </rect>
+
+    <!-- Next line empty -->
+    <text x="52" y="188" font-family="SF Mono, Menlo, monospace" font-size="13" fill="#4a5568"></text>
+  </g>
+
+  <!-- ===== Waveform visualization ===== -->
+  <g transform="translate(340, 415)" opacity="0.3">
+    <rect x="0" y="-6" width="2.5" height="12" rx="1" fill="#3ecfff"><animate attributeName="height" values="12;4;12" dur="0.8s" repeatCount="indefinite"/></rect>
+    <rect x="6" y="-10" width="2.5" height="20" rx="1" fill="#3ecfff"><animate attributeName="height" values="20;6;20" dur="1.1s" repeatCount="indefinite"/></rect>
+    <rect x="12" y="-4" width="2.5" height="8" rx="1" fill="#3ecfff"><animate attributeName="height" values="8;16;8" dur="0.7s" repeatCount="indefinite"/></rect>
+    <rect x="18" y="-12" width="2.5" height="24" rx="1" fill="#3ecfff"><animate attributeName="height" values="24;8;24" dur="0.9s" repeatCount="indefinite"/></rect>
+    <rect x="24" y="-8" width="2.5" height="16" rx="1" fill="#3ecfff"><animate attributeName="height" values="16;4;16" dur="1.3s" repeatCount="indefinite"/></rect>
+    <rect x="30" y="-14" width="2.5" height="28" rx="1" fill="#3ecfff"><animate attributeName="height" values="28;10;28" dur="0.6s" repeatCount="indefinite"/></rect>
+    <rect x="36" y="-6" width="2.5" height="12" rx="1" fill="#3ecfff"><animate attributeName="height" values="12;20;12" dur="1s" repeatCount="indefinite"/></rect>
+    <rect x="42" y="-10" width="2.5" height="20" rx="1" fill="#3ecfff"><animate attributeName="height" values="20;6;20" dur="0.75s" repeatCount="indefinite"/></rect>
+    <rect x="48" y="-4" width="2.5" height="8" rx="1" fill="#3ecfff"><animate attributeName="height" values="8;22;8" dur="1.2s" repeatCount="indefinite"/></rect>
+    <rect x="54" y="-8" width="2.5" height="16" rx="1" fill="#3ecfff"><animate attributeName="height" values="16;6;16" dur="0.85s" repeatCount="indefinite"/></rect>
+    <rect x="60" y="-6" width="2.5" height="12" rx="1" fill="#3ecfff"><animate attributeName="height" values="12;4;12" dur="1.1s" repeatCount="indefinite"/></rect>
+    <rect x="66" y="-14" width="2.5" height="28" rx="1" fill="#3ecfff"><animate attributeName="height" values="28;8;28" dur="0.7s" repeatCount="indefinite"/></rect>
+    <rect x="72" y="-10" width="2.5" height="20" rx="1" fill="#3ecfff"><animate attributeName="height" values="20;12;20" dur="0.95s" repeatCount="indefinite"/></rect>
+    <rect x="78" y="-4" width="2.5" height="8" rx="1" fill="#3ecfff"><animate attributeName="height" values="8;18;8" dur="1.15s" repeatCount="indefinite"/></rect>
+    <rect x="84" y="-12" width="2.5" height="24" rx="1" fill="#3ecfff"><animate attributeName="height" values="24;6;24" dur="0.65s" repeatCount="indefinite"/></rect>
+    <rect x="90" y="-8" width="2.5" height="16" rx="1" fill="#3ecfff"><animate attributeName="height" values="16;4;16" dur="1.05s" repeatCount="indefinite"/></rect>
+    <rect x="96" y="-6" width="2.5" height="12" rx="1" fill="#3ecfff"><animate attributeName="height" values="12;20;12" dur="0.8s" repeatCount="indefinite"/></rect>
+    <rect x="102" y="-10" width="2.5" height="20" rx="1" fill="#3ecfff"><animate attributeName="height" values="20;8;20" dur="0.9s" repeatCount="indefinite"/></rect>
+    <rect x="108" y="-14" width="2.5" height="28" rx="1" fill="#3ecfff"><animate attributeName="height" values="28;10;28" dur="0.7s" repeatCount="indefinite"/></rect>
+    <rect x="114" y="-4" width="2.5" height="8" rx="1" fill="#3ecfff"><animate attributeName="height" values="8;16;8" dur="1.3s" repeatCount="indefinite"/></rect>
+    <rect x="120" y="-8" width="2.5" height="16" rx="1" fill="#3ecfff"><animate attributeName="height" values="16;6;16" dur="0.75s" repeatCount="indefinite"/></rect>
+    <rect x="126" y="-12" width="2.5" height="24" rx="1" fill="#3ecfff"><animate attributeName="height" values="24;4;24" dur="1.1s" repeatCount="indefinite"/></rect>
+    <rect x="132" y="-6" width="2.5" height="12" rx="1" fill="#3ecfff"><animate attributeName="height" values="12;22;12" dur="0.6s" repeatCount="indefinite"/></rect>
+    <rect x="138" y="-10" width="2.5" height="20" rx="1" fill="#3ecfff"><animate attributeName="height" values="20;6;20" dur="0.95s" repeatCount="indefinite"/></rect>
+    <rect x="144" y="-4" width="2.5" height="8" rx="1" fill="#3ecfff"><animate attributeName="height" values="8;18;8" dur="0.85s" repeatCount="indefinite"/></rect>
+    <rect x="150" y="-8" width="2.5" height="16" rx="1" fill="#3ecfff"><animate attributeName="height" values="16;10;16" dur="1.2s" repeatCount="indefinite"/></rect>
+    <rect x="156" y="-14" width="2.5" height="28" rx="1" fill="#3ecfff"><animate attributeName="height" values="28;6;28" dur="0.7s" repeatCount="indefinite"/></rect>
+  </g>
+</svg>

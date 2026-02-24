@@ -1,6 +1,18 @@
 # OpenWritr
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![macOS](https://img.shields.io/badge/macOS-14%2B-black?logo=apple)](https://github.com/trsdn/OpenWritr)
+[![Swift 6](https://img.shields.io/badge/Swift-6-F05138?logo=swift&logoColor=white)](https://swift.org)
+[![Apple Silicon](https://img.shields.io/badge/Apple%20Silicon-M1%2B-333?logo=apple)](https://github.com/trsdn/OpenWritr)
+[![Release](https://img.shields.io/github/v/release/trsdn/OpenWritr)](https://github.com/trsdn/OpenWritr/releases)
+
 Native macOS menu bar app for push-to-talk voice-to-text. Hold the Fn key, speak, release — transcribed text is pasted at your cursor. Completely local, powered by Apple Neural Engine.
+
+**[Website](https://trsdn.github.io/OpenWritr/)** · **[Release](https://github.com/trsdn/OpenWritr/releases)**
+
+<p align="center">
+  <img src="docs/mockup.svg" alt="OpenWritr in action" width="720">
+</p>
 
 ## How It Works
 
@@ -65,4 +77,4 @@ Sources/OpenWritr/
 
 ## License
 
-MIT
+[MIT](LICENSE)
