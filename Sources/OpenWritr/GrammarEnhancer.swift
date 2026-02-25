@@ -60,7 +60,7 @@ struct GrammarEnhancer: Sendable {
     private func runCopilot(text: String, model: String) -> String {
         guard let bin = findCopilotBinary() else { return text }
 
-        let prompt = "Fix grammar, spelling, and punctuation. Remove filler words and hesitation sounds in any language. Keep the original meaning and tone. Return only the corrected text. Do not add explanations.\n\n\(text)"
+        let prompt = "Clean up this speech transcript: fix grammar, spelling, and punctuation. Remove fillers, hesitations, and stuttering. Every sentence must end with proper punctuation. Preserve meaning, tone, and language. If the input contains only filler words or hesitations with no meaningful content, return an empty string. Return only the corrected text.\n\n\(text)"
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: bin)
