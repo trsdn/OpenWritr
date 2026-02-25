@@ -69,6 +69,7 @@ struct GrammarEnhancer: Sendable {
             "-s",
             "--model", model,
             "--no-custom-instructions",
+            "--disable-builtin-mcps",
         ]
         process.environment = ProcessInfo.processInfo.environment
 
