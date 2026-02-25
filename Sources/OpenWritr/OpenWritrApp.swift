@@ -19,6 +19,9 @@ enum AppState: Sendable {
 final class AppViewModel {
     var state: AppState = .idle
     var lastTranscription: String = ""
+    var lastRawTranscription: String = ""
+    var lastWasEnhanced: Bool = false
+    var debugModeEnabled: Bool = false
     var soundEnabled: Bool = true
     var autoPasteEnabled: Bool = true
     var launchAtLogin: Bool = false
@@ -49,6 +52,7 @@ final class AppViewModel {
         if let modelRaw = d.string(forKey: "enhancedModel"), let m = EnhancedModel(rawValue: modelRaw) {
             enhancedModel = m
         }
+        if d.object(forKey: "debugModeEnabled") != nil { debugModeEnabled = d.bool(forKey: "debugModeEnabled") }
         launchAtLogin = SMAppService.mainApp.status == .enabled
         hotkeyManager.activeFlag = hotkeyChoice.flag
 
@@ -185,10 +189,14 @@ final class AppViewModel {
                 return
             }
             var finalText = trimmed
+            lastRawTranscription = trimmed
             if enhancedModeEnabled {
                 state = .enhancing
                 overlayPanel.show(state: .enhancing)
                 finalText = await grammarEnhancer.enhance(text: trimmed, model: enhancedModel)
+                lastWasEnhanced = true
+            } else {
+                lastWasEnhanced = false
             }
             lastTranscription = finalText
             if autoPasteEnabled {

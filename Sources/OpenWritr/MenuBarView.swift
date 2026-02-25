@@ -22,6 +22,40 @@ struct MenuBarView: View {
         Text(statusText)
             .font(.headline)
             .padding(.horizontal, 4)
+
+        if viewModel.debugModeEnabled && !viewModel.lastTranscription.isEmpty {
+            Divider()
+            if viewModel.lastWasEnhanced {
+                Text("Raw:")
+                    .font(.caption.bold())
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 4)
+                Text(viewModel.lastRawTranscription)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 4)
+                    .textSelection(.enabled)
+                Text("Enhanced:")
+                    .font(.caption.bold())
+                    .foregroundStyle(.purple)
+                    .padding(.horizontal, 4)
+                Text(viewModel.lastTranscription)
+                    .font(.caption)
+                    .foregroundStyle(.purple)
+                    .padding(.horizontal, 4)
+                    .textSelection(.enabled)
+            } else {
+                Text("Output:")
+                    .font(.caption.bold())
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 4)
+                Text(viewModel.lastTranscription)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 4)
+                    .textSelection(.enabled)
+            }
+        }
     }
 
     private var statusText: String {
@@ -122,5 +156,15 @@ struct MenuBarView: View {
                 }
             }
         }
+
+        Divider()
+
+        Toggle("Debug Mode", isOn: Binding(
+            get: { viewModel.debugModeEnabled },
+            set: {
+                viewModel.debugModeEnabled = $0
+                viewModel.savePreference("debugModeEnabled", value: $0)
+            }
+        ))
     }
 }
