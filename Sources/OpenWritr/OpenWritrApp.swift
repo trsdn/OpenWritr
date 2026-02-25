@@ -10,6 +10,7 @@ enum AppState: Sendable {
     case ready
     case listening
     case transcribing
+    case enhancing
     case error(String)
 }
 
@@ -24,8 +25,11 @@ final class AppViewModel {
     var hotkeyChoice: HotkeyChoice = .fn
     var availableInputDevices: [AudioInputDevice] = []
     var selectedInputDeviceID: AudioDeviceID?
+    var enhancedModeEnabled: Bool = false
+    var enhancedModel: EnhancedModel = .gpt4_1
 
     let transcriptionManager = TranscriptionManager()
+    let grammarEnhancer: GrammarEnhancer = .init()
     let audioEngine = AudioEngine()
     let hotkeyManager = HotkeyManager()
     let pasteManager = PasteManager()
@@ -40,6 +44,10 @@ final class AppViewModel {
         if d.object(forKey: "autoPasteEnabled") != nil { autoPasteEnabled = d.bool(forKey: "autoPasteEnabled") }
         if let raw = d.string(forKey: "hotkeyChoice"), let c = HotkeyChoice(rawValue: raw) {
             hotkeyChoice = c
+        }
+        if d.object(forKey: "enhancedModeEnabled") != nil { enhancedModeEnabled = d.bool(forKey: "enhancedModeEnabled") }
+        if let modelRaw = d.string(forKey: "enhancedModel"), let m = EnhancedModel(rawValue: modelRaw) {
+            enhancedModel = m
         }
         launchAtLogin = SMAppService.mainApp.status == .enabled
         hotkeyManager.activeFlag = hotkeyChoice.flag
@@ -176,9 +184,15 @@ final class AppViewModel {
                 overlayPanel.dismiss()
                 return
             }
-            lastTranscription = trimmed
+            var finalText = trimmed
+            if enhancedModeEnabled {
+                state = .enhancing
+                overlayPanel.show(state: .enhancing)
+                finalText = await grammarEnhancer.enhance(text: trimmed, model: enhancedModel)
+            }
+            lastTranscription = finalText
             if autoPasteEnabled {
-                pasteManager.pasteText(trimmed)
+                pasteManager.pasteText(finalText)
             }
             overlayPanel.show(state: .done)
             try? await Task.sleep(for: .milliseconds(600))
@@ -215,6 +229,8 @@ struct OpenWritrApp: App {
                     .foregroundStyle(.red)
             case .transcribing:
                 Image(systemName: "ellipsis.circle")
+            case .enhancing:
+                Image(systemName: "sparkles")
             case .loading:
                 Image(systemName: "circle.dashed")
             case .downloading:

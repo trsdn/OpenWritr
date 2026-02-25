@@ -4,6 +4,7 @@ import SwiftUI
 enum OverlayState {
     case listening
     case transcribing
+    case enhancing
     case done
 }
 
@@ -79,6 +80,10 @@ private struct OverlayContentView: View {
         case .transcribing:
             ProgressView()
                 .controlSize(.small)
+        case .enhancing:
+            Image(systemName: "sparkles")
+                .foregroundStyle(.purple)
+                .symbolEffect(.pulse)
         case .done:
             Image(systemName: "checkmark.circle.fill")
                 .foregroundStyle(.green)
@@ -93,6 +98,9 @@ private struct OverlayContentView: View {
                 .font(.system(size: 13, weight: .medium))
         case .transcribing:
             Text("Transcribing…")
+                .font(.system(size: 13, weight: .medium))
+        case .enhancing:
+            Text("Enhancing…")
                 .font(.system(size: 13, weight: .medium))
         case .done:
             Text("Done")

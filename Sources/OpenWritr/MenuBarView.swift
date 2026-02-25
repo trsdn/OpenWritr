@@ -38,6 +38,8 @@ struct MenuBarView: View {
             return "Listening…"
         case .transcribing:
             return "Transcribing…"
+        case .enhancing:
+            return "Enhancing…"
         case .error(let msg):
             return "Error: \(msg)"
         }
@@ -95,5 +97,30 @@ struct MenuBarView: View {
             get: { viewModel.launchAtLogin },
             set: { _ in viewModel.toggleLaunchAtLogin() }
         ))
+
+        Divider()
+
+        Toggle("Enhanced Mode", isOn: Binding(
+            get: { viewModel.enhancedModeEnabled },
+            set: {
+                viewModel.enhancedModeEnabled = $0
+                viewModel.savePreference("enhancedModeEnabled", value: $0)
+            }
+        ))
+        .disabled(!isReady)
+
+        if viewModel.enhancedModeEnabled {
+            Picker("Model", selection: Binding(
+                get: { viewModel.enhancedModel },
+                set: {
+                    viewModel.enhancedModel = $0
+                    viewModel.savePreference("enhancedModel", value: $0.rawValue)
+                }
+            )) {
+                ForEach(EnhancedModel.allCases) { model in
+                    Text(model.displayName).tag(model)
+                }
+            }
+        }
     }
 }
