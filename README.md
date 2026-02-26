@@ -8,7 +8,7 @@
 
 Native macOS menu bar app for push-to-talk voice-to-text. Hold the Fn key, speak, release — transcribed text is pasted at your cursor. Completely local, powered by Apple Neural Engine.
 
-**[Website](https://trsdn.github.io/OpenWritr/)** · **[Download](https://github.com/trsdn/OpenWritr/releases/latest/download/OpenWritr-v1.0.0-macOS-arm64.zip)** · **[Release](https://github.com/trsdn/OpenWritr/releases)**
+**[Website](https://trsdn.github.io/OpenWritr/)** · **[Download](https://github.com/trsdn/OpenWritr/releases/latest/download/OpenWritr-v1.1.0-macOS-arm64.zip)** · **[Release](https://github.com/trsdn/OpenWritr/releases)**
 
 <p align="center">
   <img src="docs/mockup.svg" alt="OpenWritr in action" width="720">
@@ -33,7 +33,21 @@ Native macOS menu bar app for push-to-talk voice-to-text. Hold the Fn key, speak
 | Download (zip) | 3.2 MB |
 | Model size | ~460 MB (downloaded on first launch) |
 | Languages | 25 (English, German, French, Spanish, and more) |
-| Data sent to cloud | None |
+| Data sent to cloud | None (unless Enhanced Mode is on) |
+
+## Enhanced Mode
+
+Enhanced Mode uses [GitHub Copilot](https://github.com/features/copilot) to clean up transcripts — fixing grammar, punctuation, removing filler words and hesitations while preserving meaning, tone, and language. Works with all 25 supported languages.
+
+Enable it from the menu bar dropdown. Three models are available:
+
+| Model | Premium Tokens |
+|-------|---------------|
+| **GPT-4.1** (default) | No |
+| **GPT-5 Mini** | No |
+| Claude Haiku 4.5 | Yes |
+
+**Requirements:** [GitHub Copilot CLI](https://docs.github.com/en/copilot/using-github-copilot/using-github-copilot-in-the-command-line) installed and authenticated (`copilot login`). A GitHub Copilot subscription is required — GPT-4.1 and GPT-5 Mini are included at no extra premium token cost.
 
 ## Requirements
 
@@ -65,10 +79,12 @@ Sources/OpenWritr/
 ├── MenuBarView.swift           # Menu bar dropdown UI
 ├── AudioEngine.swift           # AVAudioEngine, 16kHz capture, realtime-safe
 ├── TranscriptionManager.swift  # FluidAudio model loading + transcription
+├── GrammarEnhancer.swift       # GitHub Copilot-based transcript enhancement
 ├── HotkeyManager.swift         # CGEventTap for Fn/Globe key detection
 ├── PasteManager.swift          # Clipboard save/restore + Cmd+V simulation
 ├── OverlayPanel.swift          # Floating translucent recording indicator
 ├── SoundManager.swift          # Programmatic audio cue generation
+├── SettingsView.swift           # Hotkey choice enum and settings
 └── PermissionsManager.swift    # Microphone + Accessibility permission handling
 ```
 

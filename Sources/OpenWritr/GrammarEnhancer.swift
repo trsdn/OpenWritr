@@ -30,6 +30,7 @@ struct GrammarEnhancer: Sendable {
         let candidates = [
             "/opt/homebrew/bin/copilot",
             "/usr/local/bin/copilot",
+            "/usr/local/lib/nodejs/bin/copilot",
         ]
         for p in candidates {
             if FileManager.default.isExecutableFile(atPath: p) { return p }
@@ -71,7 +72,33 @@ struct GrammarEnhancer: Sendable {
             "--no-custom-instructions",
             "--disable-builtin-mcps",
         ]
-        process.environment = ProcessInfo.processInfo.environment
+        var env = ProcessInfo.processInfo.environment
+        // GUI apps have a minimal PATH; extend it so node/copilot can be found
+        let extraPaths = [
+            "/opt/homebrew/bin",
+            "/usr/local/bin",
+            "/usr/local/lib/nodejs/bin",
+        ]
+        if let home = env["HOME"] {
+            // nvm, fnm, Homebrew, and common Node manager locations
+            let nodeDirs = [
+                "\(home)/.nvm/versions/node",
+                "\(home)/.local/share/fnm/node-versions",
+            ]
+            for base in nodeDirs {
+                if let versions = try? FileManager.default.contentsOfDirectory(atPath: base) {
+                    for v in versions.sorted().reversed() {
+                        let binPath = "\(base)/\(v)/bin"
+                        if FileManager.default.isExecutableFile(atPath: "\(binPath)/node") {
+                            env["PATH"] = (env["PATH"] ?? "") + ":" + binPath
+                            break
+                        }
+                    }
+                }
+            }
+        }
+        env["PATH"] = (env["PATH"] ?? "") + ":" + extraPaths.joined(separator: ":")
+        process.environment = env
 
         let stdoutPipe = Pipe()
         let stderrPipe = Pipe()
