@@ -68,12 +68,14 @@ Sources/OpenWritr/
 ├── SettingsView.swift          # Dedicated settings window
 ├── AudioEngine.swift           # AVAudioEngine, 16kHz capture, realtime-safe
 ├── TranscriptionManager.swift  # FluidAudio model loading + transcription
+├── GrammarEnhancer.swift       # GitHub Copilot-based transcript enhancement
 ├── HotkeyManager.swift         # CGEventTap for Fn/Globe key detection
 ├── GrammarEnhancer.swift       # Copilot/OpenAI-compatible cleanup provider abstraction
 ├── KeychainStore.swift         # Keychain-backed storage for API credentials
 ├── PasteManager.swift          # Clipboard save/restore + Cmd+V simulation
 ├── OverlayPanel.swift          # Floating translucent recording indicator
 ├── SoundManager.swift          # Programmatic audio cue generation
+├── SettingsView.swift           # Hotkey choice enum and settings
 └── PermissionsManager.swift    # Microphone + Accessibility permission handling
 ```
 
