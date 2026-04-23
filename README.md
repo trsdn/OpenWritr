@@ -6,9 +6,9 @@
 [![Apple Silicon](https://img.shields.io/badge/Apple%20Silicon-M1%2B-333?logo=apple)](https://github.com/trsdn/OpenWritr)
 [![Release](https://img.shields.io/github/v/release/trsdn/OpenWritr)](https://github.com/trsdn/OpenWritr/releases)
 
-Native macOS menu bar app for push-to-talk voice-to-text. Hold the Fn key, speak, release — transcribed text is pasted at your cursor. Completely local, powered by Apple Neural Engine.
+Native macOS menu bar app for push-to-talk voice-to-text. Core transcription runs locally on the Apple Neural Engine; optional enhancement can use GitHub Copilot or any OpenAI-compatible API.
 
-**[Website](https://trsdn.github.io/OpenWritr/)** · **[Download](https://github.com/trsdn/OpenWritr/releases/latest/download/OpenWritr-v1.0.0-macOS-arm64.zip)** · **[Release](https://github.com/trsdn/OpenWritr/releases)**
+**[Website](https://trsdn.github.io/OpenWritr/)** · **[Download](https://github.com/trsdn/OpenWritr/releases/latest/download/OpenWritr-v1.2.0-macOS-arm64.zip)** · **[Release](https://github.com/trsdn/OpenWritr/releases)**
 
 <p align="center">
   <img src="docs/mockup.svg" alt="OpenWritr in action" width="720">
@@ -16,9 +16,9 @@ Native macOS menu bar app for push-to-talk voice-to-text. Hold the Fn key, speak
 
 ## How It Works
 
-1. **Hold Fn** — microphone activates, a floating overlay confirms recording
-2. **Release Fn** — audio is transcribed via NVIDIA Parakeet TDT v3 on the Neural Engine
-3. **Text appears** — result is pasted into whatever app is focused
+1. **Hold the hotkey** — start a normal transcription, or hold `Shift + hotkey` for enhanced cleanup
+2. **Release** — audio is transcribed locally via NVIDIA Parakeet TDT v3 on the Neural Engine
+3. **Text appears** — the result is pasted into the focused app, with optional cleanup via Copilot or an OpenAI-compatible API
 
 ## Performance
 
@@ -33,7 +33,7 @@ Native macOS menu bar app for push-to-talk voice-to-text. Hold the Fn key, speak
 | Download (zip) | 3.2 MB |
 | Model size | ~460 MB (downloaded on first launch) |
 | Languages | 25 (English, German, French, Spanish, and more) |
-| Data sent to cloud | None |
+| Data sent to cloud | None for transcription; optional in Enhanced Mode |
 
 ## Requirements
 
@@ -42,18 +42,20 @@ Native macOS menu bar app for push-to-talk voice-to-text. Hold the Fn key, speak
 
 ## Install
 
+Download the latest signed app from [Releases](https://github.com/trsdn/OpenWritr/releases), unzip it, and move `OpenWritr.app` to `/Applications`.
+
+To build from source:
+
 ```sh
 git clone https://github.com/trsdn/OpenWritr.git
 cd OpenWritr
 swift build -c release
-.build/release/OpenWritr
+bash scripts/build-app.sh
+cp -R .build/release/OpenWritr.app /Applications/
+open /Applications/OpenWritr.app
 ```
 
-The app is not code-signed. On first launch, remove the quarantine attribute:
-
-```sh
-xattr -cr /Applications/OpenWritr.app
-```
+`swift build -c release` is enough for a fast compile check. `scripts/build-app.sh` creates the signed `.app` bundle and requires a locally available Developer ID Application or Apple Development certificate.
 
 Then grant **Microphone** and **Accessibility** permissions when prompted. The Parakeet model downloads automatically (~460 MB).
 
@@ -63,16 +65,17 @@ Then grant **Microphone** and **Accessibility** permissions when prompted. The P
 Sources/OpenWritr/
 ├── OpenWritrApp.swift          # App entry, MenuBarExtra, state machine
 ├── MenuBarView.swift           # Menu bar dropdown UI
+├── SettingsView.swift          # Dedicated settings window
 ├── AudioEngine.swift           # AVAudioEngine, 16kHz capture, realtime-safe
 ├── TranscriptionManager.swift  # FluidAudio model loading + transcription
 ├── HotkeyManager.swift         # CGEventTap for Fn/Globe key detection
+├── GrammarEnhancer.swift       # Copilot/OpenAI-compatible cleanup provider abstraction
+├── KeychainStore.swift         # Keychain-backed storage for API credentials
 ├── PasteManager.swift          # Clipboard save/restore + Cmd+V simulation
 ├── OverlayPanel.swift          # Floating translucent recording indicator
 ├── SoundManager.swift          # Programmatic audio cue generation
 └── PermissionsManager.swift    # Microphone + Accessibility permission handling
 ```
-
-738 lines of Swift. No Electron, no Python, no dependencies beyond [FluidAudio](https://github.com/FluidInference/FluidAudio).
 
 ## Tech Stack
 

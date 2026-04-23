@@ -8,7 +8,7 @@ final class TranscriptionManager: @unchecked Sendable {
         let models = try await AsrModels.downloadAndLoad(version: .v3)
         progressHandler(0.7)
         let manager = AsrManager(config: .default)
-        try await manager.initialize(models: models)
+        try await manager.loadModels(models)
         self.asrManager = manager
         progressHandler(1.0)
     }

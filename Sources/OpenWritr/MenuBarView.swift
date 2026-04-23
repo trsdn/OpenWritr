@@ -1,5 +1,4 @@
 import SwiftUI
-import CoreAudio
 
 struct MenuBarView: View {
     @Bindable var viewModel: AppViewModel
@@ -8,7 +7,11 @@ struct MenuBarView: View {
         VStack(alignment: .leading, spacing: 4) {
             statusSection
             Divider()
-            settingsSection
+            quickControlsSection
+            Divider()
+            SettingsLink {
+                Label("Settings…", systemImage: "gearshape")
+            }
             Divider()
             Button("Quit OpenWritr") {
                 NSApplication.shared.terminate(nil)
@@ -19,9 +22,19 @@ struct MenuBarView: View {
 
     @ViewBuilder
     private var statusSection: some View {
-        Text(statusText)
-            .font(.headline)
-            .padding(.horizontal, 4)
+        VStack(alignment: .leading, spacing: 4) {
+            Text(statusText)
+                .font(.headline)
+                .padding(.horizontal, 4)
+
+            if let warning = viewModel.lastEnhancementWarning {
+                Text(warning)
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .padding(.horizontal, 4)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
 
         if viewModel.debugModeEnabled && !viewModel.lastTranscription.isEmpty {
             Divider()
@@ -67,7 +80,7 @@ struct MenuBarView: View {
         case .downloading(let progress):
             return "Downloading Model (\(Int(progress * 100))%)…"
         case .ready:
-            return "Ready — Hold \(viewModel.hotkeyChoice.shortLabel) to Speak"
+            return "Ready"
         case .listening:
             return "Listening…"
         case .transcribing:
@@ -85,30 +98,7 @@ struct MenuBarView: View {
     }
 
     @ViewBuilder
-    private var settingsSection: some View {
-        Picker("Input Device", selection: Binding(
-            get: { viewModel.selectedInputDeviceID },
-            set: { newID in
-                let device = viewModel.availableInputDevices.first { $0.id == newID }
-                viewModel.setInputDevice(device)
-            }
-        )) {
-            Text("System Default").tag(AudioDeviceID?.none)
-            ForEach(viewModel.availableInputDevices) { device in
-                Text(device.name).tag(AudioDeviceID?.some(device.id))
-            }
-        }
-        .onAppear { viewModel.refreshInputDevices() }
-
-        Picker("Push-to-Talk Key", selection: Binding(
-            get: { viewModel.hotkeyChoice },
-            set: { viewModel.setHotkey($0) }
-        )) {
-            ForEach(HotkeyChoice.allCases) { choice in
-                Text(choice.label).tag(choice)
-            }
-        }
-
+    private var quickControlsSection: some View {
         Toggle("Auto-Paste", isOn: Binding(
             get: { viewModel.autoPasteEnabled },
             set: {
@@ -127,13 +117,6 @@ struct MenuBarView: View {
         ))
         .disabled(!isReady)
 
-        Toggle("Launch at Login", isOn: Binding(
-            get: { viewModel.launchAtLogin },
-            set: { _ in viewModel.toggleLaunchAtLogin() }
-        ))
-
-        Divider()
-
         Toggle("Enhanced Mode", isOn: Binding(
             get: { viewModel.enhancedModeEnabled },
             set: {
@@ -142,29 +125,5 @@ struct MenuBarView: View {
             }
         ))
         .disabled(!isReady)
-
-        if viewModel.enhancedModeEnabled {
-            Picker("Model", selection: Binding(
-                get: { viewModel.enhancedModel },
-                set: {
-                    viewModel.enhancedModel = $0
-                    viewModel.savePreference("enhancedModel", value: $0.rawValue)
-                }
-            )) {
-                ForEach(EnhancedModel.allCases) { model in
-                    Text(model.displayName).tag(model)
-                }
-            }
-        }
-
-        Divider()
-
-        Toggle("Debug Mode", isOn: Binding(
-            get: { viewModel.debugModeEnabled },
-            set: {
-                viewModel.debugModeEnabled = $0
-                viewModel.savePreference("debugModeEnabled", value: $0)
-            }
-        ))
     }
 }

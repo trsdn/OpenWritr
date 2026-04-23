@@ -10,15 +10,36 @@ struct AudioInputDevice: Identifiable, Hashable, Sendable {
     let id: AudioDeviceID
     let name: String
     let uid: String
+
+    var isLikelyVirtualRoute: Bool {
+        let haystack = "\(name) \(uid)".lowercased()
+        return haystack.contains("virtual")
+            || haystack.contains("stream")
+            || haystack.contains("loopback")
+            || haystack.contains("teams")
+            || haystack.contains("detail audio")
+            || haystack.contains("boomaudio")
+            || haystack.contains("rodeconnectaudiodevice_uid")
+    }
 }
 
 final class AudioEngine: @unchecked Sendable {
+    private struct CaptureSnapshot {
+        let isCapturing: Bool
+        let sampleCount: Int
+        let revision: UInt64
+        let lastSampleAt: ContinuousClock.Instant?
+    }
+
     private var engine = AVAudioEngine()
     private let targetSampleRate: Double = 16_000
+    private let captureClock = ContinuousClock()
 
     private let bufferLock = os_unfair_lock_t.allocate(capacity: 1)
     private var _isCapturing = false
     private var _sampleBuffer: [Float] = []
+    private var _sampleRevision: UInt64 = 0
+    private var _lastSampleAt: ContinuousClock.Instant?
     private var isRunning = false
     private var selectedDeviceID: AudioDeviceID?
     private var previousSystemDefault: AudioDeviceID?
@@ -59,6 +80,10 @@ final class AudioEngine: @unchecked Sendable {
         var size = UInt32(MemoryLayout<AudioDeviceID>.size)
         AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &deviceID)
         return deviceID
+    }
+
+    static func currentSystemDefaultInputDeviceID() -> AudioDeviceID {
+        getSystemDefaultInput()
     }
 
     private static func setSystemDefaultInput(_ deviceID: AudioDeviceID) {
@@ -121,6 +146,8 @@ final class AudioEngine: @unchecked Sendable {
                 let samples = Array(UnsafeBufferPointer(start: ch[0], count: Int(buffer.frameLength)))
                 os_unfair_lock_lock(bufLock)
                 self._sampleBuffer.append(contentsOf: samples)
+                self._sampleRevision &+= 1
+                self._lastSampleAt = self.captureClock.now
                 os_unfair_lock_unlock(bufLock)
                 return
             }
@@ -146,6 +173,8 @@ final class AudioEngine: @unchecked Sendable {
                 let samples = Array(UnsafeBufferPointer(start: ch[0], count: Int(converted.frameLength)))
                 os_unfair_lock_lock(bufLock)
                 self._sampleBuffer.append(contentsOf: samples)
+                self._sampleRevision &+= 1
+                self._lastSampleAt = self.captureClock.now
                 os_unfair_lock_unlock(bufLock)
             }
         }
@@ -292,19 +321,78 @@ final class AudioEngine: @unchecked Sendable {
         resetEngine()
     }
 
+    func restartForCapture() {
+        resetEngine()
+    }
+
     func startCapture() {
         os_unfair_lock_lock(bufferLock)
         _sampleBuffer.removeAll(keepingCapacity: true)
+        _sampleRevision = 0
+        _lastSampleAt = nil
         _isCapturing = true
         os_unfair_lock_unlock(bufferLock)
+
+        audioLog.info("startCapture selectedDeviceID=\(self.selectedDeviceID ?? 0) systemDefault=\(Self.getSystemDefaultInput())")
+    }
+
+    private func captureSnapshot() -> CaptureSnapshot {
+        os_unfair_lock_lock(bufferLock)
+        let snapshot = CaptureSnapshot(
+            isCapturing: _isCapturing,
+            sampleCount: _sampleBuffer.count,
+            revision: _sampleRevision,
+            lastSampleAt: _lastSampleAt
+        )
+        os_unfair_lock_unlock(bufferLock)
+        return snapshot
+    }
+
+    func waitForCaptureToSettle(
+        idleWindow: Duration = .milliseconds(70),
+        pollInterval: Duration = .milliseconds(20),
+        maxWait: Duration = .milliseconds(350)
+    ) async {
+        let startedAt = captureClock.now
+
+        while captureClock.now - startedAt < maxWait {
+            let snapshot = captureSnapshot()
+
+            guard snapshot.isCapturing else { return }
+
+            guard snapshot.sampleCount > 0 else {
+                try? await Task.sleep(for: pollInterval)
+                continue
+            }
+
+            guard let lastSampleAt = snapshot.lastSampleAt else {
+                try? await Task.sleep(for: pollInterval)
+                continue
+            }
+
+            let quietFor = captureClock.now - lastSampleAt
+            if quietFor >= idleWindow {
+                audioLog.info("capture settled after \(snapshot.sampleCount) samples and \(snapshot.revision) buffers")
+                return
+            }
+
+            let remainingQuietTime = idleWindow - quietFor
+            let nextSleep = remainingQuietTime < pollInterval ? remainingQuietTime : pollInterval
+            try? await Task.sleep(for: nextSleep)
+        }
+
+        audioLog.info("capture settle timed out")
     }
 
     func stopCapture() -> [Float] {
         os_unfair_lock_lock(bufferLock)
         _isCapturing = false
         let samples = _sampleBuffer
+        let revisions = _sampleRevision
         _sampleBuffer.removeAll(keepingCapacity: true)
         os_unfair_lock_unlock(bufferLock)
+
+        audioLog.info("stopCapture samples=\(samples.count) buffers=\(revisions)")
         return samples
     }
 }

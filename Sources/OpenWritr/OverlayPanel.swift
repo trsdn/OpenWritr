@@ -12,6 +12,7 @@ enum OverlayState {
 final class OverlayPanel {
     private var panel: NSPanel?
     private var hostingView: NSHostingView<OverlayContentView>?
+
     func show(state: OverlayState) {
         if panel == nil {
             createPanel()
@@ -27,7 +28,7 @@ final class OverlayPanel {
 
     private func createPanel() {
         let panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 240, height: 56),
+            contentRect: NSRect(x: 0, y: 0, width: 320, height: 84),
             styleMask: [.nonactivatingPanel, .fullSizeContentView, .borderless],
             backing: .buffered,
             defer: false
@@ -47,8 +48,8 @@ final class OverlayPanel {
         // Position at top-center of main screen, respecting safe area (notch)
         if let screen = NSScreen.main {
             let safeFrame = screen.visibleFrame
-            let x = safeFrame.midX - 120
-            let y = safeFrame.maxY - 56
+            let x = safeFrame.midX - 160
+            let y = safeFrame.maxY - 92
             panel.setFrameOrigin(NSPoint(x: x, y: y))
         }
 
@@ -60,14 +61,52 @@ private struct OverlayContentView: View {
     let state: OverlayState
 
     var body: some View {
-        HStack(spacing: 8) {
-            icon
-            text
+        HStack(spacing: 14) {
+            iconBadge
+            headline
+            Spacer(minLength: 0)
         }
-        .font(.system(size: 15, weight: .medium))
-        .frame(width: 200, height: 44)
-        .background(.ultraThinMaterial)
-        .clipShape(Capsule())
+        .padding(.horizontal, 18)
+        .frame(width: 300, height: 58)
+        .background(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(.regularMaterial)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .fill(accentColor.opacity(0.18))
+                }
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .strokeBorder(accentColor.opacity(0.55), lineWidth: 1.5)
+        }
+        .shadow(color: .black.opacity(0.28), radius: 18, x: 0, y: 10)
+    }
+
+    private var accentColor: Color {
+        switch state {
+        case .listening:
+            return .red
+        case .transcribing:
+            return .orange
+        case .enhancing:
+            return .blue
+        case .done:
+            return .green
+        }
+    }
+
+    private var title: String {
+        switch state {
+        case .listening:
+            return "Listening"
+        case .transcribing:
+            return "Transcribing"
+        case .enhancing:
+            return "Enhancement"
+        case .done:
+            return "Ready"
+        }
     }
 
     @ViewBuilder
@@ -75,36 +114,35 @@ private struct OverlayContentView: View {
         switch state {
         case .listening:
             Image(systemName: "mic.fill")
-                .foregroundStyle(.red)
                 .symbolEffect(.pulse)
         case .transcribing:
-            ProgressView()
-                .controlSize(.small)
+            Image(systemName: "waveform")
+                .symbolEffect(.pulse)
         case .enhancing:
             Image(systemName: "sparkles")
-                .foregroundStyle(.purple)
                 .symbolEffect(.pulse)
         case .done:
-            Image(systemName: "checkmark.circle.fill")
-                .foregroundStyle(.green)
+            Image(systemName: "checkmark")
         }
     }
 
-    @ViewBuilder
-    private var text: some View {
-        switch state {
-        case .listening:
-            Text("Listening…")
-                .font(.system(size: 13, weight: .medium))
-        case .transcribing:
-            Text("Transcribing…")
-                .font(.system(size: 13, weight: .medium))
-        case .enhancing:
-            Text("Enhancing…")
-                .font(.system(size: 13, weight: .medium))
-        case .done:
-            Text("Done")
-                .font(.system(size: 13, weight: .medium))
+    private var iconBadge: some View {
+        ZStack {
+            Circle()
+                .fill(accentColor.gradient)
+            Circle()
+                .strokeBorder(.white.opacity(0.22), lineWidth: 1)
+
+            icon
+                .font(.system(size: 18, weight: .bold))
+                .foregroundStyle(.white)
         }
+        .frame(width: 38, height: 38)
+    }
+
+    private var headline: some View {
+        Text(title)
+            .font(.system(size: 17, weight: .semibold))
+            .foregroundStyle(.primary)
     }
 }

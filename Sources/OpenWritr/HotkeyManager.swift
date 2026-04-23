@@ -1,17 +1,32 @@
 import Cocoa
 
+enum RecordingShortcutMode: Sendable {
+    case normal
+    case enhanced
+}
+
+private enum RecordingShortcutAction: Sendable {
+    case started(RecordingShortcutMode)
+    case stopped(RecordingShortcutMode)
+}
+
 @MainActor
 final class HotkeyManager {
-    var onRecordingStarted: (@Sendable () -> Void)?
-    var onRecordingStopped: (@Sendable () -> Void)?
+    var onRecordingStarted: (@Sendable (RecordingShortcutMode) -> Void)?
+    var onRecordingStopped: (@Sendable (RecordingShortcutMode) -> Void)?
 
     // Read from callback thread — use atomic-like access via nonisolated context
     nonisolated(unsafe) var activeFlag: UInt64 = 0x800000 // Fn key default
+    nonisolated(unsafe) var activeKeyCode: Int64 = 63 // Fn key default
+    nonisolated(unsafe) private var isKeyPressed = false
+    nonisolated(unsafe) private var currentMode: RecordingShortcutMode = .normal
+    nonisolated(unsafe) private var primaryKeyDown = false
+    nonisolated(unsafe) private var shiftKeyDown = false
+    nonisolated(unsafe) private var sawShiftDuringCurrentPress = false
 
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
     private var contextPtr: UnsafeMutablePointer<HotkeyContext>?
-    private var isKeyPressed = false
 
     func start() {
         let eventMask: CGEventMask = (1 << CGEventType.flagsChanged.rawValue)
@@ -55,15 +70,42 @@ final class HotkeyManager {
         contextPtr = nil
     }
 
-    fileprivate func handleFlagsChanged(_ flags: CGEventFlags) {
-        let keyIsDown = (flags.rawValue & activeFlag) != 0
+    nonisolated fileprivate func processFlagsChanged(_ flags: CGEventFlags, keyCode: Int64) -> RecordingShortcutAction? {
+        shiftKeyDown = flags.contains(.maskShift)
 
-        if keyIsDown && !isKeyPressed {
+        if keyCode == activeKeyCode {
+            primaryKeyDown = (flags.rawValue & activeFlag) != 0
+        }
+
+        if primaryKeyDown {
+            sawShiftDuringCurrentPress = sawShiftDuringCurrentPress || shiftKeyDown
+            currentMode = sawShiftDuringCurrentPress ? .enhanced : .normal
+        }
+
+        if primaryKeyDown && !isKeyPressed {
             isKeyPressed = true
-            onRecordingStarted?()
-        } else if !keyIsDown && isKeyPressed {
+            sawShiftDuringCurrentPress = shiftKeyDown
+            currentMode = sawShiftDuringCurrentPress ? .enhanced : .normal
+            return .started(currentMode)
+        } else if !primaryKeyDown && isKeyPressed {
+            let finishedMode: RecordingShortcutMode = sawShiftDuringCurrentPress ? .enhanced : .normal
             isKeyPressed = false
-            onRecordingStopped?()
+            currentMode = .normal
+            primaryKeyDown = false
+            shiftKeyDown = false
+            sawShiftDuringCurrentPress = false
+            return .stopped(finishedMode)
+        }
+
+        return nil
+    }
+
+    fileprivate func handleShortcutAction(_ action: RecordingShortcutAction) {
+        switch action {
+        case .started(let mode):
+            onRecordingStarted?(mode)
+        case .stopped(let mode):
+            onRecordingStopped?(mode)
         }
     }
 
@@ -103,8 +145,12 @@ private func hotkeyCallback(
     }
 
     let flags = event.flags
-    DispatchQueue.main.async {
-        manager?.handleFlagsChanged(flags)
+    let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
+    let action = manager?.processFlagsChanged(flags, keyCode: keyCode)
+    if let action {
+        DispatchQueue.main.async {
+            manager?.handleShortcutAction(action)
+        }
     }
 
     return Unmanaged.passUnretained(event)

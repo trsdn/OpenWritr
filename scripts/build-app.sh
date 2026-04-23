@@ -5,48 +5,36 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 BUILD_DIR="$PROJECT_DIR/.build/release"
 APP="$BUILD_DIR/OpenWritr.app"
+DEFAULT_BUNDLE_ID="com.openwritr.app"
+PREFERRED_IDENTITY="${OPENWRITR_SIGNING_IDENTITY:-}"
 
-# ── Signing keychain (persistent, lives in .build/) ──
-KC="$PROJECT_DIR/.build/signing.keychain-db"
-KC_PASS="openwritr"
-CERT_NAME="OpenWritr Dev"
+find_signing_identity() {
+    if [[ -n "$PREFERRED_IDENTITY" ]]; then
+        security find-identity -v -p codesigning 2>/dev/null \
+            | awk -v fingerprint="$PREFERRED_IDENTITY" '$2 == fingerprint { print $2; found = 1; exit } END { if (!found) exit 1 }'
+        return
+    fi
 
-if ! security find-certificate -c "$CERT_NAME" "$KC" > /dev/null 2>&1; then
-    echo "Creating signing keychain + certificate..."
-    security delete-keychain "$KC" 2>/dev/null || true
-    security create-keychain -p "$KC_PASS" "$KC"
-    TMPD=$(mktemp -d)
-    cat > "$TMPD/cert.cfg" <<'CERTEOF'
-[ req ]
-default_bits = 2048
-distinguished_name = dn
-x509_extensions = codesign
-prompt = no
-[ dn ]
-CN = OpenWritr Dev
-[ codesign ]
-keyUsage = critical, digitalSignature
-extendedKeyUsage = critical, codeSigning
-basicConstraints = critical, CA:false
-CERTEOF
-    openssl req -x509 -newkey rsa:2048 -nodes \
-        -keyout "$TMPD/key.pem" -out "$TMPD/cert.pem" \
-        -days 3650 -config "$TMPD/cert.cfg" 2>/dev/null
-    openssl pkcs12 -export -out "$TMPD/cert.p12" \
-        -inkey "$TMPD/key.pem" -in "$TMPD/cert.pem" \
-        -passout pass:temp -legacy 2>/dev/null
-    security unlock-keychain -p "$KC_PASS" "$KC"
-    security import "$TMPD/cert.p12" -k "$KC" -T /usr/bin/codesign -P "temp"
-    security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KC_PASS" "$KC"
-    rm -rf "$TMPD"
-    echo "Certificate '$CERT_NAME' created."
-fi
+    security find-identity -v -p codesigning 2>/dev/null \
+        | awk '
+            /Developer ID Application:/ { print $2; exit }
+            /Apple Development:/ && !apple_dev { apple_dev = $2 }
+            END {
+                if (apple_dev) {
+                    print apple_dev
+                } else {
+                    exit 1
+                }
+            }
+        '
+}
 
-# Ensure keychain is unlocked and in search list
-security unlock-keychain -p "$KC_PASS" "$KC"
-EXISTING=$(security list-keychains -d user | tr -d '"' | tr '\n' ' ')
-if ! echo "$EXISTING" | grep -q "signing.keychain-db"; then
-    security list-keychains -d user -s $EXISTING "$KC"
+SIGNING_IDENTITY="$(find_signing_identity || true)"
+
+if [[ -z "$SIGNING_IDENTITY" ]]; then
+    echo "No valid macOS codesigning identity found." >&2
+    echo "Install a Developer ID Application or Apple Development certificate, or set OPENWRITR_SIGNING_IDENTITY to a valid fingerprint." >&2
+    exit 1
 fi
 
 echo "Building OpenWritr..."
@@ -75,14 +63,20 @@ with open('$APP/Contents/Info.plist', 'wb') as f:
     plistlib.dump(p, f)
 "
 
-# Sign with persistent certificate from project keychain
-codesign --force --sign "$CERT_NAME" --keychain "$KC" \
-    --identifier com.openwritr.app \
+# Sign with a stable, trusted identity so TCC permissions survive rebuilds.
+codesign --force --sign "$SIGNING_IDENTITY" \
+    --identifier "$DEFAULT_BUNDLE_ID" \
     --entitlements "$PROJECT_DIR/OpenWritr.entitlements" \
     "$APP"
 
+SIGNATURE_DETAILS=$(codesign -dv "$APP" 2>&1)
+if echo "$SIGNATURE_DETAILS" | grep -qi 'Signature=adhoc'; then
+    echo "codesign produced an ad-hoc signature; aborting so macOS permissions do not reset." >&2
+    exit 1
+fi
+
 echo "App bundle created at: $APP"
-echo "Signed with: $CERT_NAME"
+echo "Signed with identity: $SIGNING_IDENTITY"
 echo "Size: $(du -sh "$APP" | cut -f1)"
 echo ""
 echo "To install:  cp -R \"$APP\" /Applications/"
