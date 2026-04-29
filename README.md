@@ -57,6 +57,31 @@ open /Applications/OpenWritr.app
 
 `swift build -c release` is enough for a fast compile check. `scripts/build-app.sh` creates the signed `.app` bundle and requires a locally available Developer ID Application or Apple Development certificate.
 
+### Signed DMG release
+
+The release flow builds a Developer ID signed app, packages a signed DMG, notarizes it, and uploads
+the DMG plus SHA-256 checksum to the GitHub Release for a `v*` tag.
+
+Required GitHub Actions secrets:
+
+- `MACOS_CERTIFICATE` — base64-encoded Developer ID Application `.p12`
+- `MACOS_CERTIFICATE_PWD` — password for the `.p12`
+- `APPLE_ID` — Apple ID used for notarization
+- `APPLE_TEAM_ID` — Apple Developer Team ID
+- `APPLE_APP_PASSWORD` — app-specific password for notarization
+
+For local releases, copy the example environment and store a notary profile once:
+
+```sh
+cp .release.env.example .release.env
+xcrun notarytool store-credentials OpenWritr \
+  --apple-id "your@email.com" \
+  --team-id "G69Z5BNY97" \
+  --password "app-specific-password"
+
+scripts/release_macos.sh
+```
+
 Then grant **Microphone** and **Accessibility** permissions when prompted. The Parakeet model downloads automatically (~460 MB).
 
 ## Architecture

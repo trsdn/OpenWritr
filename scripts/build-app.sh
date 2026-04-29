@@ -3,15 +3,26 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+ENV_FILE="${RELEASE_ENV_FILE:-$PROJECT_DIR/.release.env}"
 BUILD_DIR="$PROJECT_DIR/.build/release"
 APP="$BUILD_DIR/OpenWritr.app"
 DEFAULT_BUNDLE_ID="com.openwritr.app"
-PREFERRED_IDENTITY="${OPENWRITR_SIGNING_IDENTITY:-}"
+PREFERRED_IDENTITY="${OPENWRITR_SIGNING_IDENTITY:-${CODE_SIGN_IDENTITY:-}}"
+
+if [[ -f "$ENV_FILE" ]]; then
+    set -a
+    . "$ENV_FILE"
+    set +a
+    PREFERRED_IDENTITY="${OPENWRITR_SIGNING_IDENTITY:-${CODE_SIGN_IDENTITY:-$PREFERRED_IDENTITY}}"
+fi
 
 find_signing_identity() {
     if [[ -n "$PREFERRED_IDENTITY" ]]; then
         security find-identity -v -p codesigning 2>/dev/null \
-            | awk -v fingerprint="$PREFERRED_IDENTITY" '$2 == fingerprint { print $2; found = 1; exit } END { if (!found) exit 1 }'
+            | awk -v preferred="$PREFERRED_IDENTITY" '
+                $2 == preferred || index($0, preferred) { print $2; found = 1; exit }
+                END { if (!found) exit 1 }
+            '
         return
     fi
 
@@ -65,6 +76,8 @@ with open('$APP/Contents/Info.plist', 'wb') as f:
 
 # Sign with a stable, trusted identity so TCC permissions survive rebuilds.
 codesign --force --sign "$SIGNING_IDENTITY" \
+    --options runtime \
+    --timestamp \
     --identifier "$DEFAULT_BUNDLE_ID" \
     --entitlements "$PROJECT_DIR/OpenWritr.entitlements" \
     "$APP"
