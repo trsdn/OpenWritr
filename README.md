@@ -59,8 +59,11 @@ open /Applications/OpenWritr.app
 
 ### Signed DMG release
 
-The release flow builds a Developer ID signed app, packages a signed DMG, notarizes it, and uploads
-the DMG plus SHA-256 checksum to the GitHub Release for a `v*` tag.
+The release flow builds a Developer ID signed app, notarizes and staples the app bundle, packages a
+ZIP from that notarized app, then creates and notarizes a DMG. GitHub Releases for `v*` tags receive:
+
+- notarized ZIP + SHA-256 checksum
+- notarized DMG + SHA-256 checksum
 
 Required GitHub Actions secrets:
 
@@ -81,6 +84,9 @@ xcrun notarytool store-credentials OpenWritr \
 
 scripts/release_macos.sh
 ```
+
+Important: if you distribute a ZIP, notarize and staple the `.app` before creating the archive. A
+stapled DMG ticket alone does not protect ZIP distribution.
 
 Then grant **Microphone** and **Accessibility** permissions when prompted. The Parakeet model downloads automatically (~460 MB).
 

@@ -12,14 +12,28 @@ if [[ -f "$ENV_FILE" ]]; then
 fi
 
 DMG_PATH="${DMG_PATH:-$PROJECT_DIR/dist/OpenWritr-macos.dmg}"
-
-"$SCRIPT_DIR/build-app.sh"
-DMG_PATH="$DMG_PATH" "$SCRIPT_DIR/make_dmg.sh"
+APP_PATH="${APP_PATH:-$PROJECT_DIR/.build/release/OpenWritr.app}"
+ZIP_PATH="${ZIP_PATH:-$PROJECT_DIR/dist/OpenWritr-macos.zip}"
+CAN_NOTARIZE=false
 
 if [[ -n "${NOTARY_PROFILE:-}" || ( -n "${APPLE_ID:-}" && -n "${APPLE_TEAM_ID:-}" && -n "${APPLE_APP_PASSWORD:-}" ) ]]; then
+  CAN_NOTARIZE=true
+fi
+
+"$SCRIPT_DIR/build-app.sh"
+
+if [[ "$CAN_NOTARIZE" == true ]]; then
+  APP_PATH="$APP_PATH" ZIP_PATH="$ZIP_PATH" "$SCRIPT_DIR/notarize_app.sh"
+else
+  echo "Skipping app notarization and ZIP packaging because neither NOTARY_PROFILE nor APPLE_ID, APPLE_TEAM_ID, and APPLE_APP_PASSWORD are set."
+fi
+
+DMG_PATH="$DMG_PATH" "$SCRIPT_DIR/make_dmg.sh"
+
+if [[ "$CAN_NOTARIZE" == true ]]; then
   DMG_PATH="$DMG_PATH" "$SCRIPT_DIR/notarize_dmg.sh"
 else
-  echo "Skipping notarization because neither NOTARY_PROFILE nor APPLE_ID, APPLE_TEAM_ID, and APPLE_APP_PASSWORD are set."
+  echo "Skipping DMG notarization because neither NOTARY_PROFILE nor APPLE_ID, APPLE_TEAM_ID, and APPLE_APP_PASSWORD are set."
 fi
 
 echo "Release artifacts are in $PROJECT_DIR/dist/."

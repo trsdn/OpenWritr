@@ -15,8 +15,8 @@ permissions:
   contents: write
 
 jobs:
-  macos-dmg:
-    name: Build signed and notarized DMG
+  macos-release:
+    name: Build signed and notarized macOS artifacts
     runs-on: macos-latest
     steps:
       - name: Resolve release metadata
@@ -86,6 +86,18 @@ jobs:
           scripts/build-app.sh
           scripts/make_dmg.sh
 
+      - name: Notarize app and package ZIP
+        shell: bash
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          APP_PATH: .build/release/OpenWritr.app
+          ZIP_PATH: dist/OpenWritr-${{ steps.release.outputs.version }}-macos.zip
+        run: |
+          set -euo pipefail
+          scripts/notarize_app.sh
+
       - name: Notarize DMG
         shell: bash
         env:
@@ -108,10 +120,12 @@ jobs:
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: OpenWritr-macos-dmg
+          name: OpenWritr-macos-artifacts
           path: |
             dist/OpenWritr-${{ steps.release.outputs.version }}-macos.dmg
             dist/OpenWritr-${{ steps.release.outputs.version }}-macos.dmg.sha256
+            dist/OpenWritr-${{ steps.release.outputs.version }}-macos.zip
+            dist/OpenWritr-${{ steps.release.outputs.version }}-macos.zip.sha256
 
       - name: Attach assets to GitHub Release
         shell: bash
@@ -122,9 +136,11 @@ jobs:
         run: |
           set -euo pipefail
           if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release create "$RELEASE_TAG" --title "OpenWritr ${RELEASE_VERSION}" --notes "Signed and notarized macOS DMG."
+            gh release create "$RELEASE_TAG" --title "OpenWritr ${RELEASE_VERSION}" --notes "Signed and notarized macOS DMG and ZIP."
           fi
           gh release upload "$RELEASE_TAG" \
             "dist/OpenWritr-${RELEASE_VERSION}-macos.dmg" \
             "dist/OpenWritr-${RELEASE_VERSION}-macos.dmg.sha256" \
+            "dist/OpenWritr-${RELEASE_VERSION}-macos.zip" \
+            "dist/OpenWritr-${RELEASE_VERSION}-macos.zip.sha256" \
             --clobber
