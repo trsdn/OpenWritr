@@ -87,6 +87,7 @@ if echo "$SIGNATURE_DETAILS" | grep -qi 'Signature=adhoc'; then
     echo "codesign produced an ad-hoc signature; aborting so macOS permissions do not reset." >&2
     exit 1
 fi
+codesign --verify --deep --strict --verbose=2 "$APP"
 
 echo "App bundle created at: $APP"
 echo "Signed with identity: $SIGNING_IDENTITY"

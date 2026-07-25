@@ -699,7 +699,7 @@ footer a:hover { color: var(--accent); }
       Push to talk, release to paste. Local transcription with optional cleanup via GitHub Copilot or an OpenAI-compatible API.
     </p>
     <div class="hero-actions">
-      <a href="https://github.com/trsdn/OpenWritr/releases/latest/download/OpenWritr-v1.2.0-macOS-arm64.zip" class="btn btn-primary">
+      <a href="https://github.com/trsdn/OpenWritr/releases/latest/download/OpenWritr-v1.2.1-macOS-arm64.zip" class="btn btn-primary">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
         Download
       </a>
@@ -738,7 +738,7 @@ footer a:hover { color: var(--accent); }
     <div class="benchmark reveal">
       <div>
         <div class="stat-val">&lt;1s</div>
-        <div class="stat-label">End-to-end latency</div>
+        <div class="stat-label">Local transcription latency</div>
       </div>
       <div>
         <div class="stat-val">190&times;</div>
@@ -784,8 +784,8 @@ footer a:hover { color: var(--accent); }
         <div class="feature-icon fi-green">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/></svg>
         </div>
-        <h3>100% Local</h3>
-        <p>Everything runs on-device via CoreML. Your audio never leaves your machine. No account, no API key, no internet.</p>
+        <h3>Local Transcription</h3>
+        <p>Audio is transcribed on-device via CoreML. Your audio never leaves your machine; Enhanced Mode can send the resulting transcript text to its selected provider for cleanup.</p>
       </div>
       <div class="feature">
         <div class="feature-icon fi-purple">
@@ -818,8 +818,8 @@ footer a:hover { color: var(--accent); }
     <div class="section-label reveal">Enhanced Mode</div>
     <h2 class="reveal">AI-powered<br>transcript cleanup</h2>
     <p class="section-desc reveal">
-      Optionally clean up transcripts using GitHub Copilot&mdash;fix grammar, remove filler words,
-      and polish punctuation while preserving meaning, tone, and language.
+      Optionally clean up transcripts using GitHub Copilot or an OpenAI-compatible API&mdash;fix grammar,
+      remove filler words, and polish punctuation while preserving meaning, tone, and language.
     </p>
     <div class="steps">
       <div class="step reveal">
@@ -839,8 +839,8 @@ footer a:hover { color: var(--accent); }
       </div>
     </div>
     <p class="section-desc reveal" style="margin-top:32px;">
-      Requires the <a href="https://docs.github.com/en/copilot/using-github-copilot/using-github-copilot-in-the-command-line" style="color:var(--accent);text-decoration:none;">GitHub Copilot CLI</a>
-      installed and authenticated. Works with all 25 supported languages.
+      GitHub Copilot enhancement requires the <a href="https://docs.github.com/en/copilot/using-github-copilot/using-github-copilot-in-the-command-line" style="color:var(--accent);text-decoration:none;">GitHub Copilot CLI</a>
+      installed and authenticated; OpenAI-compatible providers use the configured endpoint. Works with all 25 supported languages.
     </p>
   </div>
 </section>
@@ -851,8 +851,8 @@ footer a:hover { color: var(--accent); }
     <div class="section-label reveal">How It Works</div>
     <h2 class="reveal">Three steps.<br>Under one second.</h2>
     <p class="section-desc reveal">
-      The entire pipeline&mdash;from microphone to pasted text&mdash;completes
-      before you finish lifting your finger.
+      The local pipeline&mdash;from microphone to pasted text&mdash;completes
+      before you finish lifting your finger. Enhanced Mode adds provider processing before paste.
     </p>
     <div class="steps">
       <div class="step reveal">
@@ -868,7 +868,7 @@ footer a:hover { color: var(--accent); }
       <div class="step reveal">
         <span class="step-num">03</span>
         <h3>Pasted</h3>
-        <p>The transcribed text is placed on the clipboard and a Cmd+V is simulated. Text appears at your cursor. Your original clipboard is silently restored.</p>
+        <p>The local transcript&mdash;or the provider-cleaned text when Enhanced Mode is enabled&mdash;is placed on the clipboard and a Cmd+V is simulated. Text appears at your cursor. Your original clipboard is silently restored.</p>
       </div>
     </div>
   </div>

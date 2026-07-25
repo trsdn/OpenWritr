@@ -1,70 +1,150 @@
 import Cocoa
+import os.log
+
+private let pasteLog = Logger(subsystem: "com.openwritr.app", category: "PasteManager")
 
 @MainActor
 final class PasteManager {
     private struct PasteboardSnapshot {
         struct Item {
-            let representations: [(type: NSPasteboard.PasteboardType, data: Data)]
+            struct Representation {
+                let type: NSPasteboard.PasteboardType
+                let data: Data
+            }
+
+            let representations: [Representation]
         }
 
         let items: [Item]
     }
 
+    private struct PendingRestore {
+        let id: UUID
+        let snapshot: PasteboardSnapshot
+        let expectedChangeCount: Int
+    }
+
+    private var pendingRestore: PendingRestore?
+
     func pasteText(_ text: String) {
-        let pasteboard = NSPasteboard.general
-        let previousSnapshot = snapshot(of: pasteboard)
-
-        // Set our text
-        pasteboard.clearContents()
-        pasteboard.setString(text, forType: .string)
-        let temporaryChangeCount = pasteboard.changeCount
-
-        // Simulate Cmd+V
-        simulatePaste()
-
-        // Restore previous clipboard after a short delay
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            guard pasteboard.changeCount == temporaryChangeCount else {
-                return
-            }
-
-            self.restore(previousSnapshot, to: pasteboard)
-        }
-    }
-
-    private func snapshot(of pasteboard: NSPasteboard) -> PasteboardSnapshot {
-        let items: [PasteboardSnapshot.Item] = pasteboard.pasteboardItems?.map { item in
-            let representations = item.types.compactMap { type -> (NSPasteboard.PasteboardType, Data)? in
-                guard let data = item.data(forType: type) else { return nil }
-                return (type, data)
-            }
-            return PasteboardSnapshot.Item(representations: representations)
-        } ?? []
-
-        return PasteboardSnapshot(items: items)
-    }
-
-    private func restore(_ snapshot: PasteboardSnapshot, to pasteboard: NSPasteboard) {
-        pasteboard.clearContents()
-
-        guard !snapshot.items.isEmpty else {
+        guard flushPendingRestore(matching: nil) else {
             return
         }
 
-        let restoredItems = snapshot.items.compactMap { snapshotItem -> NSPasteboardItem? in
-            let item = NSPasteboardItem()
-            var wroteRepresentation = false
+        let pasteboard = NSPasteboard.general
+        let originalChangeCount = pasteboard.changeCount
 
-            for representation in snapshotItem.representations {
-                wroteRepresentation = item.setData(representation.data, forType: representation.type) || wroteRepresentation
+        guard let snapshot = snapshot(of: pasteboard) else {
+            return
+        }
+
+        let transcriptItem = NSPasteboardItem()
+        guard transcriptItem.setString(text, forType: .string) else {
+            pasteLog.error("Failed to prepare transcript for the pasteboard")
+            return
+        }
+
+        guard pasteboard.changeCount == originalChangeCount else {
+            pasteLog.notice("Clipboard changed while it was being saved; cancelling paste")
+            return
+        }
+
+        let transcriptOwnershipChangeCount = pasteboard.clearContents()
+        guard pasteboard.writeObjects([transcriptItem]) else {
+            pasteLog.error("Failed to write transcript to the pasteboard")
+            _ = restore(snapshot, to: pasteboard, ifUnchangedSince: transcriptOwnershipChangeCount)
+            return
+        }
+
+        let transcriptChangeCount = pasteboard.changeCount
+        let transactionID = UUID()
+        pendingRestore = .init(
+            id: transactionID,
+            snapshot: snapshot,
+            expectedChangeCount: transcriptChangeCount
+        )
+        simulatePaste()
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            _ = self.flushPendingRestore(matching: transactionID)
+        }
+    }
+
+    func flushPendingRestore() {
+        _ = flushPendingRestore(matching: nil)
+    }
+
+    private func flushPendingRestore(matching transactionID: UUID?) -> Bool {
+        guard let pendingRestore else {
+            return true
+        }
+        guard transactionID == nil || pendingRestore.id == transactionID else {
+            return true
+        }
+
+        self.pendingRestore = nil
+        return restore(
+            pendingRestore.snapshot,
+            to: NSPasteboard.general,
+            ifUnchangedSince: pendingRestore.expectedChangeCount
+        )
+    }
+
+    private func snapshot(of pasteboard: NSPasteboard) -> PasteboardSnapshot? {
+        var snapshotItems: [PasteboardSnapshot.Item] = []
+
+        for item in pasteboard.pasteboardItems ?? [] {
+            var representations: [PasteboardSnapshot.Item.Representation] = []
+
+            for type in item.types {
+                guard let data = item.data(forType: type) else {
+                    pasteLog.error("Failed to read clipboard representation \(type.rawValue, privacy: .public)")
+                    return nil
+                }
+
+                representations.append(.init(type: type, data: data))
             }
 
-            return wroteRepresentation ? item : nil
+            snapshotItems.append(.init(representations: representations))
         }
 
-        if !restoredItems.isEmpty {
-            pasteboard.writeObjects(restoredItems)
+        return PasteboardSnapshot(items: snapshotItems)
+    }
+
+    private func restore(
+        _ snapshot: PasteboardSnapshot,
+        to pasteboard: NSPasteboard,
+        ifUnchangedSince expectedChangeCount: Int
+    ) -> Bool {
+        var restoredItems: [NSPasteboardItem] = []
+
+        for snapshotItem in snapshot.items {
+            let restoredItem = NSPasteboardItem()
+
+            for representation in snapshotItem.representations {
+                guard restoredItem.setData(representation.data, forType: representation.type) else {
+                    pasteLog.error(
+                        "Failed to prepare clipboard representation \(representation.type.rawValue, privacy: .public)"
+                    )
+                    return false
+                }
+            }
+
+            restoredItems.append(restoredItem)
         }
+
+        guard pasteboard.changeCount == expectedChangeCount else {
+            return true
+        }
+
+        pasteboard.clearContents()
+
+        guard restoredItems.isEmpty || pasteboard.writeObjects(restoredItems) else {
+            pasteLog.error("Failed to restore clipboard contents")
+            return false
+        }
+
+        return true
     }
 
     private func simulatePaste() {

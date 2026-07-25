@@ -1,6 +1,15 @@
 import Cocoa
 import AVFoundation
 
+struct PermissionStatus: Sendable {
+    let microphone: Bool
+    let accessibility: Bool
+
+    var allGranted: Bool {
+        microphone && accessibility
+    }
+}
+
 @MainActor
 final class PermissionsManager {
 
@@ -16,21 +25,24 @@ final class PermissionsManager {
         await AVCaptureDevice.requestAccess(for: .audio)
     }
 
-    nonisolated func requestAccessibilityAccess() {
+    @discardableResult
+    func requestAccessibilityAccess() -> Bool {
         let prompt = "AXTrustedCheckOptionPrompt" as CFString
         let options = [prompt: true] as CFDictionary
-        AXIsProcessTrustedWithOptions(options)
+        return AXIsProcessTrustedWithOptions(options)
     }
 
-    func checkAllPermissions() async -> (microphone: Bool, accessibility: Bool) {
+    func checkAllPermissions() async -> PermissionStatus {
         var mic = hasMicrophoneAccess
         if !mic {
             mic = await requestMicrophoneAccess()
         }
-        let accessibility = hasAccessibilityAccess
+
+        var accessibility = hasAccessibilityAccess
         if !accessibility {
-            requestAccessibilityAccess()
+            accessibility = requestAccessibilityAccess()
         }
-        return (mic, accessibility)
+
+        return PermissionStatus(microphone: mic, accessibility: accessibility)
     }
 }

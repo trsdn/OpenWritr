@@ -1,5 +1,26 @@
 import Cocoa
 
+enum HotkeyManagerError: LocalizedError, Sendable {
+    case accessibilityPermissionRequired
+    case eventTapCreationFailed
+    case runLoopSourceCreationFailed
+
+    var errorDescription: String? {
+        switch self {
+        case .accessibilityPermissionRequired: return "Accessibility permission is required for the push-to-talk key."
+        case .eventTapCreationFailed: return "OpenWritr could not start the push-to-talk key listener."
+        case .runLoopSourceCreationFailed: return "OpenWritr could not attach the push-to-talk key listener."
+        }
+    }
+
+    var recoverySuggestion: String? {
+        switch self {
+        case .accessibilityPermissionRequired: return "Grant Accessibility access in System Settings > Privacy & Security, then retry."
+        case .eventTapCreationFailed, .runLoopSourceCreationFailed: return "Verify Accessibility access, then retry initialization."
+        }
+    }
+}
+
 enum RecordingShortcutMode: Sendable {
     case normal
     case enhanced
@@ -28,7 +49,17 @@ final class HotkeyManager {
     private var runLoopSource: CFRunLoopSource?
     private var contextPtr: UnsafeMutablePointer<HotkeyContext>?
 
-    func start() {
+    func start() -> Result<Void, HotkeyManagerError> {
+        if let eventTap, runLoopSource != nil {
+            CGEvent.tapEnable(tap: eventTap, enable: true)
+            return .success(())
+        }
+
+        stop()
+        guard AXIsProcessTrusted() else {
+            return .failure(.accessibilityPermissionRequired)
+        }
+
         let eventMask: CGEventMask = (1 << CGEventType.flagsChanged.rawValue)
 
         let context = HotkeyContext(manager: self)
@@ -43,17 +74,23 @@ final class HotkeyManager {
             callback: hotkeyCallback,
             userInfo: ptr
         ) else {
-            print("HotkeyManager: Failed to create event tap. Ensure Accessibility permission is granted.")
             ptr.deinitialize(count: 1)
             ptr.deallocate()
-            return
+            return .failure(.eventTapCreationFailed)
+        }
+        guard let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0) else {
+            CGEvent.tapEnable(tap: tap, enable: false)
+            ptr.deinitialize(count: 1)
+            ptr.deallocate()
+            return .failure(.runLoopSourceCreationFailed)
         }
 
         contextPtr = ptr
         eventTap = tap
-        runLoopSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
-        CFRunLoopAddSource(CFRunLoopGetMain(), runLoopSource, .commonModes)
+        runLoopSource = source
+        CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
         CGEvent.tapEnable(tap: tap, enable: true)
+        return .success(())
     }
 
     func stop() {
@@ -68,6 +105,10 @@ final class HotkeyManager {
         contextPtr?.deinitialize(count: 1)
         contextPtr?.deallocate()
         contextPtr = nil
+        isKeyPressed = false
+        primaryKeyDown = false
+        shiftKeyDown = false
+        sawShiftDuringCurrentPress = false
     }
 
     nonisolated fileprivate func processFlagsChanged(_ flags: CGEventFlags, keyCode: Int64) -> RecordingShortcutAction? {
@@ -133,7 +174,7 @@ private func hotkeyCallback(
     let contextPtr = userInfo.assumingMemoryBound(to: HotkeyContext.self)
     let manager = contextPtr.pointee.manager
 
-    if type == .tapDisabledByTimeout {
+    if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
         DispatchQueue.main.async {
             manager?.reEnableTap()
         }
