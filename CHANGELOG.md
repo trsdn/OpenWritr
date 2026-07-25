@@ -2,6 +2,16 @@
 
 All notable changes to OpenWritr will be documented in this file.
 
+## [1.2.1] — 2026-07-24
+
+### Fixed
+- Made model readiness, permission, and runtime failures report accurate errors with reliable retry paths
+- Handled transcription and enhancement failures without reusing invalid output, while accepting a successful empty enhancement
+- Hardened Copilot CLI execution with nvm/fnm discovery, concurrent pipe draining, enforced timeouts, and process cleanup
+- Restored temporary system microphone changes on every exit path and made the audio lifecycle safer across starts, stops, and failures
+- Preserved clipboard contents losslessly with race-safe restoration, including pending restoration during app shutdown
+- Improved build checks, privacy and installation guidance, and release artifact preparation and verification
+
 ## [1.2.0] — 2026-04-23
 
 ### Added

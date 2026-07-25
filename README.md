@@ -8,7 +8,7 @@
 
 Native macOS menu bar app for push-to-talk voice-to-text. Core transcription runs locally on the Apple Neural Engine; optional enhancement can use GitHub Copilot or any OpenAI-compatible API.
 
-**[Website](https://trsdn.github.io/OpenWritr/)** · **[Download](https://github.com/trsdn/OpenWritr/releases/latest/download/OpenWritr-v1.2.0-macOS-arm64.zip)** · **[Release](https://github.com/trsdn/OpenWritr/releases)**
+**[Website](https://trsdn.github.io/OpenWritr/)** · **[Download](https://github.com/trsdn/OpenWritr/releases/latest/download/OpenWritr-v1.2.1-macOS-arm64.zip)** · **[Release](https://github.com/trsdn/OpenWritr/releases)**
 
 <p align="center">
   <img src="docs/mockup.svg" alt="OpenWritr in action" width="720">
@@ -24,7 +24,7 @@ Native macOS menu bar app for push-to-talk voice-to-text. Core transcription run
 
 | Metric | Value |
 |--------|-------|
-| End-to-end latency | < 1 second |
+| Local transcription latency | < 1 second |
 | Model | NVIDIA Parakeet TDT 0.6B v3 |
 | Inference | Apple Neural Engine via CoreML |
 | Runtime memory | ~38 MB physical |
@@ -33,7 +33,7 @@ Native macOS menu bar app for push-to-talk voice-to-text. Core transcription run
 | Download (zip) | 3.2 MB |
 | Model size | ~460 MB (downloaded on first launch) |
 | Languages | 25 (English, German, French, Spanish, and more) |
-| Data sent to cloud | None for transcription; optional in Enhanced Mode |
+| Transcript/audio sent to cloud | Audio never leaves the device; Enhanced Mode optionally sends transcript text to its selected provider |
 
 ## Requirements
 

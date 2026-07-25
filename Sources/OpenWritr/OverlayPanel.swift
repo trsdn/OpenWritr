@@ -1,11 +1,12 @@
 import Cocoa
 import SwiftUI
 
-enum OverlayState {
+enum OverlayState: Sendable {
     case listening
     case transcribing
     case enhancing
     case done
+    case error(String)
 }
 
 @MainActor
@@ -93,6 +94,8 @@ private struct OverlayContentView: View {
             return .blue
         case .done:
             return .green
+        case .error:
+            return .orange
         }
     }
 
@@ -106,6 +109,8 @@ private struct OverlayContentView: View {
             return "Enhancement"
         case .done:
             return "Ready"
+        case .error(let message):
+            return message
         }
     }
 
@@ -123,6 +128,8 @@ private struct OverlayContentView: View {
                 .symbolEffect(.pulse)
         case .done:
             Image(systemName: "checkmark")
+        case .error:
+            Image(systemName: "exclamationmark.triangle.fill")
         }
     }
 

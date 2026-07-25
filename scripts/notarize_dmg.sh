@@ -18,6 +18,9 @@ if [[ ! -f "$DMG_PATH" ]]; then
   exit 1
 fi
 
+rm -f -- "$DMG_PATH.sha256"
+codesign --verify --strict --verbose=2 "$DMG_PATH"
+
 if [[ -n "${NOTARY_PROFILE:-}" ]]; then
   xcrun notarytool submit "$DMG_PATH" --keychain-profile "$NOTARY_PROFILE" --wait
 else
@@ -33,6 +36,7 @@ else
     exit 1
   fi
 
+  set +x
   xcrun notarytool submit "$DMG_PATH" \
     --apple-id "$APPLE_ID" \
     --team-id "$APPLE_TEAM_ID" \
@@ -42,7 +46,14 @@ fi
 
 xcrun stapler staple "$DMG_PATH"
 xcrun stapler validate "$DMG_PATH"
-spctl --assess --type open --context context:primary-signature --verbose "$DMG_PATH"
-shasum -a 256 "$DMG_PATH" > "$DMG_PATH.sha256"
+spctl --assess --type open --context context:primary-signature --verbose=2 "$DMG_PATH"
+hdiutil verify "$DMG_PATH"
+(
+  cd "$(dirname "$DMG_PATH")"
+  dmg_name="$(basename "$DMG_PATH")"
+  shasum -a 256 "$dmg_name" > "$dmg_name.sha256"
+  shasum -a 256 -c "$dmg_name.sha256"
+)
 
 echo "DMG notarization complete: $DMG_PATH"
+echo "Checksum created: $DMG_PATH.sha256"

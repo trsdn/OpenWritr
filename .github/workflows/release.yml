@@ -29,6 +29,10 @@ jobs:
           else
             tag="${GITHUB_REF_NAME}"
           fi
+          if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Release tag must be a version such as v1.2.1: $tag"
+            exit 1
+          fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
 
@@ -50,22 +54,45 @@ jobs:
             exit 1
           fi
 
-          cert_file="$(mktemp /tmp/openwritr-cert.XXXXXX.p12)"
-          keychain_file="/tmp/openwritr-build-${{ github.run_id }}.keychain-db"
+          signing_dir="$GITHUB_WORKSPACE/.build/ci-signing-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          cert_file="$signing_dir/developer-id.p12"
+          ca_file="$signing_dir/DeveloperIDG2CA.cer"
+          keychain_file="$signing_dir/build.keychain-db"
           keychain_password="$(openssl rand -base64 32)"
+          import_succeeded=false
 
-          echo "$MACOS_CERTIFICATE" | base64 --decode > "$cert_file"
-          curl -sL "https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer" -o /tmp/DeveloperIDG2CA.cer
+          cleanup_import() {
+            rm -f -- "$cert_file" "$ca_file"
+            if [[ "$import_succeeded" != true ]]; then
+              security delete-keychain "$keychain_file" 2>/dev/null || true
+              rm -f -- "$keychain_file"
+              rmdir -- "$signing_dir" 2>/dev/null || true
+            fi
+          }
+          trap cleanup_import EXIT
+          trap 'exit 129' HUP
+          trap 'exit 130' INT
+          trap 'exit 143' TERM
+
+          mkdir -p "$signing_dir"
+          set +x
+          printf '%s' "$MACOS_CERTIFICATE" | base64 --decode > "$cert_file"
+          curl --fail --silent --show-error --location \
+            "https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer" \
+            --output "$ca_file"
 
           security create-keychain -p "$keychain_password" "$keychain_file"
           security set-keychain-settings -lut 21600 "$keychain_file"
           security unlock-keychain -p "$keychain_password" "$keychain_file"
-          security import /tmp/DeveloperIDG2CA.cer -k "$keychain_file" -T /usr/bin/codesign
+          security import "$ca_file" -k "$keychain_file" -T /usr/bin/codesign
           security import "$cert_file" -P "$MACOS_CERTIFICATE_PWD" -A -t cert -f pkcs12 -k "$keychain_file"
           security set-key-partition-list -S apple-tool:,apple: -k "$keychain_password" "$keychain_file"
           security list-keychains -d user -s "$keychain_file" $(security list-keychains -d user | tr -d '"')
 
-          identity="$(security find-identity -v -p codesigning "$keychain_file" | grep 'Developer ID Application' | head -1 | sed 's/.*"\(.*\)"/\1/')"
+          identity="$(
+            security find-identity -v -p codesigning "$keychain_file" |
+              awk -F'"' '/Developer ID Application/ && !identity { identity = $2 } END { print identity }'
+          )"
           if [[ -z "$identity" ]]; then
             echo "Developer ID Application identity not found."
             exit 1
@@ -74,17 +101,15 @@ jobs:
           echo "CODE_SIGN_IDENTITY=$identity" >> "$GITHUB_ENV"
           echo "OPENWRITR_SIGNING_IDENTITY=$identity" >> "$GITHUB_ENV"
           echo "KEYCHAIN_FILE=$keychain_file" >> "$GITHUB_ENV"
-          rm -f "$cert_file" /tmp/DeveloperIDG2CA.cer
+          echo "SIGNING_DIR=$signing_dir" >> "$GITHUB_ENV"
+          import_succeeded=true
 
-      - name: Build signed app and DMG
+      - name: Build Developer ID signed app
         shell: bash
-        env:
-          DMG_PATH: dist/OpenWritr-${{ steps.release.outputs.version }}-macos.dmg
         run: |
           set -euo pipefail
           chmod +x scripts/*.sh
           scripts/build-app.sh
-          scripts/make_dmg.sh
 
       - name: Notarize app and package ZIP
         shell: bash
@@ -93,10 +118,20 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
           APP_PATH: .build/release/OpenWritr.app
-          ZIP_PATH: dist/OpenWritr-${{ steps.release.outputs.version }}-macos.zip
+          ZIP_PATH: dist/OpenWritr-v${{ steps.release.outputs.version }}-macOS-arm64.zip
         run: |
           set -euo pipefail
           scripts/notarize_app.sh
+
+      - name: Build signed DMG from stapled app
+        shell: bash
+        env:
+          APP_PATH: .build/release/OpenWritr.app
+          DMG_PATH: dist/OpenWritr-v${{ steps.release.outputs.version }}-macOS-arm64.dmg
+          REQUIRE_NOTARIZED_APP: "true"
+        run: |
+          set -euo pipefail
+          scripts/make_dmg.sh
 
       - name: Notarize DMG
         shell: bash
@@ -104,7 +139,7 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
-          DMG_PATH: dist/OpenWritr-${{ steps.release.outputs.version }}-macos.dmg
+          DMG_PATH: dist/OpenWritr-v${{ steps.release.outputs.version }}-macOS-arm64.dmg
         run: |
           set -euo pipefail
           scripts/notarize_dmg.sh
@@ -115,17 +150,56 @@ jobs:
         run: |
           if [[ -n "${KEYCHAIN_FILE:-}" ]]; then
             security delete-keychain "$KEYCHAIN_FILE" 2>/dev/null || true
+            rm -f -- "$KEYCHAIN_FILE"
           fi
+          if [[ -n "${SIGNING_DIR:-}" ]]; then
+            rmdir -- "$SIGNING_DIR" 2>/dev/null || true
+          fi
+
+      - name: Verify release artifacts
+        shell: bash
+        env:
+          APP_PATH: .build/release/OpenWritr.app
+          ASSET_BASE: dist/OpenWritr-v${{ steps.release.outputs.version }}-macOS-arm64
+        run: |
+          set -euo pipefail
+          artifacts=(
+            "$ASSET_BASE.zip"
+            "$ASSET_BASE.zip.sha256"
+            "$ASSET_BASE.dmg"
+            "$ASSET_BASE.dmg.sha256"
+          )
+          for artifact in "${artifacts[@]}"; do
+            if [[ ! -f "$artifact" ]]; then
+              echo "Expected release artifact is missing: $artifact"
+              exit 1
+            fi
+          done
+
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+          xcrun stapler validate "$APP_PATH"
+          spctl --assess --type execute --verbose=2 "$APP_PATH"
+          codesign --verify --strict --verbose=2 "$ASSET_BASE.dmg"
+          xcrun stapler validate "$ASSET_BASE.dmg"
+          spctl --assess --type open --context context:primary-signature --verbose=2 "$ASSET_BASE.dmg"
+          hdiutil verify "$ASSET_BASE.dmg"
+          (
+            cd "$(dirname "$ASSET_BASE")"
+            asset_name="$(basename "$ASSET_BASE")"
+            shasum -a 256 -c "$asset_name.zip.sha256"
+            shasum -a 256 -c "$asset_name.dmg.sha256"
+          )
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: OpenWritr-macos-artifacts
+          name: OpenWritr-v${{ steps.release.outputs.version }}-macOS-arm64
+          if-no-files-found: error
           path: |
-            dist/OpenWritr-${{ steps.release.outputs.version }}-macos.dmg
-            dist/OpenWritr-${{ steps.release.outputs.version }}-macos.dmg.sha256
-            dist/OpenWritr-${{ steps.release.outputs.version }}-macos.zip
-            dist/OpenWritr-${{ steps.release.outputs.version }}-macos.zip.sha256
+            dist/OpenWritr-v${{ steps.release.outputs.version }}-macOS-arm64.zip
+            dist/OpenWritr-v${{ steps.release.outputs.version }}-macOS-arm64.zip.sha256
+            dist/OpenWritr-v${{ steps.release.outputs.version }}-macOS-arm64.dmg
+            dist/OpenWritr-v${{ steps.release.outputs.version }}-macOS-arm64.dmg.sha256
 
       - name: Attach assets to GitHub Release
         shell: bash
@@ -135,12 +209,21 @@ jobs:
           RELEASE_VERSION: ${{ steps.release.outputs.version }}
         run: |
           set -euo pipefail
+          asset_base="dist/OpenWritr-v${RELEASE_VERSION}-macOS-arm64"
+          assets=(
+            "$asset_base.zip"
+            "$asset_base.zip.sha256"
+            "$asset_base.dmg"
+            "$asset_base.dmg.sha256"
+          )
+          for asset in "${assets[@]}"; do
+            if [[ ! -f "$asset" ]]; then
+              echo "Expected release asset is missing: $asset"
+              exit 1
+            fi
+          done
+
           if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release create "$RELEASE_TAG" --title "OpenWritr ${RELEASE_VERSION}" --notes "Signed and notarized macOS DMG and ZIP."
           fi
-          gh release upload "$RELEASE_TAG" \
-            "dist/OpenWritr-${RELEASE_VERSION}-macos.dmg" \
-            "dist/OpenWritr-${RELEASE_VERSION}-macos.dmg.sha256" \
-            "dist/OpenWritr-${RELEASE_VERSION}-macos.zip" \
-            "dist/OpenWritr-${RELEASE_VERSION}-macos.zip.sha256" \
-            --clobber
+          gh release upload "$RELEASE_TAG" "${assets[@]}" --clobber

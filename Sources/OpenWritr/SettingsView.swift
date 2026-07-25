@@ -1,5 +1,7 @@
 import SwiftUI
 import CoreAudio
+import CoreGraphics
+import IOKit.hidsystem
 
 struct SettingsView: View {
     @Bindable var viewModel: AppViewModel
@@ -223,9 +225,9 @@ enum HotkeyChoice: String, CaseIterable, Identifiable, Sendable {
 
     var flag: UInt64 {
         switch self {
-        case .fn: return 0x800000
-        case .rightOption: return 0x40
-        case .rightCommand: return 0x10
+        case .fn: return CGEventFlags.maskSecondaryFn.rawValue
+        case .rightOption: return UInt64(NX_DEVICERALTKEYMASK)
+        case .rightCommand: return UInt64(NX_DEVICERCMDKEYMASK)
         }
     }
 

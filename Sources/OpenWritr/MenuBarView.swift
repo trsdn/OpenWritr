@@ -14,6 +14,7 @@ struct MenuBarView: View {
             }
             Divider()
             Button("Quit OpenWritr") {
+                viewModel.shutdown()
                 NSApplication.shared.terminate(nil)
             }
             .keyboardShortcut("q")
@@ -27,7 +28,21 @@ struct MenuBarView: View {
                 .font(.headline)
                 .padding(.horizontal, 4)
 
-            if let warning = viewModel.lastEnhancementWarning {
+            if let error = currentError {
+                Text(error.message)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 4)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let recoverySuggestion = error.recoverySuggestion {
+                    Text(recoverySuggestion)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 4)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                errorActions
+            } else if let warning = viewModel.lastEnhancementWarning {
                 Text(warning)
                     .font(.caption)
                     .foregroundStyle(.orange)
@@ -80,15 +95,38 @@ struct MenuBarView: View {
         case .downloading(let progress):
             return "Downloading Model (\(Int(progress * 100))%)…"
         case .ready:
-            return "Ready"
+            return "Ready — Hold \(viewModel.hotkeyChoice.shortLabel) to Speak"
         case .listening:
             return "Listening…"
         case .transcribing:
             return "Transcribing…"
         case .enhancing:
             return "Enhancing…"
-        case .error(let msg):
-            return "Error: \(msg)"
+        case .initializationError(let error), .runtimeError(let error):
+            return error.title
+        }
+    }
+
+    private var currentError: AppErrorPresentation? {
+        switch viewModel.state {
+        case .initializationError(let error), .runtimeError(let error): return error
+        default: return nil
+        }
+    }
+
+    @ViewBuilder
+    private var errorActions: some View {
+        switch viewModel.state {
+        case .initializationError:
+            Button("Retry Initialization") { Task { await viewModel.retryInitialization() } }
+        case .runtimeError:
+            if viewModel.recoverableRawTranscription != nil {
+                Button("Retry Enhancement") { Task { await viewModel.retryEnhancement() } }
+                Button(viewModel.autoPasteEnabled ? "Use & Paste Raw Transcript" : "Use Raw Transcript") { viewModel.useRawTranscription() }
+            }
+            Button("Dismiss Error") { viewModel.dismissRuntimeError() }
+        default:
+            EmptyView()
         }
     }
 

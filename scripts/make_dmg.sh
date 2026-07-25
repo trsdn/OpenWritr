@@ -12,10 +12,19 @@ if [[ -f "$ENV_FILE" ]]; then
 fi
 
 APP_NAME="OpenWritr"
-APP_PATH="$PROJECT_DIR/.build/release/$APP_NAME.app"
+APP_PATH="${APP_PATH:-$PROJECT_DIR/.build/release/$APP_NAME.app}"
 DIST_DIR="$PROJECT_DIR/dist"
 DMG_PATH="${DMG_PATH:-$DIST_DIR/OpenWritr-macos.dmg}"
-STAGING_DIR="$DIST_DIR/dmg-staging"
+STAGING_DIR="$PROJECT_DIR/.build/dmg-staging-$$-${RANDOM}"
+REQUIRE_NOTARIZED_APP="${REQUIRE_NOTARIZED_APP:-false}"
+
+cleanup() {
+  rm -rf -- "$STAGING_DIR"
+}
+trap cleanup EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 if [[ ! -d "$APP_PATH" ]]; then
   echo "App bundle not found at $APP_PATH"
@@ -23,7 +32,17 @@ if [[ ! -d "$APP_PATH" ]]; then
   exit 1
 fi
 
-rm -rf "$STAGING_DIR" "$DMG_PATH" "$DMG_PATH.sha256"
+codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+if [[ "$REQUIRE_NOTARIZED_APP" == true ]]; then
+  xcrun stapler validate "$APP_PATH"
+  spctl --assess --type execute --verbose=2 "$APP_PATH"
+elif [[ "$REQUIRE_NOTARIZED_APP" != false ]]; then
+  echo "REQUIRE_NOTARIZED_APP must be true or false." >&2
+  exit 1
+fi
+
+rm -f -- "$DMG_PATH" "$DMG_PATH.sha256"
+mkdir -p "$(dirname "$DMG_PATH")"
 mkdir -p "$STAGING_DIR"
 
 ditto "$APP_PATH" "$STAGING_DIR/$APP_NAME.app"
@@ -36,20 +55,18 @@ hdiutil create \
   -format UDZO \
   "$DMG_PATH"
 
-rm -rf "$STAGING_DIR"
-
 identity="${CODE_SIGN_IDENTITY:-${OPENWRITR_SIGNING_IDENTITY:-}}"
 if [[ -z "$identity" ]]; then
   identity="$(security find-identity -v -p codesigning 2>/dev/null | grep 'Developer ID Application' | head -1 | sed 's/.*"\(.*\)"/\1/' || true)"
 fi
 
-if [[ -n "$identity" ]]; then
-  codesign --force --sign "$identity" --timestamp "$DMG_PATH"
-  codesign --verify --strict --verbose=2 "$DMG_PATH"
+if [[ -z "$identity" ]]; then
+  echo "No Developer ID Application identity found for DMG signing." >&2
+  exit 1
 fi
 
+codesign --force --sign "$identity" --timestamp "$DMG_PATH"
+codesign --verify --strict --verbose=2 "$DMG_PATH"
 hdiutil verify "$DMG_PATH"
-shasum -a 256 "$DMG_PATH" > "$DMG_PATH.sha256"
 
 echo "DMG created: $DMG_PATH"
-echo "Checksum created: $DMG_PATH.sha256"
