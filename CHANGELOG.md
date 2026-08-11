@@ -2,6 +2,20 @@
 
 All notable changes to OpenWritr will be documented in this file.
 
+## [1.3.0] — 2026-08-11
+
+### Changed
+- Activated the microphone input engine only during an accepted push-to-talk recording instead of keeping it active while OpenWritr was idle
+- Added a visible microphone preparation state and generation-safe asynchronous capture startup
+- Added typed microphone recovery actions and clearer input-device status in the menu and Settings
+
+### Fixed
+- Serialized CoreAudio lifecycle and device-change handling to prevent overlapping engine rebuilds and stale-device restart loops
+- Preserved rapid hotkey release during microphone startup and prevented stale capture operations from changing newer app state
+- Prevented queued capture starts after shutdown and hardened callback, continuation, and capture-generation cleanup
+- Preserved and restored the original macOS system input safely across repeated custom-device recordings and device disconnections
+- Rejected input-device changes while capture is active so microphone ownership cannot be stranded
+
 ## [1.2.1] — 2026-07-24
 
 ### Fixed

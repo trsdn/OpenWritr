@@ -23,7 +23,12 @@ struct AudioInputDevice: Identifiable, Hashable, Sendable {
     }
 }
 
+struct CaptureHandle: Sendable, Hashable {
+    let generation: UInt64
+}
+
 enum AudioEngineError: LocalizedError, Sendable {
+    case captureCancelled
     case defaultInputQueryFailed(OSStatus)
     case noDefaultInputDevice
     case inputDeviceUnavailable(AudioDeviceID)
@@ -38,6 +43,8 @@ enum AudioEngineError: LocalizedError, Sendable {
 
     var errorDescription: String? {
         switch self {
+        case .captureCancelled:
+            return "Microphone capture was cancelled."
         case .defaultInputQueryFailed(let status):
             return "OpenWritr could not read the system input device (\(Self.describe(status)))."
         case .noDefaultInputDevice:
@@ -65,6 +72,8 @@ enum AudioEngineError: LocalizedError, Sendable {
 
     var recoverySuggestion: String? {
         switch self {
+        case .captureCancelled:
+            return nil
         case .tapInstallationFailed, .enginePreparationFailed, .engineStartFailed:
             return "Check Microphone access in System Settings > Privacy & Security, then retry."
         case .inputDeviceAvailabilityCheckFailed:
@@ -87,37 +96,192 @@ enum AudioEngineError: LocalizedError, Sendable {
     }
 }
 
-/// Each instance is owned exclusively by one audio-tap callback.
+private enum AudioEngineLifecycleState {
+    case idle
+    case starting
+    case capturing
+    case recovering
+    case stopping
+    case failed(AudioEngineError)
+}
+
 private final class TapConversionState: @unchecked Sendable {
     var converter: AVAudioConverter?
     var inputFormat: AVAudioFormat?
 }
 
-final class AudioEngine: @unchecked Sendable {
-    private struct CaptureSnapshot {
+private final class CaptureBufferState: @unchecked Sendable {
+    struct Snapshot {
         let isCapturing: Bool
+        let generation: UInt64
         let sampleCount: Int
         let revision: UInt64
         let lastSampleAt: ContinuousClock.Instant?
     }
 
-    private var engine = AVAudioEngine()
+    private let lock = os_unfair_lock_t.allocate(capacity: 1)
+    private var isCapturing = false
+    private var generation: UInt64 = 0
+    private var samples: [Float] = []
+    private var revision: UInt64 = 0
+    private var lastSampleAt: ContinuousClock.Instant?
+
+    init() {
+        lock.initialize(to: os_unfair_lock())
+    }
+
+    deinit {
+        lock.deinitialize(count: 1)
+        lock.deallocate()
+    }
+
+    func activate(generation: UInt64) {
+        os_unfair_lock_lock(lock)
+        samples.removeAll(keepingCapacity: true)
+        revision = 0
+        lastSampleAt = nil
+        self.generation = generation
+        isCapturing = true
+        os_unfair_lock_unlock(lock)
+    }
+
+    func append(_ newSamples: [Float], generation: UInt64, at instant: ContinuousClock.Instant) {
+        os_unfair_lock_lock(lock)
+        if isCapturing, self.generation == generation {
+            samples.append(contentsOf: newSamples)
+            revision &+= 1
+            lastSampleAt = instant
+        }
+        os_unfair_lock_unlock(lock)
+    }
+
+    func snapshot() -> Snapshot {
+        os_unfair_lock_lock(lock)
+        let value = Snapshot(
+            isCapturing: isCapturing,
+            generation: generation,
+            sampleCount: samples.count,
+            revision: revision,
+            lastSampleAt: lastSampleAt
+        )
+        os_unfair_lock_unlock(lock)
+        return value
+    }
+
+    func stopAndTakeSamples(generation: UInt64) -> [Float]? {
+        os_unfair_lock_lock(lock)
+        guard isCapturing, self.generation == generation else {
+            os_unfair_lock_unlock(lock)
+            return nil
+        }
+        isCapturing = false
+        let captured = samples
+        samples.removeAll(keepingCapacity: true)
+        lastSampleAt = nil
+        os_unfair_lock_unlock(lock)
+        return captured
+    }
+
+    @discardableResult
+    func invalidate(generation: UInt64? = nil) -> Bool {
+        os_unfair_lock_lock(lock)
+        if let generation, self.generation != generation {
+            os_unfair_lock_unlock(lock)
+            return false
+        }
+        let wasActive = isCapturing
+        isCapturing = false
+        samples.removeAll(keepingCapacity: false)
+        lastSampleAt = nil
+        os_unfair_lock_unlock(lock)
+        return wasActive
+    }
+}
+
+private final class CaptureCancellationToken: @unchecked Sendable {
+    private let lock = NSLock()
+    private var cancelled = false
+
+    func cancel() {
+        lock.lock()
+        cancelled = true
+        lock.unlock()
+    }
+
+    var isCancelled: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return cancelled
+    }
+}
+
+#if DEBUG
+struct AudioEngineDebugFaults: Sendable {
+    var failStartup = false
+    var startupDelay: TimeInterval = 0
+    var failAfterHandle = false
+    var failDuringSettle = false
+    var stopEngineForConfigurationChange = false
+}
+#endif
+
+final class AudioEngine: @unchecked Sendable {
     private let targetSampleRate: Double = 16_000
     private let captureClock = ContinuousClock()
+    private let captureBuffer = CaptureBufferState()
+    private let lifecycleQueue = DispatchQueue(label: "com.openwritr.audio-engine.lifecycle")
+    private let lifecycleQueueKey = DispatchSpecificKey<UInt8>()
+    private let shutdownLock = NSLock()
+    private let callbackLock = NSLock()
 
-    private let bufferLock = os_unfair_lock_t.allocate(capacity: 1)
-    private var _isCapturing = false
-    private var _captureGeneration: UInt64 = 0
-    private var _sampleBuffer: [Float] = []
-    private var _sampleRevision: UInt64 = 0
-    private var _lastSampleAt: ContinuousClock.Instant?
+    private var lifecycleState: AudioEngineLifecycleState = .idle
+    private var engine: AVAudioEngine?
     private var isRunning = false
     private var tapInstalled = false
+    private var isShuttingDown = false
+    private var shutdownRequested = false
+    private var nextGeneration: UInt64 = 0
+    private var activeGeneration: UInt64?
+    private var returnedGeneration: UInt64?
+    private var activeDeviceID: AudioDeviceID?
+    private var recoveryAttemptedGeneration: UInt64?
+    private var pendingConfigurationWork: DispatchWorkItem?
     private var selectedDeviceID: AudioDeviceID?
     private var previousSystemDefault: AudioDeviceID?
     private var configObserver: Any?
-    var onDevicesChanged: (() -> Void)?
-    var onFailure: ((AudioEngineError) -> Void)?
+    private var deviceListListenerBlock: AudioObjectPropertyListenerBlock?
+    private var devicesChangedCallback: (@Sendable () -> Void)?
+    private var failureCallback: (@Sendable (AudioEngineError) -> Void)?
+
+    var onDevicesChanged: (@Sendable () -> Void)? {
+        get {
+            callbackLock.lock()
+            defer { callbackLock.unlock() }
+            return devicesChangedCallback
+        }
+        set {
+            callbackLock.lock()
+            devicesChangedCallback = newValue
+            callbackLock.unlock()
+        }
+    }
+
+    var onFailure: (@Sendable (AudioEngineError) -> Void)? {
+        get {
+            callbackLock.lock()
+            defer { callbackLock.unlock() }
+            return failureCallback
+        }
+        set {
+            callbackLock.lock()
+            failureCallback = newValue
+            callbackLock.unlock()
+        }
+    }
+
+    #if DEBUG
+    private var debugFaults = AudioEngineDebugFaults()
+    #endif
 
     private let desiredFormat = AVAudioFormat(
         commonFormat: .pcmFormatFloat32,
@@ -126,19 +290,20 @@ final class AudioEngine: @unchecked Sendable {
         interleaved: false
     )!
 
-    private var deviceListListenerBlock: AudioObjectPropertyListenerBlock?
-
     init() {
-        bufferLock.initialize(to: os_unfair_lock())
-        _ = installDeviceListListeners()
+        lifecycleQueue.setSpecific(key: lifecycleQueueKey, value: 1)
+        lifecycleQueue.sync {
+            let status = installDeviceListListenersOnQueue()
+            if status != noErr {
+                audioLog.error("failed to monitor input devices: \(status)")
+            }
+        }
     }
 
     deinit {
         if case .failure(let error) = shutdown() {
             audioLog.error("shutdown failed: \(error.localizedDescription, privacy: .public)")
         }
-        bufferLock.deinitialize(count: 1)
-        bufferLock.deallocate()
     }
 
     // MARK: - System default input device
@@ -239,99 +404,131 @@ final class AudioEngine: @unchecked Sendable {
         return UnsafeMutableAudioBufferListPointer(pointer).contains { $0.mNumberChannels > 0 }
     }
 
-    private func selectInputDevice(_ deviceID: AudioDeviceID) throws {
+    private func selectInputDeviceOnQueue(_ deviceID: AudioDeviceID) throws {
         guard try Self.isInputDeviceAvailable(deviceID) else {
             throw AudioEngineError.inputDeviceUnavailable(deviceID)
         }
-
-        let defaultToRestore = try previousSystemDefault ?? Self.getSystemDefaultInput()
+        if previousSystemDefault == nil {
+            previousSystemDefault = try Self.getSystemDefaultInput()
+        }
         try Self.setSystemDefaultInput(deviceID, restoring: false)
-
-        previousSystemDefault = defaultToRestore
         selectedDeviceID = deviceID
     }
 
-    private func restorePreviousSystemDefault() throws {
+    private func restorePreviousSystemDefaultOnQueue() throws {
         guard let previous = previousSystemDefault else {
             selectedDeviceID = nil
             return
         }
-        guard try Self.isInputDeviceAvailable(previous) else {
-            audioLog.warning("previous system input \(previous) is no longer available")
-            selectedDeviceID = nil
-            previousSystemDefault = nil
-            return
-        }
-
-        try Self.setSystemDefaultInput(previous, restoring: true)
         selectedDeviceID = nil
         previousSystemDefault = nil
+        guard try Self.isInputDeviceAvailable(previous) else {
+            audioLog.warning("previous system input \(previous) is no longer available")
+            return
+        }
+        try Self.setSystemDefaultInput(previous, restoring: true)
+    }
+
+    private func clearStaleSelectionOnQueue() throws {
+        guard let selected = selectedDeviceID else {
+            if previousSystemDefault != nil {
+                try restorePreviousSystemDefaultOnQueue()
+            }
+            return
+        }
+        guard try !Self.isInputDeviceAvailable(selected) else { return }
+
+        audioLog.notice("removing unavailable selected input \(selected)")
+        let previous = previousSystemDefault
+        selectedDeviceID = nil
+        previousSystemDefault = nil
+        if let previous,
+           try Self.isInputDeviceAvailable(previous) {
+            try Self.setSystemDefaultInput(previous, restoring: true)
+        }
+    }
+
+    private func resolveCaptureDeviceOnQueue() throws -> AudioDeviceID {
+        try clearStaleSelectionOnQueue()
+        if let selected = selectedDeviceID {
+            guard try Self.isInputDeviceAvailable(selected) else {
+                throw AudioEngineError.inputDeviceUnavailable(selected)
+            }
+            if previousSystemDefault == nil {
+                previousSystemDefault = try Self.getSystemDefaultInput()
+            }
+            try Self.setSystemDefaultInput(selected, restoring: false)
+            return selected
+        }
+
+        let current = try Self.getSystemDefaultInput()
+        guard try Self.isInputDeviceAvailable(current) else {
+            throw AudioEngineError.inputDeviceUnavailable(current)
+        }
+        return current
     }
 
     // MARK: - Engine lifecycle
 
-    private func resetEngine() throws {
-        removeConfigObserver()
-        stopEngine()
-
-        engine = AVAudioEngine()
-        try installTapAndStart()
-        addConfigObserver()
-    }
-
-    private func stopEngine() {
-        if isRunning || engine.isRunning {
-            let currentEngine = engine
-            var stopError: NSError?
-            if !ObjCTryCatch({ currentEngine.stop() }, &stopError) {
-                audioLog.error(
-                    "failed to stop audio engine: \(stopError?.localizedDescription ?? "unknown error", privacy: .public)"
-                )
-            }
+    private func transitionOnQueue(to newState: AudioEngineLifecycleState, generation: UInt64? = nil) {
+        lifecycleState = newState
+        let generationText = generation.map(String.init) ?? "-"
+        let stateName: String
+        switch newState {
+        case .idle: stateName = "idle"
+        case .starting: stateName = "starting"
+        case .capturing: stateName = "capturing"
+        case .recovering: stateName = "recovering"
+        case .stopping: stateName = "stopping"
+        case .failed: stateName = "failed"
         }
-        isRunning = false
-        removeInstalledTap()
+        audioLog.debug("lifecycle \(stateName, privacy: .public), generation \(generationText, privacy: .public)")
     }
 
-    private func removeInstalledTap() {
-        guard tapInstalled else { return }
-        tapInstalled = false
-
-        let inputNode = engine.inputNode
-        var removeError: NSError?
-        if !ObjCTryCatch({ inputNode.removeTap(onBus: 0) }, &removeError) {
-            audioLog.error(
-                "failed to remove audio tap: \(removeError?.localizedDescription ?? "unknown error", privacy: .public)"
-            )
+    private func constructFreshEngineOnQueue(generation: UInt64) throws {
+        guard case .starting = lifecycleState else {
+            throw AudioEngineError.captureCancelled
         }
+        let newEngine = AVAudioEngine()
+        engine = newEngine
+        try installTapOnQueue(engine: newEngine, generation: generation)
     }
 
-    private func installTapAndStart() throws {
+    private func recoverEngineOnQueue(generation: UInt64) throws {
+        guard case .recovering = lifecycleState else {
+            throw AudioEngineError.captureCancelled
+        }
+        removeConfigObserverOnQueue()
+        stopEngineOnQueue()
+        guard !shutdownWasRequested() else {
+            throw AudioEngineError.captureCancelled
+        }
+        activeDeviceID = try resolveCaptureDeviceOnQueue()
+        guard !shutdownWasRequested() else {
+            throw AudioEngineError.captureCancelled
+        }
+        let recoveredEngine = AVAudioEngine()
+        engine = recoveredEngine
+        try installTapOnQueue(engine: recoveredEngine, generation: generation)
+        try prepareAndStartEngineOnQueue(recoveredEngine)
+        addConfigObserverOnQueue(engine: recoveredEngine, generation: generation)
+    }
+
+    private func installTapOnQueue(engine: AVAudioEngine, generation: UInt64) throws {
         let inputNode = engine.inputNode
-        let bufLock = bufferLock
+        let state = captureBuffer
         let target = desiredFormat
+        let clock = captureClock
         let conversionState = TapConversionState()
 
-        let tapBlock: AVAudioNodeTapBlock = { [weak self] buffer, _ in
-            guard let self else { return }
-            os_unfair_lock_lock(bufLock)
-            let capturing = self._isCapturing
-            let captureGeneration = self._captureGeneration
-            os_unfair_lock_unlock(bufLock)
-            guard capturing else { return }
-
+        let tapBlock: AVAudioNodeTapBlock = { buffer, _ in
             let bufferFormat = buffer.format
-
             if bufferFormat.sampleRate == target.sampleRate && bufferFormat.channelCount == 1 {
-                guard let ch = buffer.floatChannelData else { return }
-                let samples = Array(UnsafeBufferPointer(start: ch[0], count: Int(buffer.frameLength)))
-                os_unfair_lock_lock(bufLock)
-                if self._isCapturing, self._captureGeneration == captureGeneration {
-                    self._sampleBuffer.append(contentsOf: samples)
-                    self._sampleRevision &+= 1
-                    self._lastSampleAt = self.captureClock.now
-                }
-                os_unfair_lock_unlock(bufLock)
+                guard let channel = buffer.floatChannelData else { return }
+                let samples = Array(
+                    UnsafeBufferPointer(start: channel[0], count: Int(buffer.frameLength))
+                )
+                state.append(samples, generation: generation, at: clock.now)
                 return
             }
 
@@ -352,16 +549,11 @@ final class AudioEngine: @unchecked Sendable {
                 outStatus.pointee = .haveData
                 return buffer
             }
-            if status == .haveData, let ch = converted.floatChannelData {
-                let samples = Array(UnsafeBufferPointer(start: ch[0], count: Int(converted.frameLength)))
-                os_unfair_lock_lock(bufLock)
-                if self._isCapturing, self._captureGeneration == captureGeneration {
-                    self._sampleBuffer.append(contentsOf: samples)
-                    self._sampleRevision &+= 1
-                    self._lastSampleAt = self.captureClock.now
-                }
-                os_unfair_lock_unlock(bufLock)
-            }
+            guard status == .haveData, let channel = converted.floatChannelData else { return }
+            let samples = Array(
+                UnsafeBufferPointer(start: channel[0], count: Int(converted.frameLength))
+            )
+            state.append(samples, generation: generation, at: clock.now)
         }
 
         var tapError: NSError?
@@ -373,61 +565,197 @@ final class AudioEngine: @unchecked Sendable {
             )
         }
         tapInstalled = true
+    }
 
+    private func prepareAndStartEngineOnQueue(_ engine: AVAudioEngine) throws {
+        guard !shutdownWasRequested() else {
+            throw AudioEngineError.captureCancelled
+        }
         var preparationError: NSError?
-        guard ObjCTryCatch({ self.engine.prepare() }, &preparationError) else {
-            removeInstalledTap()
+        guard ObjCTryCatch({ engine.prepare() }, &preparationError) else {
             throw AudioEngineError.enginePreparationFailed(
                 preparationError?.localizedDescription ?? "The audio engine rejected its configuration."
             )
         }
 
+        guard !shutdownWasRequested() else {
+            throw AudioEngineError.captureCancelled
+        }
         do {
             try engine.start()
             isRunning = true
-            if let deviceID = try? Self.getSystemDefaultInput() {
-                audioLog.info("running, device: \(deviceID)")
-            } else {
-                audioLog.info("running")
-            }
         } catch {
-            stopEngine()
             throw AudioEngineError.engineStartFailed(error.localizedDescription)
         }
     }
 
-    // MARK: - Config change observer
-
-    private func addConfigObserver() {
-        configObserver = NotificationCenter.default.addObserver(
-            forName: .AVAudioEngineConfigurationChange,
-            object: engine,
-            queue: .main
-        ) { [weak self] _ in
-            guard let self else { return }
-            audioLog.info("config changed, rebuilding")
-            do {
-                try self.resetEngine()
-            } catch let error as AudioEngineError {
-                self.reportFailure(error)
-            } catch {
-                self.reportFailure(.engineStartFailed(error.localizedDescription))
+    private func stopEngineOnQueue() {
+        guard let engine else {
+            isRunning = false
+            tapInstalled = false
+            return
+        }
+        if isRunning || engine.isRunning {
+            var stopError: NSError?
+            if !ObjCTryCatch({ engine.stop() }, &stopError) {
+                audioLog.error(
+                    "failed to stop audio engine: \(stopError?.localizedDescription ?? "unknown error", privacy: .public)"
+                )
             }
-            self.onDevicesChanged?()
+        }
+        isRunning = false
+        removeInstalledTapOnQueue()
+        self.engine = nil
+    }
+
+    private func removeInstalledTapOnQueue() {
+        guard tapInstalled, let engine else { return }
+        tapInstalled = false
+        let inputNode = engine.inputNode
+        var removeError: NSError?
+        if !ObjCTryCatch({ inputNode.removeTap(onBus: 0) }, &removeError) {
+            audioLog.error(
+                "failed to remove audio tap: \(removeError?.localizedDescription ?? "unknown error", privacy: .public)"
+            )
         }
     }
 
-    private func removeConfigObserver() {
+    private func cleanupGenerationOnQueue(
+        _ generation: UInt64,
+        discardSamples: Bool,
+        finalState: AudioEngineLifecycleState
+    ) {
+        pendingConfigurationWork?.cancel()
+        pendingConfigurationWork = nil
+        if discardSamples {
+            if captureBuffer.invalidate(generation: generation) {
+                audioLog.notice("discarded capture generation \(generation)")
+            }
+        }
+        removeConfigObserverOnQueue()
+        stopEngineOnQueue()
+        if activeGeneration == generation {
+            activeGeneration = nil
+            activeDeviceID = nil
+        }
+        if returnedGeneration == generation {
+            returnedGeneration = nil
+        }
+        if case .idle = finalState {
+            recoveryAttemptedGeneration = nil
+        }
+        transitionOnQueue(to: finalState, generation: generation)
+    }
+
+    // MARK: - Configuration changes
+
+    private func addConfigObserverOnQueue(engine: AVAudioEngine, generation: UInt64) {
+        removeConfigObserverOnQueue()
+        configObserver = NotificationCenter.default.addObserver(
+            forName: .AVAudioEngineConfigurationChange,
+            object: engine,
+            queue: nil
+        ) { [weak self] _ in
+            self?.lifecycleQueue.async { [weak self] in
+                self?.scheduleConfigurationDecisionOnQueue(generation: generation)
+            }
+        }
+    }
+
+    private func removeConfigObserverOnQueue() {
         if let configObserver {
             NotificationCenter.default.removeObserver(configObserver)
             self.configObserver = nil
         }
     }
 
+    private func scheduleConfigurationDecisionOnQueue(generation: UInt64) {
+        guard !isShuttingDown, activeGeneration == generation else { return }
+        switch lifecycleState {
+        case .capturing, .recovering:
+            break
+        default:
+            return
+        }
+
+        pendingConfigurationWork?.cancel()
+        let item = DispatchWorkItem { [weak self] in
+            self?.handleConfigurationDecisionOnQueue(generation: generation)
+        }
+        pendingConfigurationWork = item
+        audioLog.debug("debounced configuration change for generation \(generation)")
+        lifecycleQueue.asyncAfter(deadline: .now() + .milliseconds(250), execute: item)
+    }
+
+    private func handleConfigurationDecisionOnQueue(generation: UInt64) {
+        pendingConfigurationWork = nil
+        guard !isShuttingDown, activeGeneration == generation else { return }
+        switch lifecycleState {
+        case .capturing, .recovering:
+            break
+        default:
+            return
+        }
+
+        do {
+            guard let deviceID = activeDeviceID,
+                  try Self.isInputDeviceAvailable(deviceID)
+            else {
+                failActiveGenerationOnQueue(
+                    generation,
+                    error: .inputDeviceUnavailable(activeDeviceID ?? kAudioObjectUnknown)
+                )
+                return
+            }
+
+            if let engine, isRunning, engine.isRunning {
+                audioLog.debug("benign configuration change for generation \(generation)")
+                return
+            }
+
+            guard recoveryAttemptedGeneration != generation else {
+                failActiveGenerationOnQueue(
+                    generation,
+                    error: .engineStartFailed("The audio engine stopped again after recovery.")
+                )
+                return
+            }
+
+            recoveryAttemptedGeneration = generation
+            transitionOnQueue(to: .recovering, generation: generation)
+            try recoverEngineOnQueue(generation: generation)
+            guard !shutdownWasRequested(), activeGeneration == generation else {
+                cleanupGenerationOnQueue(generation, discardSamples: true, finalState: .idle)
+                return
+            }
+            transitionOnQueue(to: .capturing, generation: generation)
+            audioLog.notice("recovered capture generation \(generation)")
+        } catch let error as AudioEngineError {
+            failActiveGenerationOnQueue(generation, error: error)
+        } catch {
+            failActiveGenerationOnQueue(
+                generation,
+                error: .unexpectedFailure(error.localizedDescription)
+            )
+        }
+    }
+
+    private func failActiveGenerationOnQueue(_ generation: UInt64, error: AudioEngineError) {
+        guard activeGeneration == generation else { return }
+        let shouldNotify = returnedGeneration == generation
+        cleanupGenerationOnQueue(generation, discardSamples: true, finalState: .failed(error))
+        audioLog.error(
+            "capture generation \(generation) failed: \(error.localizedDescription, privacy: .public)"
+        )
+        if shouldNotify {
+            notifyFailure(error)
+        }
+    }
+
     // MARK: - Device list listeners
 
     @discardableResult
-    private func installDeviceListListeners() -> OSStatus {
+    private func installDeviceListListenersOnQueue() -> OSStatus {
         guard deviceListListenerBlock == nil else { return noErr }
 
         var devicesAddress = AudioObjectPropertyAddress(
@@ -436,20 +764,21 @@ final class AudioEngine: @unchecked Sendable {
             mElement: kAudioObjectPropertyElementMain
         )
         let devicesBlock: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
-            self?.handleDeviceListChanged()
+            self?.handleDeviceListChangedOnQueue()
         }
         let status = AudioObjectAddPropertyListenerBlock(
-            AudioObjectID(kAudioObjectSystemObject), &devicesAddress, DispatchQueue.main, devicesBlock
+            AudioObjectID(kAudioObjectSystemObject),
+            &devicesAddress,
+            lifecycleQueue,
+            devicesBlock
         )
         if status == noErr {
             deviceListListenerBlock = devicesBlock
-        } else {
-            audioLog.error("failed to monitor input devices: \(status)")
         }
         return status
     }
 
-    private func removeDeviceListListeners() {
+    private func removeDeviceListListenersOnQueue() {
         var devicesAddress = AudioObjectPropertyAddress(
             mSelector: kAudioHardwarePropertyDevices,
             mScope: kAudioObjectPropertyScopeGlobal,
@@ -457,7 +786,10 @@ final class AudioEngine: @unchecked Sendable {
         )
         if let block = deviceListListenerBlock {
             let status = AudioObjectRemovePropertyListenerBlock(
-                AudioObjectID(kAudioObjectSystemObject), &devicesAddress, DispatchQueue.main, block
+                AudioObjectID(kAudioObjectSystemObject),
+                &devicesAddress,
+                lifecycleQueue,
+                block
             )
             if status == noErr {
                 deviceListListenerBlock = nil
@@ -467,27 +799,53 @@ final class AudioEngine: @unchecked Sendable {
         }
     }
 
-    private func handleDeviceListChanged() {
+    private func handleDeviceListChangedOnQueue() {
+        guard !isShuttingDown else { return }
         do {
-            if let selectedDeviceID,
-               try !Self.isInputDeviceAvailable(selectedDeviceID) {
-                // The selection is stale, but the previous default remains pending until restored.
-                self.selectedDeviceID = nil
-                try restorePreviousSystemDefault()
-            } else if selectedDeviceID == nil, previousSystemDefault != nil {
-                try restorePreviousSystemDefault()
+            try clearStaleSelectionOnQueue()
+            _ = try Self.getSystemDefaultInput()
+            if let generation = activeGeneration {
+                scheduleConfigurationDecisionOnQueue(generation: generation)
             }
         } catch let error as AudioEngineError {
-            reportFailure(error)
+            audioLog.error("device list validation failed: \(error.localizedDescription, privacy: .public)")
+            if let generation = activeGeneration, returnedGeneration == generation {
+                failActiveGenerationOnQueue(generation, error: error)
+            } else {
+                transitionOnQueue(to: .failed(error))
+                notifyFailure(error)
+            }
         } catch {
-            reportFailure(.unexpectedFailure(error.localizedDescription))
+            let typedError = AudioEngineError.unexpectedFailure(error.localizedDescription)
+            audioLog.error("device list validation failed: \(typedError.localizedDescription, privacy: .public)")
+            if let generation = activeGeneration, returnedGeneration == generation {
+                failActiveGenerationOnQueue(generation, error: typedError)
+            } else {
+                transitionOnQueue(to: .failed(typedError))
+                notifyFailure(typedError)
+            }
         }
-        onDevicesChanged?()
+        notifyDevicesChanged()
     }
 
-    private func reportFailure(_ error: AudioEngineError) {
-        audioLog.error("\(error.localizedDescription, privacy: .public)")
-        onFailure?(error)
+    private func notifyDevicesChanged() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.callbackLock.lock()
+            let callback = self.devicesChangedCallback
+            self.callbackLock.unlock()
+            callback?()
+        }
+    }
+
+    private func notifyFailure(_ error: AudioEngineError) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.callbackLock.lock()
+            let callback = self.failureCallback
+            self.callbackLock.unlock()
+            callback?(error)
+        }
     }
 
     // MARK: - Public API
@@ -499,162 +857,389 @@ final class AudioEngine: @unchecked Sendable {
             mScope: kAudioObjectPropertyScopeGlobal,
             mElement: kAudioObjectPropertyElementMain
         )
-        guard AudioObjectGetPropertyDataSize(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &propSize) == noErr else { return [] }
+        guard AudioObjectGetPropertyDataSize(
+            AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &propSize
+        ) == noErr else { return [] }
         let count = Int(propSize) / MemoryLayout<AudioDeviceID>.size
         var ids = [AudioDeviceID](repeating: 0, count: count)
-        guard AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &propSize, &ids) == noErr else { return [] }
+        guard AudioObjectGetPropertyData(
+            AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &propSize, &ids
+        ) == noErr else { return [] }
 
         return ids.compactMap { deviceID -> AudioInputDevice? in
-            var inputAddr = AudioObjectPropertyAddress(
+            var inputAddress = AudioObjectPropertyAddress(
                 mSelector: kAudioDevicePropertyStreamConfiguration,
                 mScope: kAudioDevicePropertyScopeInput,
                 mElement: kAudioObjectPropertyElementMain
             )
             var inputSize: UInt32 = 0
-            guard AudioObjectGetPropertyDataSize(deviceID, &inputAddr, 0, nil, &inputSize) == noErr, inputSize > 0 else { return nil }
-            let ptr = UnsafeMutablePointer<AudioBufferList>.allocate(capacity: Int(inputSize))
-            defer { ptr.deallocate() }
-            guard AudioObjectGetPropertyData(deviceID, &inputAddr, 0, nil, &inputSize, ptr) == noErr else { return nil }
-            let ch = UnsafeMutableAudioBufferListPointer(ptr).reduce(0) { $0 + Int($1.mNumberChannels) }
-            guard ch > 0 else { return nil }
+            guard AudioObjectGetPropertyDataSize(
+                deviceID, &inputAddress, 0, nil, &inputSize
+            ) == noErr, inputSize > 0 else { return nil }
+            let pointer = UnsafeMutablePointer<AudioBufferList>.allocate(capacity: Int(inputSize))
+            defer { pointer.deallocate() }
+            guard AudioObjectGetPropertyData(
+                deviceID, &inputAddress, 0, nil, &inputSize, pointer
+            ) == noErr else { return nil }
+            let channelCount = UnsafeMutableAudioBufferListPointer(pointer)
+                .reduce(0) { $0 + Int($1.mNumberChannels) }
+            guard channelCount > 0 else { return nil }
 
-            var nameAddr = AudioObjectPropertyAddress(
+            var nameAddress = AudioObjectPropertyAddress(
                 mSelector: kAudioDevicePropertyDeviceNameCFString,
                 mScope: kAudioObjectPropertyScopeGlobal,
                 mElement: kAudioObjectPropertyElementMain
             )
-            var nameRef: Unmanaged<CFString>?
+            var nameReference: Unmanaged<CFString>?
             var nameSize = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
-            guard AudioObjectGetPropertyData(deviceID, &nameAddr, 0, nil, &nameSize, &nameRef) == noErr,
-                  let name = nameRef?.takeUnretainedValue() else { return nil }
+            guard AudioObjectGetPropertyData(
+                deviceID, &nameAddress, 0, nil, &nameSize, &nameReference
+            ) == noErr,
+                let name = nameReference?.takeUnretainedValue()
+            else { return nil }
 
-            var uidAddr = AudioObjectPropertyAddress(
+            var uidAddress = AudioObjectPropertyAddress(
                 mSelector: kAudioDevicePropertyDeviceUID,
                 mScope: kAudioObjectPropertyScopeGlobal,
                 mElement: kAudioObjectPropertyElementMain
             )
-            var uidRef: Unmanaged<CFString>?
+            var uidReference: Unmanaged<CFString>?
             var uidSize = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
-            guard AudioObjectGetPropertyData(deviceID, &uidAddr, 0, nil, &uidSize, &uidRef) == noErr,
-                  let uid = uidRef?.takeUnretainedValue() else { return nil }
+            guard AudioObjectGetPropertyData(
+                deviceID, &uidAddress, 0, nil, &uidSize, &uidReference
+            ) == noErr,
+                let uid = uidReference?.takeUnretainedValue()
+            else { return nil }
 
             return AudioInputDevice(id: deviceID, name: name as String, uid: uid as String)
         }
     }
 
-    /// Switch input device by changing the macOS system default input.
-    /// AVAudioEngine always uses the system default — this is the only
-    /// reliable way to switch devices, especially for Bluetooth (AirPods).
-    /// The running engine picks up a successful change via its configuration observer.
     func setInputDevice(_ deviceID: AudioDeviceID?) -> Result<Void, AudioEngineError> {
-        do {
-            if let deviceID {
-                let listenerStatus = installDeviceListListeners()
-                guard listenerStatus == noErr else {
-                    return .failure(.deviceMonitoringFailed(listenerStatus))
-                }
-                try selectInputDevice(deviceID)
-            } else {
-                try restorePreviousSystemDefault()
+        syncOnLifecycleQueue {
+            guard !isShuttingDown else { return .failure(.captureCancelled) }
+            let listenerStatus = installDeviceListListenersOnQueue()
+            guard listenerStatus == noErr else {
+                return .failure(.deviceMonitoringFailed(listenerStatus))
             }
-            return .success(())
-        } catch let error as AudioEngineError {
-            return .failure(error)
-        } catch {
-            return .failure(.unexpectedFailure(error.localizedDescription))
+            do {
+                if let deviceID {
+                    try selectInputDeviceOnQueue(deviceID)
+                } else {
+                    try restorePreviousSystemDefaultOnQueue()
+                }
+                if let generation = activeGeneration {
+                    scheduleConfigurationDecisionOnQueue(generation: generation)
+                }
+                return .success(())
+            } catch let error as AudioEngineError {
+                return .failure(error)
+            } catch {
+                return .failure(.unexpectedFailure(error.localizedDescription))
+            }
         }
     }
 
     func prepare() -> Result<Void, AudioEngineError> {
-        let listenerStatus = installDeviceListListeners()
-        guard listenerStatus == noErr else {
-            return .failure(.deviceMonitoringFailed(listenerStatus))
+        syncOnLifecycleQueue {
+            guard !isShuttingDown else { return .failure(.captureCancelled) }
+            let listenerStatus = installDeviceListListenersOnQueue()
+            guard listenerStatus == noErr else {
+                return .failure(.deviceMonitoringFailed(listenerStatus))
+            }
+            guard activeGeneration == nil else {
+                return .failure(.captureCancelled)
+            }
+            do {
+                try clearStaleSelectionOnQueue()
+                let device = try Self.getSystemDefaultInput()
+                guard try Self.isInputDeviceAvailable(device) else {
+                    throw AudioEngineError.inputDeviceUnavailable(device)
+                }
+                transitionOnQueue(to: .idle)
+                audioLog.notice("non-streaming microphone validation succeeded")
+                return .success(())
+            } catch let error as AudioEngineError {
+                transitionOnQueue(to: .failed(error))
+                audioLog.error("microphone validation failed: \(error.localizedDescription, privacy: .public)")
+                return .failure(error)
+            } catch {
+                let error = AudioEngineError.unexpectedFailure(error.localizedDescription)
+                transitionOnQueue(to: .failed(error))
+                return .failure(error)
+            }
         }
-        guard !isRunning || !engine.isRunning else { return .success(()) }
+    }
+
+    func startCapture() async -> Result<CaptureHandle, AudioEngineError> {
+        let cancellation = CaptureCancellationToken()
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                lifecycleQueue.async { [self] in
+                    let result = startCaptureOnQueue(cancellation: cancellation)
+                    if case .success(let handle) = result {
+                        returnedGeneration = handle.generation
+                    }
+                    continuation.resume(returning: result)
+                    #if DEBUG
+                    if case .success(let handle) = result {
+                        scheduleDebugPostStartFaultsOnQueue(handle: handle)
+                    }
+                    #endif
+                }
+            }
+        } onCancel: {
+            cancellation.cancel()
+        }
+    }
+
+    private func startCaptureOnQueue(
+        cancellation: CaptureCancellationToken
+    ) -> Result<CaptureHandle, AudioEngineError> {
+        guard !isShuttingDown, !shutdownWasRequested(), !cancellation.isCancelled else {
+            return .failure(.captureCancelled)
+        }
+        guard activeGeneration == nil else {
+            return .failure(.captureCancelled)
+        }
+
+        nextGeneration &+= 1
+        let generation = nextGeneration
+        activeGeneration = generation
+        returnedGeneration = nil
+        recoveryAttemptedGeneration = nil
+        transitionOnQueue(to: .starting, generation: generation)
 
         do {
-            try resetEngine()
-            return .success(())
+            #if DEBUG
+            if debugFaults.startupDelay > 0 {
+                Thread.sleep(forTimeInterval: debugFaults.startupDelay)
+            }
+            if debugFaults.failStartup {
+                debugFaults.failStartup = false
+                throw AudioEngineError.engineStartFailed("Injected startup failure.")
+            }
+            #endif
+
+            guard !shutdownWasRequested(), !cancellation.isCancelled else {
+                throw AudioEngineError.captureCancelled
+            }
+            activeDeviceID = try resolveCaptureDeviceOnQueue()
+            try constructFreshEngineOnQueue(generation: generation)
+            guard !shutdownWasRequested(), !cancellation.isCancelled, let engine else {
+                throw AudioEngineError.captureCancelled
+            }
+            captureBuffer.activate(generation: generation)
+            try prepareAndStartEngineOnQueue(engine)
+            guard !shutdownWasRequested(), !cancellation.isCancelled else {
+                throw AudioEngineError.captureCancelled
+            }
+            addConfigObserverOnQueue(engine: engine, generation: generation)
+            transitionOnQueue(to: .capturing, generation: generation)
+            audioLog.notice("capture generation \(generation) started on device \(self.activeDeviceID ?? 0)")
+            return .success(CaptureHandle(generation: generation))
         } catch let error as AudioEngineError {
+            cleanupGenerationOnQueue(
+                generation,
+                discardSamples: true,
+                finalState: error.isCancellation ? .idle : .failed(error)
+            )
             return .failure(error)
         } catch {
-            return .failure(.unexpectedFailure(error.localizedDescription))
+            let typedError = AudioEngineError.unexpectedFailure(error.localizedDescription)
+            cleanupGenerationOnQueue(generation, discardSamples: true, finalState: .failed(typedError))
+            return .failure(typedError)
         }
-    }
-
-    /// Stops capture and restores any system input changed by OpenWritr.
-    /// This method is idempotent and should be called during normal app shutdown.
-    func shutdown() -> Result<Void, AudioEngineError> {
-        removeConfigObserver()
-        stopEngine()
-        removeDeviceListListeners()
-
-        os_unfair_lock_lock(bufferLock)
-        _isCapturing = false
-        _sampleBuffer.removeAll(keepingCapacity: false)
-        os_unfair_lock_unlock(bufferLock)
-
-        do {
-            try restorePreviousSystemDefault()
-            return .success(())
-        } catch let error as AudioEngineError {
-            return .failure(error)
-        } catch {
-            return .failure(.unexpectedFailure(error.localizedDescription))
-        }
-    }
-
-    func restartForCapture() -> Result<Void, AudioEngineError> {
-        prepare()
-    }
-
-    func startCapture() {
-        os_unfair_lock_lock(bufferLock)
-        _sampleBuffer.removeAll(keepingCapacity: true)
-        _sampleRevision = 0
-        _lastSampleAt = nil
-        _captureGeneration &+= 1
-        _isCapturing = true
-        os_unfair_lock_unlock(bufferLock)
-    }
-
-    private func captureSnapshot() -> CaptureSnapshot {
-        os_unfair_lock_lock(bufferLock)
-        let snapshot = CaptureSnapshot(
-            isCapturing: _isCapturing,
-            sampleCount: _sampleBuffer.count,
-            revision: _sampleRevision,
-            lastSampleAt: _lastSampleAt
-        )
-        os_unfair_lock_unlock(bufferLock)
-        return snapshot
     }
 
     func waitForCaptureToSettle(
+        handle: CaptureHandle,
         idleWindow: Duration = .milliseconds(70),
-        pollInterval: Duration = .milliseconds(20),
-        maxWait: Duration = .milliseconds(350)
+        maxWait: Duration = .milliseconds(350),
+        pollInterval: Duration = .milliseconds(10)
     ) async {
         let startedAt = captureClock.now
         while captureClock.now - startedAt < maxWait {
-            let snapshot = captureSnapshot()
-            guard snapshot.isCapturing else { return }
+            if Task.isCancelled { return }
+            let snapshot = captureBuffer.snapshot()
+            guard snapshot.isCapturing, snapshot.generation == handle.generation else { return }
+
+            #if DEBUG
+            if await consumeSettleFailureIfNeeded(handle: handle) {
+                return
+            }
+            #endif
+
             guard snapshot.sampleCount > 0, let lastSampleAt = snapshot.lastSampleAt else {
-                try? await Task.sleep(for: pollInterval)
+                do {
+                    try await Task.sleep(for: pollInterval)
+                } catch {
+                    return
+                }
                 continue
             }
             let quietFor = captureClock.now - lastSampleAt
             if quietFor >= idleWindow { return }
-            try? await Task.sleep(for: min(idleWindow - quietFor, pollInterval))
+            do {
+                try await Task.sleep(for: min(idleWindow - quietFor, pollInterval))
+            } catch {
+                return
+            }
         }
     }
 
-    func stopCapture() -> [Float] {
-        os_unfair_lock_lock(bufferLock)
-        _isCapturing = false
-        let samples = _sampleBuffer
-        _sampleBuffer.removeAll(keepingCapacity: true)
-        os_unfair_lock_unlock(bufferLock)
-        return samples
+    func stopCapture(handle: CaptureHandle) async -> [Float]? {
+        await withCheckedContinuation { continuation in
+            lifecycleQueue.async { [self] in
+                guard !isShuttingDown,
+                      activeGeneration == handle.generation,
+                      let samples = captureBuffer.stopAndTakeSamples(generation: handle.generation)
+                else {
+                    continuation.resume(returning: nil)
+                    return
+                }
+
+                transitionOnQueue(to: .stopping, generation: handle.generation)
+                pendingConfigurationWork?.cancel()
+                pendingConfigurationWork = nil
+                removeConfigObserverOnQueue()
+                stopEngineOnQueue()
+                activeGeneration = nil
+                returnedGeneration = nil
+                activeDeviceID = nil
+                recoveryAttemptedGeneration = nil
+                transitionOnQueue(to: .idle, generation: handle.generation)
+                audioLog.notice("capture generation \(handle.generation) stopped with \(samples.count) samples")
+                continuation.resume(returning: samples)
+            }
+        }
+    }
+
+    func shutdown() -> Result<Void, AudioEngineError> {
+        markShutdownRequested()
+        return syncOnLifecycleQueue {
+            if isShuttingDown {
+                return .success(())
+            }
+            isShuttingDown = true
+            pendingConfigurationWork?.cancel()
+            pendingConfigurationWork = nil
+            if let generation = activeGeneration {
+                captureBuffer.invalidate(generation: generation)
+                audioLog.notice("invalidated capture generation \(generation) for shutdown")
+            } else {
+                captureBuffer.invalidate()
+            }
+            activeGeneration = nil
+            returnedGeneration = nil
+            activeDeviceID = nil
+            recoveryAttemptedGeneration = nil
+            removeConfigObserverOnQueue()
+            stopEngineOnQueue()
+            removeDeviceListListenersOnQueue()
+
+            do {
+                try restorePreviousSystemDefaultOnQueue()
+                transitionOnQueue(to: .idle)
+                return .success(())
+            } catch let error as AudioEngineError {
+                transitionOnQueue(to: .failed(error))
+                return .failure(error)
+            } catch {
+                let error = AudioEngineError.unexpectedFailure(error.localizedDescription)
+                transitionOnQueue(to: .failed(error))
+                return .failure(error)
+            }
+        }
+    }
+
+    #if DEBUG
+    func configureDebugFaults(_ faults: AudioEngineDebugFaults) {
+        syncOnLifecycleQueue {
+            debugFaults = faults
+        }
+    }
+
+    func injectDebugPostHandleDeviceFailure(handle: CaptureHandle) {
+        lifecycleQueue.async { [weak self] in
+            guard let self, self.returnedGeneration == handle.generation else { return }
+            self.failActiveGenerationOnQueue(
+                handle.generation,
+                error: .inputDeviceUnavailable(self.activeDeviceID ?? kAudioObjectUnknown)
+            )
+        }
+    }
+
+    func injectDebugStoppedEngineConfigurationChange(handle: CaptureHandle) {
+        lifecycleQueue.async { [weak self] in
+            guard let self,
+                  self.returnedGeneration == handle.generation,
+                  let engine = self.engine
+            else { return }
+            engine.stop()
+            self.isRunning = false
+            self.scheduleConfigurationDecisionOnQueue(generation: handle.generation)
+        }
+    }
+
+    private func scheduleDebugPostStartFaultsOnQueue(handle: CaptureHandle) {
+        if debugFaults.failAfterHandle {
+            debugFaults.failAfterHandle = false
+            injectDebugPostHandleDeviceFailure(handle: handle)
+        }
+        if debugFaults.stopEngineForConfigurationChange {
+            debugFaults.stopEngineForConfigurationChange = false
+            injectDebugStoppedEngineConfigurationChange(handle: handle)
+        }
+    }
+
+    private func consumeSettleFailureIfNeeded(handle: CaptureHandle) async -> Bool {
+        await withCheckedContinuation { continuation in
+            lifecycleQueue.async { [self] in
+                guard debugFaults.failDuringSettle,
+                      activeGeneration == handle.generation
+                else {
+                    continuation.resume(returning: false)
+                    return
+                }
+                debugFaults.failDuringSettle = false
+                failActiveGenerationOnQueue(
+                    handle.generation,
+                    error: .engineStartFailed("Injected settle failure.")
+                )
+                continuation.resume(returning: true)
+            }
+        }
+    }
+    #endif
+
+    // MARK: - Queue helpers
+
+    private func syncOnLifecycleQueue<T>(_ work: () -> T) -> T {
+        if DispatchQueue.getSpecific(key: lifecycleQueueKey) != nil {
+            return work()
+        }
+        return lifecycleQueue.sync(execute: work)
+    }
+
+    private func markShutdownRequested() {
+        shutdownLock.lock()
+        shutdownRequested = true
+        shutdownLock.unlock()
+    }
+
+    private func shutdownWasRequested() -> Bool {
+        shutdownLock.lock()
+        defer { shutdownLock.unlock() }
+        return shutdownRequested
+    }
+}
+
+private extension AudioEngineError {
+    var isCancellation: Bool {
+        if case .captureCancelled = self {
+            return true
+        }
+        return false
     }
 }

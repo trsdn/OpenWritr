@@ -9,22 +9,17 @@ struct SettingsView: View {
     var body: some View {
         Form {
             Section("Recording") {
-                Picker("Input Device", selection: Binding(
-                    get: { viewModel.selectedInputDeviceID },
-                    set: { newID in
-                        let device = viewModel.availableInputDevices.first { $0.id == newID }
-                        viewModel.setInputDevice(device)
-                    }
-                )) {
-                    Text("System Default").tag(AudioDeviceID?.none)
+                Picker("Input Device", selection: inputDeviceSelection) {
+                    Text("System Default").tag(kAudioObjectUnknown)
                     ForEach(viewModel.availableInputDevices) { device in
-                        Text(device.name).tag(AudioDeviceID?.some(device.id))
+                        Text(device.name).tag(device.id)
                     }
                 }
+                .disabled(!viewModel.canChangeInputDevice)
 
-                Text(viewModel.inputDeviceStatusMessage)
+                Text(inputDeviceStatusMessage)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(inputDeviceStatusNeedsAttention ? Color.orange : Color.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
                 Picker("Push-to-Talk Key", selection: Binding(
@@ -197,6 +192,42 @@ struct SettingsView: View {
         .onAppear {
             viewModel.refreshInputDevices()
         }
+    }
+
+    private var inputDeviceSelection: Binding<AudioDeviceID> {
+        Binding(
+            get: { viewModel.selectedInputDeviceID ?? kAudioObjectUnknown },
+            set: { newID in
+                let device = viewModel.availableInputDevices.first { $0.id == newID }
+                viewModel.setInputDevice(device)
+            }
+        )
+    }
+
+    private var isAudioRuntimeError: Bool {
+        guard case .runtimeError(let error) = viewModel.state,
+              case .audio = error.kind
+        else { return false }
+        return true
+    }
+
+    private var selectedInputDeviceIsDisconnected: Bool {
+        guard let selectedID = viewModel.selectedInputDeviceID else { return false }
+        return !viewModel.availableInputDevices.contains { $0.id == selectedID }
+    }
+
+    private var inputDeviceStatusNeedsAttention: Bool {
+        selectedInputDeviceIsDisconnected || isAudioRuntimeError
+    }
+
+    private var inputDeviceStatusMessage: String {
+        if selectedInputDeviceIsDisconnected {
+            return "The selected input device is disconnected. OpenWritr will fall back to the macOS system default after validation."
+        }
+        if isAudioRuntimeError {
+            return "\(viewModel.inputDeviceStatusMessage) Microphone validation is required before recording."
+        }
+        return viewModel.inputDeviceStatusMessage
     }
 }
 

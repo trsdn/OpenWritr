@@ -96,6 +96,8 @@ struct MenuBarView: View {
             return "Downloading Model (\(Int(progress * 100))%)…"
         case .ready:
             return "Ready — Hold \(viewModel.hotkeyChoice.shortLabel) to Speak"
+        case .preparingMicrophone:
+            return "Preparing Microphone…"
         case .listening:
             return "Listening…"
         case .transcribing:
@@ -119,12 +121,26 @@ struct MenuBarView: View {
         switch viewModel.state {
         case .initializationError:
             Button("Retry Initialization") { Task { await viewModel.retryInitialization() } }
-        case .runtimeError:
-            if viewModel.recoverableRawTranscription != nil {
+        case .runtimeError(let error):
+            switch error.kind {
+            case .audio:
+                Button("Retry Microphone") {
+                    viewModel.retryMicrophone()
+                }
+                Button("Dismiss Error") {
+                    viewModel.dismissRuntimeError()
+                }
+            case .enhancement:
                 Button("Retry Enhancement") { Task { await viewModel.retryEnhancement() } }
-                Button(viewModel.autoPasteEnabled ? "Use & Paste Raw Transcript" : "Use Raw Transcript") { viewModel.useRawTranscription() }
+                if viewModel.recoverableRawTranscription != nil {
+                    Button(viewModel.autoPasteEnabled ? "Use & Paste Raw Transcript" : "Use Raw Transcript") {
+                        viewModel.useRawTranscription()
+                    }
+                }
+                Button("Dismiss Error") { viewModel.dismissRuntimeError() }
+            case .transcription:
+                Button("Dismiss Error") { viewModel.dismissRuntimeError() }
             }
-            Button("Dismiss Error") { viewModel.dismissRuntimeError() }
         default:
             EmptyView()
         }
