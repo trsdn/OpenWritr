@@ -2,6 +2,7 @@ import SwiftUI
 
 struct MenuBarView: View {
     @Bindable var viewModel: AppViewModel
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -11,6 +12,11 @@ struct MenuBarView: View {
             Divider()
             SettingsLink {
                 Label("Settings…", systemImage: "gearshape")
+            }
+            Button {
+                openWindow(id: "about")
+            } label: {
+                Label("About OpenWritr…", systemImage: "info.circle")
             }
             Divider()
             Button("Quit OpenWritr") {

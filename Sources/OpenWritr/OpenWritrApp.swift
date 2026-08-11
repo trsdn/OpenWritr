@@ -1277,6 +1277,11 @@ struct OpenWritrApp: App {
         Settings {
             SettingsView(viewModel: viewModel)
         }
+
+        Window("About OpenWritr", id: "about") {
+            AboutView()
+        }
+        .windowResizability(.contentSize)
     }
 
     private var menuBarIcon: some View {

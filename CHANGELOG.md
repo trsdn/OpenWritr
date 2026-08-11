@@ -2,6 +2,13 @@
 
 All notable changes to OpenWritr will be documented in this file.
 
+## [1.4.0] — 2026-08-11
+
+### Added
+- Added an About OpenWritr window with installed version/build information
+- Added direct links to the project website, source repository, issue reporting, releases, and MIT license
+- Added open-source, maintainer, and copyright attribution inside the app
+
 ## [1.3.0] — 2026-08-11
 
 ### Changed
