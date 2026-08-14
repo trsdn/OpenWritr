@@ -58,6 +58,8 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
 cp "$BUILD_DIR/OpenWritr" "$APP/Contents/MacOS/OpenWritr"
 cp "$PROJECT_DIR/Resources/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
+cp "$PROJECT_DIR/Sources/OpenWritr/Resources/cleanup-prompt-profiles.json" \
+    "$APP/Contents/Resources/cleanup-prompt-profiles.json"
 cp "$PROJECT_DIR/Info.plist" "$APP/Contents/Info.plist"
 
 python3 -c "

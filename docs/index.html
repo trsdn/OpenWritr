@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>OpenWritr — Voice to Text, Instantly</title>
-<meta name="description" content="Native macOS menu bar app for push-to-talk speech-to-text. Completely local, blazing fast, powered by Apple Neural Engine.">
+<meta name="description" content="Native macOS push-to-talk speech-to-text with local transcription, a live waveform, and optional cleanup through Apple Intelligence or cloud models.">
 <link rel="icon" type="image/x-icon" href="favicon.ico">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -304,42 +304,39 @@ h1 .accent {
 .pill-overlay {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 28px;
+  justify-content: center;
+  gap: 14px;
+  width: 228px;
+  height: 46px;
+  padding: 8px 14px;
   border-radius: 100px;
-  background: rgba(255,255,255,.06);
+  background: rgba(19,19,19,.96);
   backdrop-filter: blur(12px);
-  border: 1px solid rgba(255,255,255,.08);
-}
-
-.rec-dot {
-  width: 10px; height: 10px;
-  border-radius: 50%;
-  background: var(--red);
-  box-shadow: 0 0 12px var(--red-glow);
-  animation: pulse-dot 1.2s ease infinite;
+  border: none;
+  box-shadow: 0 8px 28px rgba(0,0,0,.38);
 }
 
 .pill-overlay span {
-  font-size: .9rem;
-  font-weight: 500;
-  color: var(--text);
+  font-size: .78rem;
+  font-weight: 600;
+  color: #c4b5fd;
   letter-spacing: .01em;
 }
 
 .waveform {
   display: flex;
   align-items: center;
-  gap: 3px;
-  height: 40px;
+  gap: 2px;
+  width: 108px;
+  height: 30px;
 }
 
 .waveform .bar {
   width: 3px;
   border-radius: 3px;
-  background: var(--accent);
-  animation: wave 1s ease-in-out infinite;
-  opacity: .7;
+  background: #a78bfa;
+  animation: wave .8s ease-in-out infinite;
+  opacity: .9;
 }
 
 @keyframes wave {
@@ -696,10 +693,10 @@ footer a:hover { color: var(--accent); }
     <h1>Your voice.<br><span class="accent">Instant text.</span></h1>
     <p class="hero-sub">
       Native macOS menu bar app that turns speech into text in under a second.
-      Push to talk, release to paste. Local transcription with optional cleanup via GitHub Copilot or an OpenAI-compatible API.
+      Push to talk, release to paste. Local transcription with optional cleanup via Apple Intelligence, GitHub Copilot, or an OpenAI-compatible API.
     </p>
     <div class="hero-actions">
-      <a href="https://github.com/trsdn/OpenWritr/releases/latest/download/OpenWritr-v1.4.0-macOS-arm64.zip" class="btn btn-primary">
+      <a href="https://github.com/trsdn/OpenWritr/releases/latest/download/OpenWritr-v1.5.0-macOS-arm64.zip" class="btn btn-primary">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
         Download
       </a>
@@ -721,10 +718,9 @@ footer a:hover { color: var(--accent); }
         </div>
         <div class="menubar-body">
           <div class="pill-overlay">
-            <div class="rec-dot"></div>
-            <span>Listening...</span>
+            <div class="waveform" id="waveform"></div>
+            <span>&#10022;&nbsp; Enhanced</span>
           </div>
-          <div class="waveform" id="waveform"></div>
           <div class="mock-text">The quick brown fox jumps over the lazy dog</div>
         </div>
       </div>
@@ -749,8 +745,8 @@ footer a:hover { color: var(--accent); }
         <div class="stat-label">Languages</div>
       </div>
       <div>
-        <div class="stat-val">Optional</div>
-        <div class="stat-label">Cloud enhancement</div>
+        <div class="stat-val">On-device</div>
+        <div class="stat-label">Apple AI cleanup</div>
       </div>
     </div>
   </div>
@@ -785,7 +781,7 @@ footer a:hover { color: var(--accent); }
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/></svg>
         </div>
         <h3>Local Transcription</h3>
-        <p>Audio is transcribed on-device via CoreML. Your audio never leaves your machine; Enhanced Mode can send the resulting transcript text to its selected provider for cleanup.</p>
+        <p>Audio is always transcribed on-device via CoreML. Apple Intelligence cleanup also stays local; cloud providers receive transcript text only when selected.</p>
       </div>
       <div class="feature">
         <div class="feature-icon fi-purple">
@@ -798,8 +794,8 @@ footer a:hover { color: var(--accent); }
         <div class="feature-icon fi-amber">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
         </div>
-        <h3>Invisible Until Needed</h3>
-        <p>Lives in your menu bar. No dock icon, no window. A translucent overlay appears only while recording.</p>
+        <h3>Live Waveform</h3>
+        <p>A compact borderless waveform follows your voice and clearly distinguishes Listening, Enhanced, Processing, and Done states.</p>
       </div>
       <div class="feature">
         <div class="feature-icon fi-teal">
@@ -818,29 +814,29 @@ footer a:hover { color: var(--accent); }
     <div class="section-label reveal">Enhanced Mode</div>
     <h2 class="reveal">AI-powered<br>transcript cleanup</h2>
     <p class="section-desc reveal">
-      Optionally clean up transcripts using GitHub Copilot or an OpenAI-compatible API&mdash;fix grammar,
+      Optionally clean up transcripts using Apple Intelligence, GitHub Copilot, or an OpenAI-compatible API&mdash;fix grammar,
       remove filler words, and polish punctuation while preserving meaning, tone, and language.
     </p>
     <div class="steps">
       <div class="step reveal">
-        <span class="step-num">GPT-4.1</span>
-        <h3>Default Model</h3>
-        <p>High-quality grammar and punctuation cleanup. Included with any GitHub Copilot subscription&mdash;no premium tokens required.</p>
+        <span class="step-num">Apple Intelligence</span>
+        <h3>Local &amp; Private</h3>
+        <p>Fast on-device cleanup on compatible Macs running macOS 26. No transcript text leaves your machine and there is no token cost.</p>
       </div>
       <div class="step reveal">
-        <span class="step-num">GPT-5 Mini</span>
-        <h3>Lightweight &amp; Fast</h3>
-        <p>Quick enhancement for simple corrections. Also included with GitHub Copilot at no extra cost&mdash;no premium tokens.</p>
+        <span class="step-num">GPT-5.6 Luna</span>
+        <h3>Cloud Default</h3>
+        <p>The evaluated default for strong cleanup quality at low token cost through GitHub Copilot CLI.</p>
       </div>
       <div class="step reveal">
-        <span class="step-num">Claude Haiku</span>
-        <h3>Premium Option</h3>
-        <p>Claude Haiku 4.5 for alternative enhancement style. Uses premium tokens from your GitHub Copilot allowance.</p>
+        <span class="step-num">Gemini &middot; MAI &middot; Claude</span>
+        <h3>Choose Your Model</h3>
+        <p>Switch among evaluated models, see current price tiers, and use a model-tuned default prompt or your own update-safe customization.</p>
       </div>
     </div>
     <p class="section-desc reveal" style="margin-top:32px;">
       GitHub Copilot enhancement requires the <a href="https://docs.github.com/en/copilot/using-github-copilot/using-github-copilot-in-the-command-line" style="color:var(--accent);text-decoration:none;">GitHub Copilot CLI</a>
-      installed and authenticated; OpenAI-compatible providers use the configured endpoint. Works with all 25 supported languages.
+      installed and authenticated; OpenAI-compatible providers use the configured endpoint. Enhancement can run only with Shift or for every recording, with Shift as a one-time bypass.
     </p>
   </div>
 </section>
@@ -858,7 +854,7 @@ footer a:hover { color: var(--accent); }
       <div class="step reveal">
         <span class="step-num">01</span>
         <h3>Hold Fn</h3>
-        <p>Press and hold the Fn (Globe) key. The mic activates instantly&mdash;audio streams into a 16kHz buffer via AVAudioEngine. A floating pill overlay confirms you&rsquo;re recording.</p>
+        <p>Press and hold your configured hotkey. The mic activates instantly and the bottom waveform follows your voice. Purple Enhanced feedback confirms when cleanup will run.</p>
       </div>
       <div class="step reveal">
         <span class="step-num">02</span>
@@ -929,7 +925,7 @@ footer a:hover { color: var(--accent); }
     <div class="section-label reveal">Get Started</div>
     <h2 class="reveal">Up and running<br>in 30 seconds</h2>
     <p class="section-desc reveal">
-      Requires macOS 14+ and Apple Silicon. The ASR model (~460 MB) downloads
+      Download OpenWritr v1.5.0, or build it from source. Requires macOS 14+ and Apple Silicon. The ASR model (~460 MB) downloads
       automatically on first launch.
     </p>
     <div class="install-block reveal">
@@ -975,7 +971,7 @@ footer a:hover { color: var(--accent); }
 <script>
 // Generate waveform bars
 const wf = document.getElementById('waveform');
-for (let i = 0; i < 40; i++) {
+for (let i = 0; i < 22; i++) {
   const bar = document.createElement('div');
   bar.className = 'bar';
   bar.style.animationDelay = `${(Math.sin(i * .4) * .5 + .5) * .8}s`;

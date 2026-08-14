@@ -36,8 +36,15 @@ enum AppState: Sendable {
 @MainActor
 @Observable
 final class AppViewModel {
+    private struct CustomPromptStore: Codable {
+        let version: Int
+        let prompts: [String: String]
+    }
+
     private static let keychainService = "com.openwritr.app"
     private static let enhancementAPIKeyAccount = "enhancedOpenAIAPIKey"
+    private static let customPromptsPreferenceKey = "enhancementCustomPromptsV1"
+    private static let customPromptsStoreVersion = 1
     var state: AppState = .idle
     var lastTranscription: String = ""
     var lastRawTranscription: String = ""
@@ -55,15 +62,17 @@ final class AppViewModel {
     var availableInputDevices: [AudioInputDevice] = []
     var selectedInputDeviceID: AudioDeviceID?
     var enhancedModeEnabled: Bool = false
+    var alwaysEnhancedEnabled: Bool = false
     var enhancedProvider: EnhancedProvider = .copilot
-    var enhancedModel: EnhancedModel = .gpt4_1
+    var enhancedModel: EnhancedModel = .luna
     var enhancedOpenAIBaseURL: String = EnhancedProvider.defaultOpenAIBaseURL
     var enhancedOpenAIAPIKey: String = ""
     var selectedOpenAIModel: String = EnhancedProvider.defaultOpenAIModelOverride
     var availableOpenAIModels: [String] = []
     var isRefreshingOpenAIModels = false
     var openAIModelRefreshMessage: String?
-    var enhancementPrompt = GrammarEnhancer.defaultCleanupPrompt
+    private(set) var customEnhancementPrompts: [String: String] = [:]
+    var appleIntelligenceAvailability = AppleIntelligenceEnhancer.currentAvailability()
 
     let transcriptionManager = TranscriptionManager()
     let grammarEnhancer: GrammarEnhancer = .init()
@@ -94,12 +103,46 @@ final class AppViewModel {
     @ObservationIgnored private var initializationErrorProcessingOperationID: UUID?
     @ObservationIgnored private var initializationRetryID: UUID?
     @ObservationIgnored private var terminationObserver: NSObjectProtocol?
+    @ObservationIgnored private var microphoneRecoveryTask: Task<Void, Never>?
+    @ObservationIgnored private var microphoneRecoveryID: UUID?
 
     var displayedOpenAIModels: [String] {
         var models = availableOpenAIModels
         let selected = selectedOpenAIModel.trimmingCharacters(in: .whitespacesAndNewlines)
         if !selected.isEmpty, !models.contains(selected) { models.insert(selected, at: 0) }
         return models
+    }
+
+    var enhancementPromptTargetKey: String {
+        GrammarEnhancer.promptTargetKey(
+            provider: enhancedProvider,
+            model: enhancedModel,
+            openAIModel: selectedOpenAIModel
+        )
+    }
+
+    var enhancementPromptTargetDisplayName: String {
+        GrammarEnhancer.promptTargetDisplayName(
+            provider: enhancedProvider,
+            model: enhancedModel,
+            openAIModel: selectedOpenAIModel
+        )
+    }
+
+    var modelDefaultEnhancementPrompt: String {
+        GrammarEnhancer.bundledCleanupPrompt(
+            provider: enhancedProvider,
+            model: enhancedModel,
+            openAIModel: selectedOpenAIModel
+        )
+    }
+
+    var enhancementPrompt: String {
+        customEnhancementPrompts[enhancementPromptTargetKey] ?? modelDefaultEnhancementPrompt
+    }
+
+    var enhancementPromptIsCustomized: Bool {
+        customEnhancementPrompts[enhancementPromptTargetKey] != nil
     }
 
     var canChangeInputDevice: Bool {
@@ -248,6 +291,7 @@ final class AppViewModel {
         didConfigure = true
 
         restorePreferences()
+        refreshAppleIntelligenceAvailability()
 
         audioEngine.onDevicesChanged = { [weak self] in
             Task { @MainActor [weak self] in
@@ -259,9 +303,23 @@ final class AppViewModel {
                 self?.handleAudioFailure(error)
             }
         }
+        audioEngine.onAudioLevel = { [weak self] level, generation in
+            Task { @MainActor [weak self] in
+                guard let self,
+                      case .listening = self.state,
+                      self.captureHandle?.generation == generation
+                else { return }
+                self.overlayPanel.updateAudioLevel(level)
+            }
+        }
         hotkeyManager.onRecordingStarted = { [weak self] mode in
             Task { @MainActor [weak self] in
                 self?.startListening(triggerMode: mode)
+            }
+        }
+        hotkeyManager.onRecordingModeChanged = { [weak self] mode in
+            Task { @MainActor [weak self] in
+                self?.updateRecordingMode(shortcutMode: mode)
             }
         }
         hotkeyManager.onRecordingStopped = { [weak self] mode in
@@ -296,8 +354,18 @@ final class AppViewModel {
         if defaults.object(forKey: "enhancedModeEnabled") != nil {
             enhancedModeEnabled = defaults.bool(forKey: "enhancedModeEnabled")
         }
-        if let raw = defaults.string(forKey: "enhancedProvider"), let provider = EnhancedProvider(rawValue: raw) {
-            enhancedProvider = provider
+        if defaults.object(forKey: "alwaysEnhancedEnabled") != nil {
+            alwaysEnhancedEnabled = defaults.bool(forKey: "alwaysEnhancedEnabled")
+        }
+        if let raw = defaults.string(forKey: "enhancedProvider"),
+           let provider = EnhancedProvider(rawValue: raw) {
+            if provider == .appleIntelligence,
+               !AppleIntelligenceEnhancer.currentAvailability().isAvailable {
+                enhancedProvider = .copilot
+                defaults.set(EnhancedProvider.copilot.rawValue, forKey: "enhancedProvider")
+            } else {
+                enhancedProvider = provider
+            }
         }
         if let baseURL = defaults.string(forKey: "enhancedOpenAIBaseURL"), !baseURL.isEmpty {
             enhancedOpenAIBaseURL = baseURL
@@ -315,13 +383,11 @@ final class AppViewModel {
             selectedOpenAIModel = modelOverride
             defaults.removeObject(forKey: "enhancedOpenAIModelOverride")
         }
-        if let savedPrompt = defaults.string(forKey: "enhancementPrompt"), !savedPrompt.isEmpty {
-            enhancementPrompt = savedPrompt
-        }
         if let raw = defaults.string(forKey: "enhancedModel"),
            let model = EnhancedModel(rawValue: raw) {
             enhancedModel = model
         }
+        restoreCustomEnhancementPrompts(defaults: defaults)
         if defaults.object(forKey: "debugModeEnabled") != nil {
             debugModeEnabled = defaults.bool(forKey: "debugModeEnabled")
         }
@@ -483,6 +549,29 @@ final class AppViewModel {
         UserDefaults.standard.set(value, forKey: key)
     }
 
+    func setEnhancedProvider(_ provider: EnhancedProvider) {
+        if provider == .appleIntelligence {
+            refreshAppleIntelligenceAvailability()
+            guard appleIntelligenceAvailability.isAvailable else { return }
+        }
+        enhancedProvider = provider
+        savePreference("enhancedProvider", value: provider.rawValue)
+    }
+
+    func setEnhancedModel(_ model: EnhancedModel) {
+        enhancedModel = model
+        savePreference("enhancedModel", value: model.rawValue)
+    }
+
+    func refreshAppleIntelligenceAvailability() {
+        appleIntelligenceAvailability = AppleIntelligenceEnhancer.currentAvailability()
+        if enhancedProvider == .appleIntelligence,
+           !appleIntelligenceAvailability.isAvailable {
+            enhancedProvider = .copilot
+            savePreference("enhancedProvider", value: EnhancedProvider.copilot.rawValue)
+        }
+    }
+
     func setHotkey(_ choice: HotkeyChoice) {
         hotkeyChoice = choice
         hotkeyManager.activeFlag = choice.flag
@@ -500,6 +589,7 @@ final class AppViewModel {
             return
         }
 
+        cancelMicrophoneRecovery()
         switch audioEngine.setInputDevice(device?.id) {
         case .success:
             selectedInputDeviceID = device?.id
@@ -519,10 +609,14 @@ final class AppViewModel {
                 }
             case .failure(let error):
                 appLog.error("Input device validation failed: \(error.localizedDescription, privacy: .public)")
-                presentRuntimeError(
-                    errorPresentation(kind: .audio, title: "Microphone Selection Failed", error: error),
-                    overlayMessage: "Microphone unavailable"
-                )
+                if device == nil {
+                    scheduleSystemDefaultRecovery(showTransientError: true, initialError: error)
+                } else {
+                    presentRuntimeError(
+                        errorPresentation(kind: .audio, title: "Microphone Selection Failed", error: error),
+                        overlayMessage: "Microphone unavailable"
+                    )
+                }
             }
         case .failure(let error):
             if device == nil {
@@ -530,27 +624,34 @@ final class AppViewModel {
                 inputDeviceStatusMessage = "The previous macOS system input could not be restored."
             }
             appLog.error("Input device selection failed: \(error.localizedDescription, privacy: .public)")
-            presentRuntimeError(
-                errorPresentation(kind: .audio, title: "Microphone Selection Failed", error: error),
-                overlayMessage: "Microphone change failed"
-            )
+            if device == nil {
+                scheduleSystemDefaultRecovery(showTransientError: true, initialError: error)
+            } else {
+                presentRuntimeError(
+                    errorPresentation(kind: .audio, title: "Microphone Selection Failed", error: error),
+                    overlayMessage: "Microphone change failed"
+                )
+            }
         }
     }
 
     private func handleInputDevicesChanged() {
         refreshInputDevices()
-        guard let selectedInputDeviceID,
-              !availableInputDevices.contains(where: { $0.id == selectedInputDeviceID })
-        else { return }
+        if let selectedInputDeviceID,
+           !availableInputDevices.contains(where: { $0.id == selectedInputDeviceID }) {
+            clearSelectedInputDevice()
+            appLog.notice("The selected input device disappeared; following System Default")
+            inputDeviceStatusMessage = "Selected input device is no longer available. Waiting for the macOS system default input."
+        }
 
-        clearSelectedInputDevice()
-        if case .runtimeError(let presentation) = state,
-           presentation.kind == .audio {
-            appLog.error("The selected input device disappeared and default restoration failed")
+        guard selectedInputDeviceID == nil,
+              captureOperationID == nil,
+              pendingStartTask == nil,
+              activeProcessingTask == nil
+        else {
             return
         }
-        appLog.notice("The selected input device disappeared; using the restored system default")
-        inputDeviceStatusMessage = "Selected input device is no longer available. OpenWritr is following the macOS system default input."
+        scheduleSystemDefaultRecovery(showTransientError: false)
     }
 
     private func clearSelectedInputDevice() {
@@ -561,15 +662,36 @@ final class AppViewModel {
     private func handleAudioFailure(_ error: AudioEngineError) {
         guard !didShutdown, isOperational else { return }
 
+        if let operationID = captureOperationID, captureHandle == nil {
+            appLog.error(
+                "Runtime audio failure invalidated pending capture: \(error.localizedDescription, privacy: .public)"
+            )
+            pendingStartTask?.cancel()
+            invalidateCaptureOperation(ifCurrent: operationID)
+            if selectedInputDeviceID == nil {
+                scheduleSystemDefaultRecovery(showTransientError: true, initialError: error)
+            } else {
+                presentRuntimeError(
+                    errorPresentation(kind: .audio, title: "Microphone Became Unavailable", error: error),
+                    overlayMessage: "Microphone unavailable"
+                )
+            }
+            return
+        }
+
         guard let operationID = captureOperationID,
               let handle = captureHandle
         else {
             appLog.error("Runtime audio failure: \(error.localizedDescription, privacy: .public)")
             inputDeviceStatusMessage = "The microphone configuration failed: \(error.localizedDescription)"
-            presentRuntimeError(
-                errorPresentation(kind: .audio, title: "Microphone Became Unavailable", error: error),
-                overlayMessage: "Microphone unavailable"
-            )
+            if selectedInputDeviceID == nil {
+                scheduleSystemDefaultRecovery(showTransientError: true, initialError: error)
+            } else {
+                presentRuntimeError(
+                    errorPresentation(kind: .audio, title: "Microphone Became Unavailable", error: error),
+                    overlayMessage: "Microphone unavailable"
+                )
+            }
             return
         }
 
@@ -586,6 +708,8 @@ final class AppViewModel {
         )
         Task { @MainActor [weak self] in
             _ = await self?.stopCaptureOnce(handle)
+            guard let self, self.selectedInputDeviceID == nil else { return }
+            self.scheduleSystemDefaultRecovery(showTransientError: true, initialError: error)
         }
     }
 
@@ -596,6 +720,7 @@ final class AppViewModel {
               !didShutdown
         else { return }
 
+        cancelMicrophoneRecovery()
         refreshInputDevices()
         if let selectedInputDeviceID,
            !availableInputDevices.contains(where: { $0.id == selectedInputDeviceID }) {
@@ -610,11 +735,113 @@ final class AppViewModel {
             state = .ready
         case .failure(let error):
             appLog.error("Microphone retry validation failed: \(error.localizedDescription, privacy: .public)")
+            if selectedInputDeviceID == nil {
+                scheduleSystemDefaultRecovery(showTransientError: true, initialError: error)
+            } else {
+                presentRuntimeError(
+                    errorPresentation(kind: .audio, title: "Microphone Still Unavailable", error: error),
+                    overlayMessage: "Microphone unavailable"
+                )
+            }
+        }
+    }
+
+    private func scheduleSystemDefaultRecovery(
+        showTransientError: Bool,
+        initialError: AudioEngineError? = nil
+    ) {
+        guard selectedInputDeviceID == nil,
+              isOperational,
+              !didShutdown,
+              captureOperationID == nil,
+              pendingStartTask == nil,
+              activeProcessingTask == nil,
+              microphoneRecoveryTask == nil
+        else { return }
+
+        let recoveryID = UUID()
+        microphoneRecoveryID = recoveryID
+        if showTransientError, let initialError {
             presentRuntimeError(
-                errorPresentation(kind: .audio, title: "Microphone Still Unavailable", error: error),
+                errorPresentation(
+                    kind: .audio,
+                    title: "Microphone Temporarily Unavailable",
+                    error: initialError,
+                    defaultRecovery: "OpenWritr is waiting for the macOS system input to become available."
+                ),
+                overlayMessage: "Reconnecting microphone"
+            )
+        }
+        inputDeviceStatusMessage = "Waiting for the macOS system default input to become available."
+
+        microphoneRecoveryTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            let delays: [Duration] = [
+                .milliseconds(250),
+                .milliseconds(500),
+                .seconds(1),
+                .seconds(2),
+            ]
+            var lastError = initialError
+
+            for delay in delays {
+                do {
+                    try await Task.sleep(for: delay)
+                } catch {
+                    return
+                }
+                guard self.microphoneRecoveryID == recoveryID,
+                      self.selectedInputDeviceID == nil,
+                      self.isOperational,
+                      !self.didShutdown,
+                      self.captureOperationID == nil,
+                      self.pendingStartTask == nil,
+                      self.activeProcessingTask == nil
+                else { return }
+
+                self.refreshInputDevices()
+                switch self.prepareAudioUsingSystemDefault() {
+                case .success:
+                    appLog.notice("System Default microphone recovered automatically")
+                    self.inputDeviceStatusMessage = "Using System Default. OpenWritr follows the current macOS system input device."
+                    self.microphoneRecoveryTask = nil
+                    self.microphoneRecoveryID = nil
+                    if case .runtimeError(let presentation) = self.state,
+                       presentation.kind == .audio {
+                        self.overlayPanel.dismiss()
+                        self.state = .ready
+                    }
+                    return
+                case .failure(let error):
+                    lastError = error
+                    appLog.debug("System Default recovery attempt failed: \(error.localizedDescription, privacy: .public)")
+                }
+            }
+
+            guard self.microphoneRecoveryID == recoveryID,
+                  self.captureOperationID == nil,
+                  self.pendingStartTask == nil,
+                  self.activeProcessingTask == nil
+            else { return }
+            self.microphoneRecoveryTask = nil
+            self.microphoneRecoveryID = nil
+            let error = lastError ?? .noDefaultInputDevice
+            self.inputDeviceStatusMessage = "The macOS system input is still unavailable: \(error.localizedDescription)"
+            self.presentRuntimeError(
+                self.errorPresentation(
+                    kind: .audio,
+                    title: "Microphone Still Unavailable",
+                    error: error
+                ),
                 overlayMessage: "Microphone unavailable"
             )
         }
+    }
+
+    private func cancelMicrophoneRecovery() {
+        microphoneRecoveryTask?.cancel()
+        microphoneRecoveryTask = nil
+        microphoneRecoveryID = nil
     }
 
     func setEnhancedOpenAIAPIKey(_ value: String) {
@@ -680,9 +907,6 @@ final class AppViewModel {
                 return
             }
 
-            if !models.contains(selectedOpenAIModel) {
-                setSelectedOpenAIModel(models[0])
-            }
             openAIModelRefreshMessage = "Loaded \(models.count) models."
         } catch {
             openAIModelRefreshMessage = "Failed to refresh models: \(error.localizedDescription)"
@@ -690,12 +914,93 @@ final class AppViewModel {
     }
 
     func setEnhancementPrompt(_ value: String) {
-        enhancementPrompt = value
-        UserDefaults.standard.set(value, forKey: "enhancementPrompt")
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        if trimmed == modelDefaultEnhancementPrompt {
+            customEnhancementPrompts.removeValue(forKey: enhancementPromptTargetKey)
+        } else {
+            customEnhancementPrompts[enhancementPromptTargetKey] = trimmed
+        }
+        persistCustomEnhancementPrompts()
     }
 
     func resetEnhancementPrompt() {
-        setEnhancementPrompt(GrammarEnhancer.defaultCleanupPrompt)
+        customEnhancementPrompts.removeValue(forKey: enhancementPromptTargetKey)
+        persistCustomEnhancementPrompts()
+    }
+
+    func hasCustomEnhancementPrompt(
+        provider: EnhancedProvider,
+        model: EnhancedModel,
+        openAIModel: String
+    ) -> Bool {
+        customEnhancementPrompts[
+            GrammarEnhancer.promptTargetKey(
+                provider: provider,
+                model: model,
+                openAIModel: openAIModel
+            )
+        ] != nil
+    }
+
+    func copyCurrentEnhancementPrompt(
+        to provider: EnhancedProvider,
+        model: EnhancedModel,
+        openAIModel: String
+    ) {
+        let key = GrammarEnhancer.promptTargetKey(
+            provider: provider,
+            model: model,
+            openAIModel: openAIModel
+        )
+        customEnhancementPrompts[key] = enhancementPrompt
+        persistCustomEnhancementPrompts()
+    }
+
+    private func restoreCustomEnhancementPrompts(defaults: UserDefaults) {
+        if let data = defaults.data(forKey: Self.customPromptsPreferenceKey) {
+            if let store = try? JSONDecoder().decode(CustomPromptStore.self, from: data),
+               store.version <= Self.customPromptsStoreVersion {
+                customEnhancementPrompts = store.prompts
+                if store.version < Self.customPromptsStoreVersion {
+                    persistCustomEnhancementPrompts()
+                }
+            } else if let legacyDictionary = try? JSONDecoder().decode(
+                [String: String].self,
+                from: data
+            ) {
+                customEnhancementPrompts = legacyDictionary
+                persistCustomEnhancementPrompts()
+            }
+        }
+
+        guard let legacyPrompt = defaults.string(forKey: "enhancementPrompt") else { return }
+        let trimmed = legacyPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        let migratedPrompt = GrammarEnhancer.migrateLegacyCleanupPrompt(
+            trimmed,
+            provider: enhancedProvider,
+            model: enhancedModel,
+            openAIModel: selectedOpenAIModel
+        )
+        if !trimmed.isEmpty,
+           migratedPrompt != modelDefaultEnhancementPrompt,
+           customEnhancementPrompts[enhancementPromptTargetKey] == nil {
+            customEnhancementPrompts[enhancementPromptTargetKey] = migratedPrompt
+            persistCustomEnhancementPrompts()
+        }
+        defaults.removeObject(forKey: "enhancementPrompt")
+    }
+
+    private func persistCustomEnhancementPrompts() {
+        let store = CustomPromptStore(
+            version: Self.customPromptsStoreVersion,
+            prompts: customEnhancementPrompts
+        )
+        guard let data = try? JSONEncoder().encode(store) else {
+            appLog.error("Failed to encode custom enhancement prompts")
+            return
+        }
+        UserDefaults.standard.set(data, forKey: Self.customPromptsPreferenceKey)
     }
 
 
@@ -735,6 +1040,7 @@ final class AppViewModel {
               let operationID = captureOperationID
         else { return }
 
+        captureTriggerMode = resolvedRecordingMode(for: triggerMode)
         if case .preparingMicrophone = state {
             releaseRequested = true
             appLog.debug("Retained release for pending microphone operation")
@@ -768,6 +1074,25 @@ final class AppViewModel {
         activeProcessingOperationID = nil
     }
 
+    private func resolvedRecordingMode(
+        for shortcutMode: RecordingShortcutMode
+    ) -> RecordingShortcutMode {
+        guard enhancedModeEnabled else { return .normal }
+        if alwaysEnhancedEnabled {
+            return shortcutMode == .enhanced ? .normal : .enhanced
+        }
+        return shortcutMode
+    }
+
+    private func updateRecordingMode(shortcutMode: RecordingShortcutMode) {
+        guard captureOperationID != nil else { return }
+        let mode = resolvedRecordingMode(for: shortcutMode)
+        captureTriggerMode = mode
+        if case .listening = state {
+            overlayPanel.show(state: .listening(enhanced: mode == .enhanced))
+        }
+    }
+
     func startListening(triggerMode: RecordingShortcutMode = .normal) {
         guard case .ready = state,
               isOperational,
@@ -777,11 +1102,12 @@ final class AppViewModel {
               captureOperationID == nil
         else { return }
 
+        cancelMicrophoneRecovery()
         recoverableRawTranscription = nil
         let operationID = UUID()
         captureOperationID = operationID
         captureHandle = nil
-        captureTriggerMode = triggerMode
+        captureTriggerMode = resolvedRecordingMode(for: triggerMode)
         releaseRequested = false
         state = .preparingMicrophone
         appLog.debug("Starting asynchronous microphone preparation")
@@ -833,10 +1159,14 @@ final class AppViewModel {
                   case .preparingMicrophone = state
             else { return }
             appLog.error("Microphone start failed: \(error.localizedDescription, privacy: .public)")
-            presentRuntimeError(
-                errorPresentation(kind: .audio, title: "Microphone Preparation Failed", error: error),
-                overlayMessage: "Microphone unavailable"
-            )
+            if selectedInputDeviceID == nil {
+                scheduleSystemDefaultRecovery(showTransientError: true, initialError: error)
+            } else {
+                presentRuntimeError(
+                    errorPresentation(kind: .audio, title: "Microphone Preparation Failed", error: error),
+                    overlayMessage: "Microphone unavailable"
+                )
+            }
 
         case .success(let handle):
             guard captureOperationID == operationID,
@@ -877,7 +1207,11 @@ final class AppViewModel {
 
             clearPendingStartTask(ifCurrent: operationID)
             state = .listening
-            overlayPanel.show(state: .listening)
+            overlayPanel.show(
+                state: .listening(
+                    enhanced: captureTriggerMode == .enhanced
+                )
+            )
             if soundEnabled {
                 soundManager.playStartSound()
             }
@@ -961,7 +1295,7 @@ final class AppViewModel {
                 return
             }
 
-            if enhancedModeEnabled && triggerMode == .enhanced {
+            if triggerMode == .enhanced {
                 state = .enhancing
                 overlayPanel.show(state: .enhancing)
                 await enhanceAndComplete(
@@ -1241,6 +1575,7 @@ final class AppViewModel {
         isOperational = false
 
         grammarEnhancer.cancelActiveEnhancement()
+        cancelMicrophoneRecovery()
         pendingStartTask?.cancel()
         activeProcessingTask?.cancel()
         invalidateCaptureOperation()
@@ -1255,7 +1590,9 @@ final class AppViewModel {
 
         audioEngine.onDevicesChanged = nil
         audioEngine.onFailure = nil
+        audioEngine.onAudioLevel = nil
         hotkeyManager.onRecordingStarted = nil
+        hotkeyManager.onRecordingModeChanged = nil
         hotkeyManager.onRecordingStopped = nil
 
         _ = audioEngine.shutdown()

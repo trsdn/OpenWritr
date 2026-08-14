@@ -6,9 +6,9 @@
 [![Apple Silicon](https://img.shields.io/badge/Apple%20Silicon-M1%2B-333?logo=apple)](https://github.com/trsdn/OpenWritr)
 [![Release](https://img.shields.io/github/v/release/trsdn/OpenWritr)](https://github.com/trsdn/OpenWritr/releases)
 
-Native macOS menu bar app for push-to-talk voice-to-text. Core transcription runs locally on the Apple Neural Engine; optional enhancement can use GitHub Copilot or any OpenAI-compatible API.
+Native macOS menu bar app for push-to-talk voice-to-text. Core transcription runs locally on the Apple Neural Engine; optional enhancement can use Apple Intelligence, GitHub Copilot, or any OpenAI-compatible API.
 
-**[Website](https://trsdn.github.io/OpenWritr/)** · **[Download](https://github.com/trsdn/OpenWritr/releases/latest/download/OpenWritr-v1.4.0-macOS-arm64.zip)** · **[Release](https://github.com/trsdn/OpenWritr/releases)**
+**[Website](https://trsdn.github.io/OpenWritr/)** · **[Download](https://github.com/trsdn/OpenWritr/releases/latest/download/OpenWritr-v1.5.0-macOS-arm64.zip)** · **[Release](https://github.com/trsdn/OpenWritr/releases)**
 
 <p align="center">
   <img src="docs/mockup.svg" alt="OpenWritr in action" width="720">
@@ -18,7 +18,9 @@ Native macOS menu bar app for push-to-talk voice-to-text. Core transcription run
 
 1. **Hold the hotkey** — start a normal transcription, or hold `Shift + hotkey` for enhanced cleanup
 2. **Release** — audio is transcribed locally via NVIDIA Parakeet TDT v3 on the Neural Engine
-3. **Text appears** — the result is pasted into the focused app, with optional cleanup via Copilot or an OpenAI-compatible API
+3. **Text appears** — the result is pasted into the focused app, with optional cleanup via Apple Intelligence, Copilot, or an OpenAI-compatible API
+
+The bottom-center recording indicator uses a live, voice-reactive waveform. Listening, transcription, enhancement, completion, and error states share the same compact borderless design.
 
 ## Performance
 
@@ -33,12 +35,22 @@ Native macOS menu bar app for push-to-talk voice-to-text. Core transcription run
 | Download (zip) | 3.2 MB |
 | Model size | ~460 MB (downloaded on first launch) |
 | Languages | 25 (English, German, French, Spanish, and more) |
-| Transcript/audio sent to cloud | Audio never leaves the device; Enhanced Mode optionally sends transcript text to its selected provider |
+| Transcript/audio sent to cloud | Audio never leaves the device; Apple Intelligence cleanup stays on-device, while other Enhanced Mode providers receive transcript text |
 
 ## Requirements
 
 - macOS 14+
 - Apple Silicon (M1 or later)
+
+Apple Intelligence cleanup additionally requires macOS 26+, a compatible Mac, Apple Intelligence enabled in System Settings, and the on-device model ready. OpenWritr keeps its macOS 14 minimum and explains when this provider is unavailable.
+
+When **System Default** is selected, OpenWritr follows macOS input-device changes and automatically retries after transient Bluetooth or AirPods handoffs.
+
+### Model-tuned cleanup prompts
+
+Each cleanup model has a visible bundled default tuned for that provider and model. Prompts are read-only until **Edit** is selected. Custom prompts are stored separately per provider/model, survive application updates, and are never silently discarded when switching models.
+
+Enhanced Mode can run on demand with **Shift + hotkey**, or **Always Enhance Recordings** can clean up every recording. In always-enhanced mode, holding Shift temporarily bypasses cleanup. The listening overlay immediately shows whether the current recording will be enhanced.
 
 ## Install
 
@@ -56,6 +68,30 @@ open /Applications/OpenWritr.app
 ```
 
 `swift build -c release` is enough for a fast compile check. `scripts/build-app.sh` creates the signed `.app` bundle and requires a locally available Developer ID Application or Apple Development certificate.
+
+### Cleanup model evaluation
+
+OpenWritr includes a synthetic, privacy-safe benchmark for comparing Apple Intelligence with Copilot models. It uses the production prompt profiles, sends every model the same cases, records latency and failures, and scores terminology preservation, forbidden additions, punctuation, output format, and reference similarity. Apple Intelligence additionally uses the same Swift integrity validator and bounded repair policy in production and evaluation.
+Each report also embeds GitHub's current input, cached-input, cache-write, and output prices per million tokens for the selected models.
+
+```sh
+# Fast smoke comparison
+python3 scripts/evaluate-cleanup-models.py \
+  --models apple-intelligence gpt-5.6-luna \
+  --case-limit 2
+
+# Full repeated comparison, including a blind quality judge
+python3 scripts/evaluate-cleanup-models.py \
+  --runs 3 \
+  --workers 3 \
+  --judge-model gpt-5.6-sol
+
+# Evaluate a candidate with model-specific prompt suffixes
+python3 scripts/evaluate-cleanup-models.py \
+  --prompt-config Sources/OpenWritr/Resources/cleanup-prompt-profiles.json
+```
+
+The default comparison covers Apple Intelligence, Luna, Gemini Flash, MAI Flash, GPT-5 Mini, and Claude Haiku. Reports are written to `.artifacts/cleanup-eval/` and are not committed. Add only synthetic or explicitly approved transcripts to `eval/cleanup-cases.json`; never add private dictation.
 
 ### Signed DMG release
 
@@ -99,14 +135,15 @@ Sources/OpenWritr/
 ├── SettingsView.swift          # Dedicated settings window
 ├── AudioEngine.swift           # AVAudioEngine, 16kHz capture, realtime-safe
 ├── TranscriptionManager.swift  # FluidAudio model loading + transcription
-├── GrammarEnhancer.swift       # GitHub Copilot-based transcript enhancement
+├── GrammarEnhancer.swift       # Cleanup provider routing and remote providers
+├── AppleIntelligenceEnhancer.swift # macOS 26+ on-device cleanup
+├── AppleCleanupPolicy.swift    # Shared Apple validation and repair policy
+├── CleanupIntegrityValidator.swift # Meaning-preservation checks
 ├── HotkeyManager.swift         # CGEventTap for Fn/Globe key detection
-├── GrammarEnhancer.swift       # Copilot/OpenAI-compatible cleanup provider abstraction
 ├── KeychainStore.swift         # Keychain-backed storage for API credentials
 ├── PasteManager.swift          # Clipboard save/restore + Cmd+V simulation
-├── OverlayPanel.swift          # Floating translucent recording indicator
+├── OverlayPanel.swift          # Borderless voice-reactive bottom overlay
 ├── SoundManager.swift          # Programmatic audio cue generation
-├── SettingsView.swift           # Hotkey choice enum and settings
 └── PermissionsManager.swift    # Microphone + Accessibility permission handling
 ```
 

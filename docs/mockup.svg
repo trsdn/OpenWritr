@@ -50,16 +50,30 @@
     <line x1="6" y1="13" x2="6" y2="15" stroke="#ff4d4d" stroke-width="1.2" stroke-linecap="round"/>
   </g>
 
-  <!-- ===== Floating Overlay Pill ===== -->
-  <g filter="shadow" transform="translate(290, 80)">
-    <rect width="260" height="52" rx="26" fill="#1e2a3a" opacity="0.85"/>
-    <rect width="260" height="52" rx="26" fill="url(#pill-bg)" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
-    <!-- Recording dot -->
-    <circle cx="32" cy="26" r="5" fill="#ff4d4d" filter="glow-sm">
-      <animate attributeName="opacity" values="1;0.3;1" dur="1.5s" repeatCount="indefinite"/>
-    </circle>
-    <!-- Listening text -->
-    <text x="50" y="31" font-family="-apple-system, SF Pro, Helvetica" font-size="15" font-weight="500" fill="#e2e8f0">Listening…</text>
+  <!-- ===== Borderless Enhanced Waveform Overlay ===== -->
+  <g filter="shadow" transform="translate(306, 82)">
+    <rect width="228" height="46" rx="23" fill="#131313" opacity="0.96"/>
+    <g transform="translate(18, 23)" fill="#a78bfa">
+      <rect x="0" y="-5" width="3" height="10" rx="1.5"/>
+      <rect x="5" y="-9" width="3" height="18" rx="1.5"/>
+      <rect x="10" y="-12" width="3" height="24" rx="1.5"/>
+      <rect x="15" y="-7" width="3" height="14" rx="1.5"/>
+      <rect x="20" y="-13" width="3" height="26" rx="1.5"/>
+      <rect x="25" y="-9" width="3" height="18" rx="1.5"/>
+      <rect x="30" y="-15" width="3" height="30" rx="1.5"/>
+      <rect x="35" y="-11" width="3" height="22" rx="1.5"/>
+      <rect x="40" y="-14" width="3" height="28" rx="1.5"/>
+      <rect x="45" y="-8" width="3" height="16" rx="1.5"/>
+      <rect x="50" y="-12" width="3" height="24" rx="1.5"/>
+      <rect x="55" y="-7" width="3" height="14" rx="1.5"/>
+      <rect x="60" y="-10" width="3" height="20" rx="1.5"/>
+      <rect x="65" y="-5" width="3" height="10" rx="1.5"/>
+      <rect x="70" y="-8" width="3" height="16" rx="1.5"/>
+      <rect x="75" y="-4" width="3" height="8" rx="1.5"/>
+      <rect x="80" y="-6" width="3" height="12" rx="1.5"/>
+      <rect x="85" y="-3" width="3" height="6" rx="1.5"/>
+    </g>
+    <text x="130" y="29" font-family="-apple-system, SF Pro, Helvetica" font-size="13" font-weight="600" fill="#c4b5fd">✦ Enhanced</text>
   </g>
 
   <!-- ===== Text Editor Window ===== -->

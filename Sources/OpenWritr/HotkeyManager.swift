@@ -21,19 +21,21 @@ enum HotkeyManagerError: LocalizedError, Sendable {
     }
 }
 
-enum RecordingShortcutMode: Sendable {
+enum RecordingShortcutMode: Sendable, Equatable {
     case normal
     case enhanced
 }
 
 private enum RecordingShortcutAction: Sendable {
     case started(RecordingShortcutMode)
+    case modeChanged(RecordingShortcutMode)
     case stopped(RecordingShortcutMode)
 }
 
 @MainActor
 final class HotkeyManager {
     var onRecordingStarted: (@Sendable (RecordingShortcutMode) -> Void)?
+    var onRecordingModeChanged: (@Sendable (RecordingShortcutMode) -> Void)?
     var onRecordingStopped: (@Sendable (RecordingShortcutMode) -> Void)?
 
     // Read from callback thread — use atomic-like access via nonisolated context
@@ -118,16 +120,19 @@ final class HotkeyManager {
             primaryKeyDown = (flags.rawValue & activeFlag) != 0
         }
 
-        if primaryKeyDown {
-            sawShiftDuringCurrentPress = sawShiftDuringCurrentPress || shiftKeyDown
-            currentMode = sawShiftDuringCurrentPress ? .enhanced : .normal
-        }
-
         if primaryKeyDown && !isKeyPressed {
             isKeyPressed = true
             sawShiftDuringCurrentPress = shiftKeyDown
             currentMode = sawShiftDuringCurrentPress ? .enhanced : .normal
             return .started(currentMode)
+        } else if primaryKeyDown && isKeyPressed {
+            sawShiftDuringCurrentPress = sawShiftDuringCurrentPress || shiftKeyDown
+            let updatedMode: RecordingShortcutMode =
+                sawShiftDuringCurrentPress ? .enhanced : .normal
+            if updatedMode != currentMode {
+                currentMode = updatedMode
+                return .modeChanged(updatedMode)
+            }
         } else if !primaryKeyDown && isKeyPressed {
             let finishedMode: RecordingShortcutMode = sawShiftDuringCurrentPress ? .enhanced : .normal
             isKeyPressed = false
@@ -145,6 +150,8 @@ final class HotkeyManager {
         switch action {
         case .started(let mode):
             onRecordingStarted?(mode)
+        case .modeChanged(let mode):
+            onRecordingModeChanged?(mode)
         case .stopped(let mode):
             onRecordingStopped?(mode)
         }

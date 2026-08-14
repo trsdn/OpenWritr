@@ -21,9 +21,7 @@ let package = Package(
                 .product(name: "FluidAudio", package: "FluidAudio"),
                 "ObjCExceptionCatcher"
             ],
-            resources: [
-                .copy("Resources")
-            ]
+            exclude: ["Resources"]
         )
     ]
 )

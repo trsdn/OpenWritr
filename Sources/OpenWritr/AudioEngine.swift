@@ -250,8 +250,10 @@ final class AudioEngine: @unchecked Sendable {
     private var previousSystemDefault: AudioDeviceID?
     private var configObserver: Any?
     private var deviceListListenerBlock: AudioObjectPropertyListenerBlock?
+    private var defaultInputListenerBlock: AudioObjectPropertyListenerBlock?
     private var devicesChangedCallback: (@Sendable () -> Void)?
     private var failureCallback: (@Sendable (AudioEngineError) -> Void)?
+    private var audioLevelCallback: (@Sendable (Float, UInt64) -> Void)?
 
     var onDevicesChanged: (@Sendable () -> Void)? {
         get {
@@ -275,6 +277,19 @@ final class AudioEngine: @unchecked Sendable {
         set {
             callbackLock.lock()
             failureCallback = newValue
+            callbackLock.unlock()
+        }
+    }
+
+    var onAudioLevel: (@Sendable (Float, UInt64) -> Void)? {
+        get {
+            callbackLock.lock()
+            defer { callbackLock.unlock() }
+            return audioLevelCallback
+        }
+        set {
+            callbackLock.lock()
+            audioLevelCallback = newValue
             callbackLock.unlock()
         }
     }
@@ -520,6 +535,10 @@ final class AudioEngine: @unchecked Sendable {
         let target = desiredFormat
         let clock = captureClock
         let conversionState = TapConversionState()
+        let levelHandler: @Sendable ([Float]) -> Void = { [weak self] samples in
+            guard let self else { return }
+            self.notifyAudioLevel(Self.rawRMSLevel(samples), generation: generation)
+        }
 
         let tapBlock: AVAudioNodeTapBlock = { buffer, _ in
             let bufferFormat = buffer.format
@@ -529,6 +548,7 @@ final class AudioEngine: @unchecked Sendable {
                     UnsafeBufferPointer(start: channel[0], count: Int(buffer.frameLength))
                 )
                 state.append(samples, generation: generation, at: clock.now)
+                levelHandler(samples)
                 return
             }
 
@@ -554,6 +574,7 @@ final class AudioEngine: @unchecked Sendable {
                 UnsafeBufferPointer(start: channel[0], count: Int(converted.frameLength))
             )
             state.append(samples, generation: generation, at: clock.now)
+            levelHandler(samples)
         }
 
         var tapError: NSError?
@@ -756,26 +777,71 @@ final class AudioEngine: @unchecked Sendable {
 
     @discardableResult
     private func installDeviceListListenersOnQueue() -> OSStatus {
-        guard deviceListListenerBlock == nil else { return noErr }
+        if deviceListListenerBlock != nil, defaultInputListenerBlock != nil {
+            return noErr
+        }
 
-        var devicesAddress = AudioObjectPropertyAddress(
-            mSelector: kAudioHardwarePropertyDevices,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
-        let devicesBlock: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
-            self?.handleDeviceListChangedOnQueue()
+        var installedDevicesBlock: AudioObjectPropertyListenerBlock?
+        if deviceListListenerBlock == nil {
+            var devicesAddress = AudioObjectPropertyAddress(
+                mSelector: kAudioHardwarePropertyDevices,
+                mScope: kAudioObjectPropertyScopeGlobal,
+                mElement: kAudioObjectPropertyElementMain
+            )
+            let block: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
+                self?.handleDeviceListChangedOnQueue()
+            }
+            let status = AudioObjectAddPropertyListenerBlock(
+                AudioObjectID(kAudioObjectSystemObject),
+                &devicesAddress,
+                lifecycleQueue,
+                block
+            )
+            guard status == noErr else { return status }
+            deviceListListenerBlock = block
+            installedDevicesBlock = block
         }
-        let status = AudioObjectAddPropertyListenerBlock(
-            AudioObjectID(kAudioObjectSystemObject),
-            &devicesAddress,
-            lifecycleQueue,
-            devicesBlock
-        )
-        if status == noErr {
-            deviceListListenerBlock = devicesBlock
+
+        if defaultInputListenerBlock == nil {
+            var defaultInputAddress = AudioObjectPropertyAddress(
+                mSelector: kAudioHardwarePropertyDefaultInputDevice,
+                mScope: kAudioObjectPropertyScopeGlobal,
+                mElement: kAudioObjectPropertyElementMain
+            )
+            let block: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
+                self?.handleDeviceListChangedOnQueue()
+            }
+            let status = AudioObjectAddPropertyListenerBlock(
+                AudioObjectID(kAudioObjectSystemObject),
+                &defaultInputAddress,
+                lifecycleQueue,
+                block
+            )
+            guard status == noErr else {
+                if let installedDevicesBlock {
+                    var devicesAddress = AudioObjectPropertyAddress(
+                        mSelector: kAudioHardwarePropertyDevices,
+                        mScope: kAudioObjectPropertyScopeGlobal,
+                        mElement: kAudioObjectPropertyElementMain
+                    )
+                    let removalStatus = AudioObjectRemovePropertyListenerBlock(
+                        AudioObjectID(kAudioObjectSystemObject),
+                        &devicesAddress,
+                        lifecycleQueue,
+                        installedDevicesBlock
+                    )
+                    if removalStatus != noErr {
+                        audioLog.error("failed to roll back input device monitoring: \(removalStatus)")
+                    } else {
+                        deviceListListenerBlock = nil
+                    }
+                }
+                return status
+            }
+            defaultInputListenerBlock = block
         }
-        return status
+
+        return noErr
     }
 
     private func removeDeviceListListenersOnQueue() {
@@ -797,13 +863,31 @@ final class AudioEngine: @unchecked Sendable {
                 audioLog.error("failed to stop monitoring input devices: \(status)")
             }
         }
+
+        var defaultInputAddress = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDefaultInputDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        if let block = defaultInputListenerBlock {
+            let status = AudioObjectRemovePropertyListenerBlock(
+                AudioObjectID(kAudioObjectSystemObject),
+                &defaultInputAddress,
+                lifecycleQueue,
+                block
+            )
+            if status == noErr {
+                defaultInputListenerBlock = nil
+            } else {
+                audioLog.error("failed to stop monitoring the default input device: \(status)")
+            }
+        }
     }
 
     private func handleDeviceListChangedOnQueue() {
         guard !isShuttingDown else { return }
         do {
             try clearStaleSelectionOnQueue()
-            _ = try Self.getSystemDefaultInput()
             if let generation = activeGeneration {
                 scheduleConfigurationDecisionOnQueue(generation: generation)
             }
@@ -811,18 +895,12 @@ final class AudioEngine: @unchecked Sendable {
             audioLog.error("device list validation failed: \(error.localizedDescription, privacy: .public)")
             if let generation = activeGeneration, returnedGeneration == generation {
                 failActiveGenerationOnQueue(generation, error: error)
-            } else {
-                transitionOnQueue(to: .failed(error))
-                notifyFailure(error)
             }
         } catch {
             let typedError = AudioEngineError.unexpectedFailure(error.localizedDescription)
             audioLog.error("device list validation failed: \(typedError.localizedDescription, privacy: .public)")
             if let generation = activeGeneration, returnedGeneration == generation {
                 failActiveGenerationOnQueue(generation, error: typedError)
-            } else {
-                transitionOnQueue(to: .failed(typedError))
-                notifyFailure(typedError)
             }
         }
         notifyDevicesChanged()
@@ -846,6 +924,27 @@ final class AudioEngine: @unchecked Sendable {
             self.callbackLock.unlock()
             callback?(error)
         }
+    }
+
+    private func notifyAudioLevel(_ level: Float, generation: UInt64) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.callbackLock.lock()
+            let callback = self.audioLevelCallback
+            self.callbackLock.unlock()
+            callback?(level, generation)
+        }
+    }
+
+    private static func rawRMSLevel(_ samples: [Float]) -> Float {
+        guard !samples.isEmpty else { return 0 }
+        let meanSquare = samples.reduce(Float.zero) { partialResult, sample in
+            partialResult + sample * sample
+        } / Float(samples.count)
+        guard meanSquare.isFinite, meanSquare >= 0 else { return 0 }
+        let rms = sqrt(meanSquare)
+        guard rms.isFinite else { return 0 }
+        return min(max(rms, 0), 1)
     }
 
     // MARK: - Public API

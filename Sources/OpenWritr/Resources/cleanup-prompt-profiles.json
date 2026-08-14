@@ -1,0 +1,8 @@
+{
+  "name": "production-with-model-profiles-v3",
+  "model_suffixes": {
+    "apple-intelligence": "Language preservation is mandatory. Follow the primary-language hint in the request and preserve foreign-language phrases. Actively remove speech fillers such as ähm, äh, hm, um, and uh, plus discourse words such as also only when they add no meaning. Remove accidental repetitions. Correct grammar and add all required punctuation rather than merely repeating the input. If nothing meaningful remains after removing fillers, return exactly [[EMPTY]].",
+    "claude-haiku-4.5": "Make only necessary edits and do not paraphrase, formalize, summarize, or explain. Preserve colloquial wording. For filler-only input, return exactly [[EMPTY]] and never describe the sentinel.",
+    "gpt-5-mini": "Make only necessary edits and preserve colloquial wording rather than replacing it with more formal synonyms. For filler-only input, return exactly [[EMPTY]]."
+  }
+}

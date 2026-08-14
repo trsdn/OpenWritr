@@ -27,22 +27,22 @@ OpenWritr is a macOS menu bar app (LSUIElement) built with Swift Package Manager
 **The full flow:**
 1. User holds the hotkey (Fn/Globe or Right-Shift, configured per `HotkeyChoice`)
 2. `HotkeyManager` fires `onRecordingStarted` via a `CGEvent` tap (requires Accessibility permission)
-3. `AudioEngine` captures PCM at 16 kHz into a float buffer
+3. `AudioEngine` captures PCM at 16 kHz into a float buffer and publishes raw RMS levels
 4. On key release, `AppViewModel.stopListeningAndTranscribe()` is called
 5. `TranscriptionManager` runs the audio through `FluidAudio.AsrManager` (Whisper-based, downloaded on first launch)
-6. If Enhanced Mode is on, `GrammarEnhancer` calls `copilot -p … -s --model …` as a subprocess
+6. If Enhanced Mode is on, `GrammarEnhancer` routes cleanup to Copilot, an OpenAI-compatible API, or Apple Intelligence
 7. `PasteManager` simulates Cmd+V to paste — it saves/restores the clipboard around the keystroke
-8. `OverlayPanel` shows a floating HUD near the top of the screen throughout
+8. `OverlayPanel` shows a borderless, voice-reactive HUD at the bottom center throughout
 
 **Key files:**
 - `OpenWritrApp.swift` — `AppViewModel` (@Observable, @MainActor) owns all state and wires everything together; `AppState` enum drives the UI
-- `AudioEngine.swift` — Wraps `AVAudioEngine`; switches input device by temporarily changing the macOS system default input (the only reliable method for Bluetooth/AirPods)
-- `GrammarEnhancer.swift` — Spawns `copilot` CLI as a subprocess; `EnhancedModel` enum holds the three supported models
-- `OverlayPanel.swift` — `NSPanel` with `OverlayState` enum; states: `.listening`, `.transcribing`, `.enhancing`, `.done`
+- `AudioEngine.swift` — Wraps `AVAudioEngine`; follows System Default route changes with bounded recovery and temporarily switches the macOS default only for explicit custom-device selections
+- `GrammarEnhancer.swift` — Spawns `copilot` CLI as a subprocess; `EnhancedModel` holds the evaluated cleanup models and loads model-specific prompt profiles
+- `OverlayPanel.swift` — borderless `NSPanel` with a shared waveform design for `.listening`, `.transcribing`, `.enhancing`, `.done`, and `.error`
 
 **Concurrency model:** `AppViewModel` is `@MainActor`. `AudioEngine` is `@unchecked Sendable` with `os_unfair_lock` for the sample buffer. `GrammarEnhancer` uses `Task.detached` to run the blocking subprocess off the main thread.
 
-**Preferences** are stored in `UserDefaults` (no separate plist). Keys: `soundEnabled`, `autoPasteEnabled`, `hotkeyChoice`, `inputDeviceUID`, `enhancedModeEnabled`, `enhancedModel`.
+**Preferences** are stored in `UserDefaults` (no separate plist). Custom cleanup prompts use a versioned per-provider/model store so bundled tuned defaults can change without overwriting user text.
 
 **Signing** uses a self-signed cert stored in `.build/signing.keychain-db` (created automatically by the build script). On a fresh machine the keychain is regenerated.
 
@@ -50,4 +50,6 @@ OpenWritr is a macOS menu bar app (LSUIElement) built with Swift Package Manager
 
 The `GrammarEnhancer` calls `copilot -p … -s --model … --no-custom-instructions` as a subprocess. The CLI requires a valid GitHub Copilot subscription. Run `copilot login` once to authenticate.
 
-**Supported models:** GPT-4.1 (default), Claude Haiku 4.5, GPT-5 Mini — all verified working.
+**Supported models:** GPT-5.6 Luna (default), Gemini 3.7 Flash, MAI Code 1.1 Flash, GPT-5 Mini, and Claude Haiku 4.5.
+
+Enhanced activation has two modes: on-demand (`Shift + hotkey`) and always-enhanced (`hotkey`, with Shift as a one-recording normal-transcription bypass). The listening overlay reflects the resolved mode immediately.

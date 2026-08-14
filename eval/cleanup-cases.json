@@ -1,0 +1,175 @@
+{
+  "cases": [
+    {
+      "id": "de-fillers",
+      "category": "fillers",
+      "input": "Ähm also ich glaube wir sollten das, äh, morgen nochmal besprechen.",
+      "reference": "Ich glaube, wir sollten das morgen noch einmal besprechen.",
+      "must_contain": ["morgen", "besprechen"],
+      "must_not_contain": ["ähm", " äh"],
+      "expect_empty": false
+    },
+    {
+      "id": "en-stutter",
+      "category": "stuttering",
+      "input": "We we need to ship the new feature by the end of the sprint",
+      "reference": "We need to ship the new feature by the end of the sprint.",
+      "must_contain": ["new feature", "end of the sprint"],
+      "must_not_contain": ["we we"],
+      "expect_empty": false
+    },
+    {
+      "id": "mixed-technical",
+      "category": "mixed-language",
+      "input": "Bitte deploy das neue Backend in die staging environment und prüf danach den health check",
+      "reference": "Bitte deploye das neue Backend in die staging environment und prüfe danach den health check.",
+      "must_contain": ["Backend", "staging environment", "health check"],
+      "must_not_contain": ["Gesundheitsprüfung"],
+      "expect_empty": false
+    },
+    {
+      "id": "product-command",
+      "category": "terminology",
+      "input": "Öffne GitHub Copilot CLI und führ copilot login aus danach starte OpenWritr neu",
+      "reference": "Öffne GitHub Copilot CLI und führe „copilot login“ aus. Starte danach OpenWritr neu.",
+      "must_contain": ["GitHub Copilot CLI", "copilot login", "OpenWritr"],
+      "must_not_contain": [],
+      "expect_empty": false
+    },
+    {
+      "id": "numbers-date",
+      "category": "factual-preservation",
+      "input": "Der Release ist am 14. August 2026 um 17 Uhr und die Version ist 1.4.0",
+      "reference": "Der Release ist am 14. August 2026 um 17 Uhr, und die Version ist 1.4.0.",
+      "must_contain": ["14. August 2026", "17 Uhr", "1.4.0"],
+      "must_not_contain": [],
+      "expect_empty": false
+    },
+    {
+      "id": "negation",
+      "category": "meaning",
+      "input": "Wir dürfen das Update nicht heute installieren sondern erst morgen nach dem Backup",
+      "reference": "Wir dürfen das Update nicht heute installieren, sondern erst morgen nach dem Backup.",
+      "must_contain": ["nicht heute", "erst morgen", "Backup"],
+      "must_not_contain": [],
+      "expect_empty": false
+    },
+    {
+      "id": "colloquial-tone",
+      "category": "tone",
+      "input": "Das ist irgendwie echt cool aber ich würd da jetzt noch nicht zu viel dran ändern",
+      "reference": "Das ist echt cool, aber ich würde daran jetzt noch nicht zu viel ändern.",
+      "must_contain": ["echt cool", "noch nicht zu viel"],
+      "must_not_contain": [],
+      "expect_empty": false
+    },
+    {
+      "id": "list-preservation",
+      "category": "structure",
+      "input": "Wir brauchen drei Sachen erstens Logs zweitens Metriken und drittens Alerts",
+      "reference": "Wir brauchen drei Sachen: erstens Logs, zweitens Metriken und drittens Alerts.",
+      "must_contain": ["erstens Logs", "zweitens Metriken", "drittens Alerts"],
+      "must_not_contain": [],
+      "expect_empty": false
+    },
+    {
+      "id": "filler-only",
+      "category": "empty-output",
+      "input": "Ähm, äh, also, hm.",
+      "reference": "",
+      "must_contain": [],
+      "must_not_contain": [],
+      "expect_empty": true
+    },
+    {
+      "id": "no-hallucination",
+      "category": "factual-preservation",
+      "input": "Der Kunde hat noch nicht geantwortet",
+      "reference": "Der Kunde hat noch nicht geantwortet.",
+      "must_contain": ["noch nicht geantwortet"],
+      "must_not_contain": ["E-Mail", "gestern", "heute", "morgen"],
+      "expect_empty": false
+    },
+    {
+      "id": "english-technical",
+      "category": "terminology",
+      "input": "um we should keep the API backward compatible and roll it out behind a feature flag",
+      "reference": "We should keep the API backward compatible and roll it out behind a feature flag.",
+      "must_contain": ["API", "backward compatible", "feature flag"],
+      "must_not_contain": ["um "],
+      "expect_empty": false
+    },
+    {
+      "id": "repetition",
+      "category": "repetition",
+      "input": "Ich wollte nur nur kurz sagen dass das Meeting das Meeting auf Dienstag verschoben wurde",
+      "reference": "Ich wollte nur kurz sagen, dass das Meeting auf Dienstag verschoben wurde.",
+      "must_contain": ["Meeting", "Dienstag", "verschoben"],
+      "must_not_contain": ["nur nur", "Meeting das Meeting"],
+      "expect_empty": false
+    },
+    {
+      "id": "time-version-percentage",
+      "category": "factual-preservation",
+      "input": "Ship version 2.7.14 at 09:30 and keep the rollout at 25 percent",
+      "reference": "Ship version 2.7.14 at 09:30 and keep the rollout at 25 percent.",
+      "must_contain": ["2.7.14", "09:30", "25 percent"],
+      "must_not_contain": ["2.7.15", "9:30 PM"],
+      "expect_empty": false
+    },
+    {
+      "id": "numeric-list-markers",
+      "category": "structure",
+      "input": "Die Schritte sind 1. git status prüfen 2. swift build ausführen 3. OpenWritr starten",
+      "reference": "Die Schritte sind: 1. git status prüfen, 2. swift build ausführen, 3. OpenWritr starten.",
+      "must_contain": ["1.", "git status", "2.", "swift build", "3.", "OpenWritr"],
+      "must_not_contain": [],
+      "expect_empty": false
+    },
+    {
+      "id": "english-negation",
+      "category": "meaning",
+      "input": "We should not disable the API and we must never remove the feature flag",
+      "reference": "We should not disable the API, and we must never remove the feature flag.",
+      "must_contain": ["not disable", "API", "never remove", "feature flag"],
+      "must_not_contain": ["should disable", "must remove"],
+      "expect_empty": false
+    },
+    {
+      "id": "repeated-negation",
+      "category": "meaning",
+      "input": "We should not disable the API and not remove the feature flag",
+      "reference": "We should not disable the API and not remove the feature flag.",
+      "must_contain": ["not disable", "API", "not remove", "feature flag"],
+      "must_not_contain": ["should disable", "remove the feature flag without not"],
+      "expect_empty": false
+    },
+    {
+      "id": "product-casing",
+      "category": "terminology",
+      "input": "Ähm öffne SwiftUI in Xcode und teste danach OpenWritr auf macOS",
+      "reference": "Öffne SwiftUI in Xcode und teste danach OpenWritr auf macOS.",
+      "must_contain": ["SwiftUI", "Xcode", "OpenWritr", "macOS"],
+      "must_not_contain": [],
+      "expect_empty": false
+    },
+    {
+      "id": "mixed-phrase-casing",
+      "category": "mixed-language",
+      "input": "Wir testen das im staging environment und führen danach den Health Check aus",
+      "reference": "Wir testen das im staging environment und führen danach den Health Check aus.",
+      "must_contain": ["staging environment", "Health Check"],
+      "must_not_contain": ["Staging-Umgebung", "Health-Check"],
+      "expect_empty": false
+    },
+    {
+      "id": "quoted-terminal-punctuation",
+      "category": "structure",
+      "input": "He said “done.”",
+      "reference": "He said “done.”",
+      "must_contain": ["He said", "done."],
+      "must_not_contain": ["done.”."],
+      "expect_empty": false
+    }
+  ]
+}

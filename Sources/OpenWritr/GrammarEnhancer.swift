@@ -15,6 +15,7 @@ struct EnhancementResult: Sendable {
 enum EnhancedProvider: String, CaseIterable, Identifiable {
     case copilot = "copilot"
     case openAICompatible = "openai-compatible"
+    case appleIntelligence = "apple-intelligence"
 
     var id: String { rawValue }
 
@@ -22,6 +23,7 @@ enum EnhancedProvider: String, CaseIterable, Identifiable {
         switch self {
         case .copilot: return "GitHub Copilot"
         case .openAICompatible: return "OpenAI-Compatible API"
+        case .appleIntelligence: return "Apple Intelligence"
         }
     }
 
@@ -51,7 +53,9 @@ enum EnhancedProvider: String, CaseIterable, Identifiable {
 
 
 enum EnhancedModel: String, CaseIterable, Identifiable, Sendable {
-    case gpt4_1 = "gpt-4.1"
+    case luna = "gpt-5.6-luna"
+    case geminiFlash = "gemini-3.7-flash"
+    case maiFlash = "mai-code-1.1-flash"
     case claudeHaiku = "claude-haiku-4.5"
     case gptMini = "gpt-5-mini"
 
@@ -59,11 +63,43 @@ enum EnhancedModel: String, CaseIterable, Identifiable, Sendable {
 
     var displayName: String {
         switch self {
-        case .gpt4_1: return "GPT-4.1"
+        case .luna: return "GPT-5.6 Luna"
+        case .geminiFlash: return "Gemini 3.7 Flash"
+        case .maiFlash: return "MAI Code 1.1 Flash"
         case .claudeHaiku: return "Claude Haiku 4.5"
         case .gptMini: return "GPT-5 Mini"
         }
     }
+
+    var priceIndicator: String {
+        switch self {
+        case .luna, .maiFlash, .gptMini:
+            return "$"
+        case .geminiFlash:
+            return "$$"
+        case .claudeHaiku:
+            return "$$$"
+        }
+    }
+
+    var pricingSummary: String {
+        switch self {
+        case .luna:
+            return "$0.20 input / $1.20 output"
+        case .geminiFlash:
+            return "$0.75 input / $3.75 output"
+        case .maiFlash:
+            return "$0.20 input / $1.20 output"
+        case .gptMini:
+            return "$0.25 input / $2.00 output"
+        case .claudeHaiku:
+            return "$1.00 input / $5.00 output"
+        }
+    }
+
+    static let pricingURL = URL(
+        string: "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing"
+    )!
 }
 
 enum GrammarEnhancementResult: Sendable, Equatable {
@@ -139,10 +175,112 @@ struct GrammarEnhancer: Sendable {
         let modelOverride: String?
     }
 
+    private struct PromptProfiles: Decodable {
+        let modelSuffixes: [String: String]
+
+        enum CodingKeys: String, CodingKey {
+            case modelSuffixes = "model_suffixes"
+        }
+    }
+
+    private static let promptProfiles: PromptProfiles = {
+        let sourceTreeURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .appendingPathComponent("Resources/cleanup-prompt-profiles.json")
+        guard let url = Bundle.main.url(
+            forResource: "cleanup-prompt-profiles",
+            withExtension: "json"
+        ) ?? (FileManager.default.fileExists(atPath: sourceTreeURL.path) ? sourceTreeURL : nil),
+        let data = try? Data(contentsOf: url),
+        let profiles = try? JSONDecoder().decode(PromptProfiles.self, from: data)
+        else {
+            return PromptProfiles(modelSuffixes: [:])
+        }
+        return profiles
+    }()
+
+    static func promptTargetKey(
+        provider: EnhancedProvider,
+        model: EnhancedModel,
+        openAIModel: String
+    ) -> String {
+        switch provider {
+        case .copilot:
+            return "\(provider.rawValue):\(model.rawValue)"
+        case .appleIntelligence:
+            return "\(provider.rawValue):default"
+        case .openAICompatible:
+            let target = openAIModel.trimmingCharacters(in: .whitespacesAndNewlines)
+            return "\(provider.rawValue):\(target.isEmpty ? "default" : target)"
+        }
+    }
+
+    static func promptTargetDisplayName(
+        provider: EnhancedProvider,
+        model: EnhancedModel,
+        openAIModel: String
+    ) -> String {
+        switch provider {
+        case .copilot:
+            return "\(provider.displayName) · \(model.displayName)"
+        case .appleIntelligence:
+            return provider.displayName
+        case .openAICompatible:
+            let target = openAIModel.trimmingCharacters(in: .whitespacesAndNewlines)
+            return "\(provider.displayName) · \(target.isEmpty ? "Default model" : target)"
+        }
+    }
+
+    static func bundledCleanupPrompt(
+        provider: EnhancedProvider,
+        model: EnhancedModel,
+        openAIModel: String = "",
+        basePrompt: String = defaultCleanupPrompt
+    ) -> String {
+        let profileKey: String?
+        switch provider {
+        case .copilot:
+            profileKey = model.rawValue
+        case .appleIntelligence:
+            profileKey = provider.rawValue
+        case .openAICompatible:
+            let target = openAIModel.trimmingCharacters(in: .whitespacesAndNewlines)
+            profileKey = target.isEmpty ? nil : target
+        }
+        guard let profileKey,
+              let suffix = promptProfiles.modelSuffixes[profileKey],
+              !suffix.isEmpty
+        else { return basePrompt }
+        return "\(basePrompt)\n\nModel-specific requirements:\n\(suffix)"
+    }
+
+    static func migrateLegacyCleanupPrompt(
+        _ legacyBasePrompt: String,
+        provider: EnhancedProvider,
+        model: EnhancedModel,
+        openAIModel: String
+    ) -> String {
+        let trimmed = legacyBasePrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        let effectiveDefault = bundledCleanupPrompt(
+            provider: provider,
+            model: model,
+            openAIModel: openAIModel
+        )
+        let profileSuffix = effectiveDefault.hasPrefix(defaultCleanupPrompt)
+            ? String(effectiveDefault.dropFirst(defaultCleanupPrompt.count))
+            : ""
+
+        guard !profileSuffix.isEmpty, !trimmed.hasSuffix(profileSuffix) else {
+            return trimmed
+        }
+        return "\(trimmed)\(profileSuffix)"
+    }
+
     func effectiveModelName(model: EnhancedModel, provider: EnhancedProvider, openAIConfiguration: OpenAIConfiguration) -> String {
         switch provider {
         case .copilot: return model.rawValue
         case .openAICompatible: return normalizedModelName(model, override: openAIConfiguration.modelOverride)
+        case .appleIntelligence: return AppleIntelligenceEnhancer.modelName
         }
     }
 
@@ -331,16 +469,41 @@ struct GrammarEnhancer: Sendable {
     ) async -> EnhancementResult {
         switch provider {
         case .copilot:
-            let outcome = await runCopilot(text: text, model: model.rawValue, prompt: prompt)
+            let outcome = await runCopilot(
+                text: text,
+                model: model.rawValue,
+                prompt: prompt
+            )
             switch outcome {
             case .success(let output):
-                return .init(text: output, effectiveModel: model.rawValue, providerDisplayName: provider.displayName, didSucceed: true, warning: nil)
+                return .init(
+                    text: normalizedOutput(output),
+                    effectiveModel: model.rawValue,
+                    providerDisplayName: provider.displayName,
+                    didSucceed: true,
+                    warning: nil
+                )
             case .failure(let error):
                 return .init(text: text, effectiveModel: model.rawValue, providerDisplayName: provider.displayName, didSucceed: false, warning: error.localizedDescription)
             }
         case .openAICompatible:
-            return await runOpenAICompatible(text: text, model: model, configuration: openAIConfiguration, prompt: prompt)
+            return await runOpenAICompatible(
+                text: text,
+                model: model,
+                configuration: openAIConfiguration,
+                prompt: prompt
+            )
+        case .appleIntelligence:
+            return await AppleIntelligenceEnhancer().enhance(
+                text: text,
+                prompt: prompt
+            )
         }
+    }
+
+    private func normalizedOutput(_ output: String) -> String {
+        let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed == "[[EMPTY]]" ? "" : trimmed
     }
 
     /// Closes the launch gate and synchronously force-kills the currently owned process group.
