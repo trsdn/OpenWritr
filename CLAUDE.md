@@ -36,7 +36,7 @@ OpenWritr is a macOS menu bar app (LSUIElement) built with Swift Package Manager
 
 **Key files:**
 - `OpenWritrApp.swift` — `AppViewModel` (@Observable, @MainActor) owns all state and wires everything together; `AppState` enum drives the UI
-- `AudioEngine.swift` — Wraps `AVAudioEngine`; follows System Default route changes with bounded recovery and temporarily switches the macOS default only for explicit custom-device selections
+- `AudioEngine.swift` — Wraps `AVAudioEngine`; follows System Default route changes with bounded recovery and binds explicit microphone selections directly to the capture input audio unit
 - `GrammarEnhancer.swift` — Spawns `copilot` CLI as a subprocess; `EnhancedModel` holds the evaluated cleanup models and loads model-specific prompt profiles
 - `OverlayPanel.swift` — borderless `NSPanel` with a shared waveform design for `.listening`, `.transcribing`, `.enhancing`, `.done`, and `.error`
 
