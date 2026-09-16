@@ -43,7 +43,7 @@ OpenWritr is a macOS menu bar app (LSUIElement) built with Swift Package Manager
 - **ObjCExceptionCatcher** — bridges Objective-C exceptions to Swift errors; used to safely wrap `AVAudioEngine` calls
 - **AudioEngine** — binds explicit microphone selections directly to the capture input audio unit without changing the macOS system default
 - **GrammarEnhancer** — spawns `copilot -p … -s --model … --no-custom-instructions` with a 30-second timeout; `EnhancedModel` enum holds supported models
-- **UpdateManager** — wraps [AppUpdater](https://github.com/mxcl/AppUpdater) to check `trsdn/OpenWritr` GitHub Releases for a newer Developer ID-signed DMG (`OpenWritr-{semver}.dmg`), verify it (signing identity + GitHub Artifact Attestation), and install/relaunch in place; quiesces recording/hotkey/paste state via `AppViewModel.quiesceForUpdateInstall()` before installing
+- **UpdateManager** — wraps [AppUpdater](https://github.com/mxcl/AppUpdater) to check `trsdn/OpenWritr` GitHub Releases for a newer Developer ID-signed DMG (`OpenWritr-{semver}.dmg`), verify its Developer ID signing identity (no attestation policy, see #31), and install/relaunch in place; quiesces recording/hotkey/paste state via `AppViewModel.quiesceForUpdateInstall()` before installing
 
 ## Conventions
 
@@ -53,4 +53,4 @@ OpenWritr is a macOS menu bar app (LSUIElement) built with Swift Package Manager
 - **Weak self captures** in closures to prevent reference cycles
 - **MARK comments** organize sections within files
 - **Dependencies** — [FluidAudio](https://github.com/FluidInference/FluidAudio) for transcription and [AppUpdater](https://github.com/mxcl/AppUpdater) for in-app updates
-- **Release assets** — `scripts/build-app.sh` embeds AppUpdater's `AppUpdater_AppUpdater.bundle` resource bundle into `Contents/Resources/`; the release workflow publishes an extra `OpenWritr-{semver}.dmg` asset (alongside the existing versioned zip/dmg) and attests its provenance via `actions/attest-build-provenance`
+- **Release assets** — `scripts/build-app.sh` embeds AppUpdater's `AppUpdater_AppUpdater.bundle` resource bundle into `Contents/Resources/`; the release workflow publishes an extra `OpenWritr-{semver}.dmg` asset (alongside the existing versioned zip/dmg). It must not be attested, because 1.6.0 crashes when verifying an attestation (#31)

@@ -50,14 +50,20 @@ final class UpdateManager {
     /// stop recording/hotkey/paste activity before AppUpdater replaces the bundle.
     var onWillInstall: (() -> Void)?
 
+    /// No `GitHubAttestationPolicy`, for two reasons (see #31):
+    ///
+    /// - AppUpdater only accepts a branch ref (`refs/heads/…`) as the attested source,
+    ///   and releases are built by a tag push, whose provenance names `refs/tags/vX.Y.Z`.
+    ///   Every release would be rejected.
+    /// - It loads its Sigstore trust roots through SwiftPM's `Bundle.module`, which, in a
+    ///   `swift build` product, only looks at the `.app` root and the build machine's
+    ///   `.build` path, never at `Contents/Resources`. Verifying an attestation therefore
+    ///   hits `fatalError` in the shipped app.
+    ///
+    /// The Developer ID check still applies: the downloaded app must carry the same Team ID,
+    /// signing identifier and bundle identifier as the installed one.
     init() {
-        let configuration = AppUpdater.Configuration(
-            attestationPolicy: GitHubAttestationPolicy(
-                workflow: ".github/workflows/release.yml",
-                sourceRef: "refs/heads/main"
-            )
-        )
-        updater = AppUpdater(owner: Self.repositoryOwner, repo: Self.repositoryName, configuration: configuration)
+        updater = AppUpdater(owner: Self.repositoryOwner, repo: Self.repositoryName)
     }
 
     var automaticCheckEnabled: Bool {

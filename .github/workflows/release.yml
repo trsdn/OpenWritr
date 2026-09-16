@@ -13,8 +13,6 @@ on:
 
 permissions:
   contents: write
-  attestations: write
-  id-token: write
 
 jobs:
   macos-release:
@@ -158,10 +156,10 @@ jobs:
           # rebuilding, so no additional signing/notarization is required.
           cp "dist/OpenWritr-v${RELEASE_VERSION}-macOS-arm64.dmg" "dist/OpenWritr-${RELEASE_VERSION}.dmg"
 
-      - name: Attest AppUpdater DMG provenance
-        uses: actions/attest-build-provenance@v2
-        with:
-          subject-path: dist/OpenWritr-${{ steps.release.outputs.version }}.dmg
+      # Do NOT attest this DMG. OpenWritr 1.6.0 was built with an attestation
+      # policy, and verifying an attestation crashes it (see #31). Without an
+      # attestation for the digest, 1.6.0 rejects the update cleanly before it
+      # reaches that code.
 
       - name: Cleanup keychain
         if: always()
