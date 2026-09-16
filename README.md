@@ -9,7 +9,7 @@
 
 Native macOS menu bar app for push-to-talk voice-to-text. Core transcription runs locally on the Apple Neural Engine; optional enhancement can use Apple Intelligence, GitHub Copilot, or any OpenAI-compatible API.
 
-**[Website](https://trsdn.github.io/OpenWritr/)** · **[Download](https://github.com/trsdn/OpenWritr/releases/latest/download/OpenWritr-v1.5.1-macOS-arm64.zip)** · **[Release](https://github.com/trsdn/OpenWritr/releases)**
+**[Website](https://trsdn.github.io/OpenWritr/)** · **[Download](https://github.com/trsdn/OpenWritr/releases/latest/download/OpenWritr-v1.6.1-macOS-arm64.zip)** · **[Release](https://github.com/trsdn/OpenWritr/releases)**
 
 <p align="center">
   <img src="docs/mockup.svg" alt="OpenWritr in action" width="720">
