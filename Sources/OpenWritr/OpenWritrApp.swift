@@ -1544,9 +1544,9 @@ final class AppViewModel {
 
     private func updateInputDeviceStatusMessage(for device: AudioInputDevice? = nil) {
         if let device {
-            inputDeviceStatusMessage = "Selected input: \(device.name). OpenWritr switches the macOS system input to this device while it is selected."
+            inputDeviceStatusMessage = "Selected input: \(device.name). OpenWritr records directly from this device without changing the macOS system input."
         } else if let selectedID = selectedInputDeviceID, let device = availableInputDevices.first(where: { $0.id == selectedID }) {
-            inputDeviceStatusMessage = "Selected input: \(device.name). OpenWritr switches the macOS system input to this device while it is selected."
+            inputDeviceStatusMessage = "Selected input: \(device.name). OpenWritr records directly from this device without changing the macOS system input."
         } else {
             inputDeviceStatusMessage = "Using System Default. OpenWritr follows the current macOS system input device."
         }

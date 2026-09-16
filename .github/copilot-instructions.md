@@ -41,7 +41,7 @@ OpenWritr is a macOS menu bar app (LSUIElement) built with Swift Package Manager
 ### Key components
 
 - **ObjCExceptionCatcher** — bridges Objective-C exceptions to Swift errors; used to safely wrap `AVAudioEngine` calls
-- **AudioEngine** — switches input device by temporarily changing the macOS system default input (the only reliable method for Bluetooth/AirPods)
+- **AudioEngine** — binds explicit microphone selections directly to the capture input audio unit without changing the macOS system default
 - **GrammarEnhancer** — spawns `copilot -p … -s --model … --no-custom-instructions` with a 30-second timeout; `EnhancedModel` enum holds supported models
 
 ## Conventions
