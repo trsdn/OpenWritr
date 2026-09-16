@@ -82,6 +82,7 @@ final class AppViewModel {
     let overlayPanel = OverlayPanel()
     let soundManager = SoundManager()
     let permissionsManager = PermissionsManager()
+    let updateManager = UpdateManager()
 
     private let captureDrainIdleDuration: Duration = .milliseconds(70)
     private let captureDrainTimeout: Duration = .milliseconds(350)
@@ -284,6 +285,7 @@ final class AppViewModel {
 
         isOperational = true
         state = .ready
+        updateManager.startAutomaticChecksIfNeeded()
     }
 
     private func configureIfNeeded() {
@@ -292,6 +294,10 @@ final class AppViewModel {
 
         restorePreferences()
         refreshAppleIntelligenceAvailability()
+
+        updateManager.onWillInstall = { [weak self] in
+            self?.quiesceForUpdateInstall()
+        }
 
         audioEngine.onDevicesChanged = { [weak self] in
             Task { @MainActor [weak self] in
@@ -543,6 +549,36 @@ final class AppViewModel {
         }
         overlayPanel.dismiss()
         state = .ready
+    }
+
+    // MARK: - Updates
+
+    func checkForUpdates() {
+        Task { await updateManager.checkForUpdates(userInitiated: true) }
+    }
+
+    func installAvailableUpdate() {
+        Task { await updateManager.installPreparedUpdate() }
+    }
+
+    func dismissAvailableUpdate() {
+        Task { await updateManager.discardPreparedUpdate() }
+    }
+
+    /// Stops recording/hotkey/paste activity before AppUpdater replaces the
+    /// app bundle. Mirrors `shutdown()` but keeps `didShutdown` false so the
+    /// (about-to-be-replaced) process can still report failures if the
+    /// install itself fails partway through.
+    private func quiesceForUpdateInstall() {
+        grammarEnhancer.cancelActiveEnhancement()
+        cancelMicrophoneRecovery()
+        pendingStartTask?.cancel()
+        activeProcessingTask?.cancel()
+        invalidateCaptureOperation()
+        hotkeyManager.stop()
+        pasteManager.flushPendingRestore()
+        overlayPanel.dismiss()
+        updateManager.stopAutomaticChecks()
     }
 
     func savePreference(_ key: String, value: Any) {
@@ -1582,6 +1618,7 @@ final class AppViewModel {
         hotkeyManager.stop()
         pasteManager.flushPendingRestore()
         overlayPanel.dismiss()
+        updateManager.stopAutomaticChecks()
 
         if let terminationObserver {
             NotificationCenter.default.removeObserver(terminationObserver)

@@ -13,6 +13,8 @@ on:
 
 permissions:
   contents: write
+  attestations: write
+  id-token: write
 
 jobs:
   macos-release:
@@ -144,6 +146,23 @@ jobs:
           set -euo pipefail
           scripts/notarize_dmg.sh
 
+      - name: Create AppUpdater-named DMG copy
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          # AppUpdater (in-app updater) expects a release DMG named
+          # exactly "<repo>-<semver>.dmg" (no "v" prefix, no arch suffix).
+          # Reuse the already-signed and notarized bytes rather than
+          # rebuilding, so no additional signing/notarization is required.
+          cp "dist/OpenWritr-v${RELEASE_VERSION}-macOS-arm64.dmg" "dist/OpenWritr-${RELEASE_VERSION}.dmg"
+
+      - name: Attest AppUpdater DMG provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: dist/OpenWritr-${{ steps.release.outputs.version }}.dmg
+
       - name: Cleanup keychain
         if: always()
         shell: bash
@@ -161,6 +180,7 @@ jobs:
         env:
           APP_PATH: .build/release/OpenWritr.app
           ASSET_BASE: dist/OpenWritr-v${{ steps.release.outputs.version }}-macOS-arm64
+          APPUPDATER_DMG: dist/OpenWritr-${{ steps.release.outputs.version }}.dmg
         run: |
           set -euo pipefail
           artifacts=(
@@ -168,6 +188,7 @@ jobs:
             "$ASSET_BASE.zip.sha256"
             "$ASSET_BASE.dmg"
             "$ASSET_BASE.dmg.sha256"
+            "$APPUPDATER_DMG"
           )
           for artifact in "${artifacts[@]}"; do
             if [[ ! -f "$artifact" ]]; then
@@ -183,6 +204,7 @@ jobs:
           xcrun stapler validate "$ASSET_BASE.dmg"
           spctl --assess --type open --context context:primary-signature --verbose=2 "$ASSET_BASE.dmg"
           hdiutil verify "$ASSET_BASE.dmg"
+          hdiutil verify "$APPUPDATER_DMG"
           (
             cd "$(dirname "$ASSET_BASE")"
             asset_name="$(basename "$ASSET_BASE")"
@@ -200,6 +222,7 @@ jobs:
             dist/OpenWritr-v${{ steps.release.outputs.version }}-macOS-arm64.zip.sha256
             dist/OpenWritr-v${{ steps.release.outputs.version }}-macOS-arm64.dmg
             dist/OpenWritr-v${{ steps.release.outputs.version }}-macOS-arm64.dmg.sha256
+            dist/OpenWritr-${{ steps.release.outputs.version }}.dmg
 
       - name: Attach assets to GitHub Release
         shell: bash
@@ -215,6 +238,7 @@ jobs:
             "$asset_base.zip.sha256"
             "$asset_base.dmg"
             "$asset_base.dmg.sha256"
+            "dist/OpenWritr-${RELEASE_VERSION}.dmg"
           )
           for asset in "${assets[@]}"; do
             if [[ ! -f "$asset" ]]; then

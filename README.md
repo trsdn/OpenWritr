@@ -100,6 +100,7 @@ ZIP from that notarized app, then creates and notarizes a DMG. GitHub Releases f
 
 - notarized ZIP + SHA-256 checksum
 - notarized DMG + SHA-256 checksum
+- an additional `OpenWritr-{version}.dmg` (same signed/notarized bytes, renamed for [AppUpdater](#in-app-updates)), with build provenance attested via `actions/attest-build-provenance`
 
 Required GitHub Actions secrets:
 
@@ -126,6 +127,14 @@ stapled DMG ticket alone does not protect ZIP distribution.
 
 Then grant **Microphone** and **Accessibility** permissions when prompted. The Parakeet model downloads automatically (~460 MB).
 
+### In-app updates
+
+OpenWritr checks `trsdn/OpenWritr` GitHub Releases for newer, Developer ID-signed builds using [AppUpdater](https://github.com/mxcl/AppUpdater), and installs them in place:
+
+- Automatic checks run roughly every 24 hours (toggle: **Settings → Updates**); a manual check is also available from the menu bar.
+- Downloaded DMGs are verified against the installed app's Developer ID signing identity and GitHub Artifact Attestation provenance before install — nothing is installed from an unsigned or mismatched build.
+- The release workflow publishes an extra `OpenWritr-{version}.dmg` asset specifically for this update check, alongside the existing versioned ZIP/DMG downloads above.
+
 ## Architecture
 
 ```
@@ -144,6 +153,7 @@ Sources/OpenWritr/
 ├── PasteManager.swift          # Clipboard save/restore + Cmd+V simulation
 ├── OverlayPanel.swift          # Borderless voice-reactive bottom overlay
 ├── SoundManager.swift          # Programmatic audio cue generation
+├── UpdateManager.swift         # AppUpdater-backed in-app update checks/install
 └── PermissionsManager.swift    # Microphone + Accessibility permission handling
 ```
 
@@ -155,6 +165,7 @@ Sources/OpenWritr/
 - **Apple Neural Engine** — hardware-accelerated inference via CoreML
 - **AVAudioEngine** — low-latency microphone capture at 16kHz
 - **CGEventTap** — global Fn key detection (requires Accessibility permission)
+- **AppUpdater** — signed, in-app update checks against GitHub Releases
 
 ## License
 

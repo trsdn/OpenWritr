@@ -62,6 +62,15 @@ cp "$PROJECT_DIR/Sources/OpenWritr/Resources/cleanup-prompt-profiles.json" \
     "$APP/Contents/Resources/cleanup-prompt-profiles.json"
 cp "$PROJECT_DIR/Info.plist" "$APP/Contents/Info.plist"
 
+# AppUpdater ships its Sigstore/TUF trust roots as a SwiftPM resource bundle;
+# it must be present in Contents/Resources for in-app update checks to work.
+APP_UPDATER_BUNDLE="$BUILD_DIR/AppUpdater_AppUpdater.bundle"
+if [[ -d "$APP_UPDATER_BUNDLE" ]]; then
+    cp -R "$APP_UPDATER_BUNDLE" "$APP/Contents/Resources/AppUpdater_AppUpdater.bundle"
+else
+    echo "Warning: AppUpdater_AppUpdater.bundle not found at $APP_UPDATER_BUNDLE; in-app updates will not work." >&2
+fi
+
 python3 -c "
 import plistlib, sys
 with open('$APP/Contents/Info.plist', 'rb') as f:

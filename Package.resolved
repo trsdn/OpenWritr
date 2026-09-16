@@ -1,6 +1,15 @@
 {
-  "originHash" : "94e7ff7cca3c9bb78261ef9d927679bbc5cc08130bd80dcce965e6526f21c6c7",
+  "originHash" : "6dd1f8018650f4c0d9e00d276a7417b1e77e7b9c22185ba205d075008459c52a",
   "pins" : [
+    {
+      "identity" : "appupdater",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/mxcl/AppUpdater.git",
+      "state" : {
+        "revision" : "4826e7205ed0159347de84b19960f4ba0e535504",
+        "version" : "4.1.2"
+      }
+    },
     {
       "identity" : "fluidaudio",
       "kind" : "remoteSourceControl",
@@ -8,6 +17,15 @@
       "state" : {
         "revision" : "57551cd90e0bbec342766244358bcf08afb05290",
         "version" : "0.13.6"
+      }
+    },
+    {
+      "identity" : "version",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/mxcl/Version",
+      "state" : {
+        "revision" : "3043fcd2a50375db76d89ff206a612471833d1c2",
+        "version" : "2.2.1"
       }
     }
   ],
