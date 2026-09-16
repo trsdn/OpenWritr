@@ -274,6 +274,22 @@ struct SettingsView: View {
                     }
                 ))
             }
+
+            Section("Updates") {
+                Toggle("Automatically Check for Updates", isOn: Binding(
+                    get: { viewModel.updateManager.automaticCheckEnabled },
+                    set: { viewModel.updateManager.automaticCheckEnabled = $0 }
+                ))
+
+                Button("Check for Updates Now…") {
+                    viewModel.checkForUpdates()
+                }
+
+                Text(updateStatusMessage)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .formStyle(.grouped)
         .padding(20)
@@ -427,6 +443,27 @@ struct SettingsView: View {
             return "The hotkey enhances every recording. Hold Shift to bypass enhancement once."
         }
         return "Hold Shift with the hotkey to enhance only that recording."
+    }
+
+    private var updateStatusMessage: String {
+        switch viewModel.updateManager.state {
+        case .idle:
+            return "Updates are downloaded from signed GitHub releases and verified before install."
+        case .checking:
+            return "Checking GitHub for a newer release…"
+        case .upToDate:
+            return "You're on the latest release."
+        case .updateAvailable(let version):
+            return "OpenWritr \(version) is available and is being downloaded."
+        case .downloading(let version):
+            return "Downloading OpenWritr \(version)…"
+        case .readyToInstall(let version):
+            return "OpenWritr \(version) is ready. Use the menu bar item to install & relaunch."
+        case .installing:
+            return "Installing update and relaunching…"
+        case .failed(let message):
+            return "Last update check failed: \(message)"
+        }
     }
 
     private var isAudioRuntimeError: Bool {

@@ -7,7 +7,8 @@ let package = Package(
         .macOS(.v14)
     ],
     dependencies: [
-        .package(url: "https://github.com/FluidInference/FluidAudio.git", from: "0.7.9")
+        .package(url: "https://github.com/FluidInference/FluidAudio.git", from: "0.7.9"),
+        .package(url: "https://github.com/mxcl/AppUpdater.git", from: "4.1.2")
     ],
     targets: [
         .target(
@@ -19,6 +20,7 @@ let package = Package(
             name: "OpenWritr",
             dependencies: [
                 .product(name: "FluidAudio", package: "FluidAudio"),
+                .product(name: "AppUpdater", package: "AppUpdater"),
                 "ObjCExceptionCatcher"
             ],
             exclude: ["Resources"]

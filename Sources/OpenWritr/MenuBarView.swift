@@ -10,6 +10,7 @@ struct MenuBarView: View {
             Divider()
             quickControlsSection
             Divider()
+            updateSection
             SettingsLink {
                 Label("Settings…", systemImage: "gearshape")
             }
@@ -185,5 +186,52 @@ struct MenuBarView: View {
             }
         ))
         .disabled(!isReady)
+    }
+
+    @ViewBuilder
+    private var updateSection: some View {
+        switch viewModel.updateManager.state {
+        case .idle, .upToDate:
+            Button("Check for Updates…") {
+                viewModel.checkForUpdates()
+            }
+            if case .upToDate = viewModel.updateManager.state {
+                Text("OpenWritr is up to date.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 4)
+            }
+            Divider()
+        case .checking:
+            Label("Checking for Updates…", systemImage: "arrow.triangle.2.circlepath")
+            Divider()
+        case .updateAvailable(let version), .downloading(let version):
+            Label("Downloading OpenWritr \(version)…", systemImage: "arrow.down.circle")
+            Divider()
+        case .readyToInstall(let version):
+            Text("OpenWritr \(version) is ready to install.")
+                .font(.caption)
+                .padding(.horizontal, 4)
+            Button("Install & Relaunch…") {
+                viewModel.installAvailableUpdate()
+            }
+            Button("Later") {
+                viewModel.dismissAvailableUpdate()
+            }
+            Divider()
+        case .installing:
+            Label("Installing Update…", systemImage: "hourglass")
+            Divider()
+        case .failed(let message):
+            Text("Update check failed: \(message)")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 4)
+                .fixedSize(horizontal: false, vertical: true)
+            Button("Check for Updates…") {
+                viewModel.checkForUpdates()
+            }
+            Divider()
+        }
     }
 }
