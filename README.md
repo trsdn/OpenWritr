@@ -100,7 +100,7 @@ ZIP from that notarized app, then creates and notarizes a DMG. GitHub Releases f
 
 - notarized ZIP + SHA-256 checksum
 - notarized DMG + SHA-256 checksum
-- an additional `OpenWritr-{version}.dmg` (same signed/notarized bytes, renamed for [AppUpdater](#in-app-updates)), with build provenance attested via `actions/attest-build-provenance`
+- an additional `OpenWritr-{version}.dmg` (same signed/notarized bytes, renamed for [AppUpdater](#in-app-updates))
 
 Required GitHub Actions secrets:
 
@@ -132,7 +132,8 @@ Then grant **Microphone** and **Accessibility** permissions when prompted. The P
 OpenWritr checks `trsdn/OpenWritr` GitHub Releases for newer, Developer ID-signed builds using [AppUpdater](https://github.com/mxcl/AppUpdater), and installs them in place:
 
 - Automatic checks run roughly every 24 hours (toggle: **Settings → Updates**); a manual check is also available from the menu bar.
-- Downloaded DMGs are verified against the installed app's Developer ID signing identity and GitHub Artifact Attestation provenance before install — nothing is installed from an unsigned or mismatched build.
+- Before installing, AppUpdater checks that the downloaded app has the same Developer ID Team ID, signing identifier and bundle identifier as the installed app. Nothing is installed from an unsigned or mismatched build.
+- **OpenWritr 1.6.0 cannot update itself.** It was built to require GitHub Artifact Attestation, which does not work with the current release pipeline (see [#31](https://github.com/trsdn/OpenWritr/issues/31)). It reports the update check as failed. Install the next release manually from the Releases page; later versions update themselves.
 - The release workflow publishes an extra `OpenWritr-{version}.dmg` asset specifically for this update check, alongside the existing versioned ZIP/DMG downloads above.
 
 ## Architecture
