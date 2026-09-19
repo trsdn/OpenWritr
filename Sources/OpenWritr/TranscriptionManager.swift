@@ -13,11 +13,18 @@ final class TranscriptionManager: @unchecked Sendable {
         progressHandler(1.0)
     }
 
+    /// The ASR model rejects input shorter than one second of 16 kHz audio.
+    private static let minimumSampleCount = 16_000
+
     func transcribe(samples: [Float]) async throws -> String {
         guard let manager = asrManager else {
             throw TranscriptionError.notReady
         }
-        let result = try await manager.transcribe(samples, source: .microphone)
+        var input = samples
+        if input.count < Self.minimumSampleCount {
+            input.append(contentsOf: repeatElement(0, count: Self.minimumSampleCount - input.count))
+        }
+        let result = try await manager.transcribe(input, source: .microphone)
         return result.text
     }
 }

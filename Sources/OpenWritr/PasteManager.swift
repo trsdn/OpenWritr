@@ -97,15 +97,20 @@ final class PasteManager {
             var representations: [PasteboardSnapshot.Item.Representation] = []
 
             for type in item.types {
+                // Some representations cannot be read: protected content (e.g. from
+                // managed apps), promised data that never materialises, or an empty
+                // clipboard. Skip them rather than dropping the paste altogether.
                 guard let data = item.data(forType: type) else {
-                    pasteLog.error("Failed to read clipboard representation \(type.rawValue, privacy: .public)")
-                    return nil
+                    pasteLog.notice("Skipping unreadable clipboard representation \(type.rawValue, privacy: .public)")
+                    continue
                 }
 
                 representations.append(.init(type: type, data: data))
             }
 
-            snapshotItems.append(.init(representations: representations))
+            if !representations.isEmpty {
+                snapshotItems.append(.init(representations: representations))
+            }
         }
 
         return PasteboardSnapshot(items: snapshotItems)
