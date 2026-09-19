@@ -31,6 +31,11 @@ enum AppState: Sendable {
     case enhancing
     case initializationError(AppErrorPresentation)
     case runtimeError(AppErrorPresentation)
+
+    var isReady: Bool {
+        if case .ready = self { return true }
+        return false
+    }
 }
 
 @MainActor
@@ -97,6 +102,8 @@ final class AppViewModel {
     @ObservationIgnored private var captureTriggerMode: RecordingShortcutMode?
     @ObservationIgnored private var releaseRequested = false
     @ObservationIgnored private var pendingStartTask: Task<Void, Never>?
+    @ObservationIgnored private var transientErrorDismissTask: Task<Void, Never>?
+    private static let transientErrorDisplayDuration: Duration = .seconds(2.5)
     @ObservationIgnored private var stoppedCaptureGenerations: Set<UInt64> = []
     @ObservationIgnored private var activeProcessingTask: Task<Void, Never>?
     @ObservationIgnored private var activeProcessingOperationID: UUID?
@@ -505,6 +512,38 @@ final class AppViewModel {
         self.recoverableRawTranscription = recoverableRawTranscription
         transitionToErrorState(.runtimeError(error))
         overlayPanel.show(state: .error(overlayMessage))
+        if error.kind == .transcription {
+            scheduleTransientErrorDismissal()
+        }
+    }
+
+    /// Transcription failures (e.g. after a silent recording) are informational:
+    /// flash the overlay, then return to `.ready` without requiring a menu action.
+    private func scheduleTransientErrorDismissal() {
+        transientErrorDismissTask?.cancel()
+        transientErrorDismissTask = Task { @MainActor [weak self] in
+            do {
+                try await Task.sleep(for: Self.transientErrorDisplayDuration)
+            } catch {
+                return
+            }
+            guard let self, self.isTransientErrorState else { return }
+            self.transientErrorDismissTask = nil
+            self.overlayPanel.dismiss()
+            self.state = .ready
+        }
+    }
+
+    private var isTransientErrorState: Bool {
+        if case .runtimeError(let error) = state, error.kind == .transcription {
+            return true
+        }
+        return false
+    }
+
+    private func cancelTransientErrorDismissal() {
+        transientErrorDismissTask?.cancel()
+        transientErrorDismissTask = nil
     }
 
     private func transitionToErrorState(_ errorState: AppState) {
@@ -513,6 +552,7 @@ final class AppViewModel {
 
     func dismissRuntimeError() {
         guard case .runtimeError(let error) = state, isOperational else { return }
+        cancelTransientErrorDismissal()
         if error.kind == .audio {
             retryMicrophone()
             return
@@ -1130,7 +1170,7 @@ final class AppViewModel {
     }
 
     func startListening(triggerMode: RecordingShortcutMode = .normal) {
-        guard case .ready = state,
+        guard state.isReady || isTransientErrorState,
               isOperational,
               !didShutdown,
               activeProcessingTask == nil,
@@ -1138,6 +1178,7 @@ final class AppViewModel {
               captureOperationID == nil
         else { return }
 
+        cancelTransientErrorDismissal()
         cancelMicrophoneRecovery()
         recoverableRawTranscription = nil
         let operationID = UUID()
