@@ -92,7 +92,7 @@ and `scripts/build-app.sh`, whose bundle was inspected).
 - `S06`: no environment configuration is needed; `.release.env.example` is the only template and holds no values.
 - `S08`: Dependabot covers `github-actions` and `swift`, weekly.
 - `S10`: architecture is in `AGENTS.md`, the README, and `plan/`, including the non-obvious update-attestation constraint.
-- `S11`, `S12`: both workflows declare `permissions`; every `uses:` reference satisfies the table.
+- `S11`, `S12`: all three workflows declare `permissions`; every `uses:` reference satisfies the table.
 - `R01`, `I02`, `I03`: `Info.plist` holds name, version, copyright, licence, repository, and issue URLs (verified in the built bundle); the licence text is bundled.
 - `R02`: SemVer and the macOS 14 / Apple Silicon requirement are stated in the README.
 - `R04`: the release workflow fails when `Info.plist` differs from the tag, and derives the title and asset names from it.
