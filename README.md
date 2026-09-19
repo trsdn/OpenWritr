@@ -161,7 +161,8 @@ Known limitations, stated rather than left to be discovered:
 
 - Dictating requires **holding** a key. There is no toggle mode, which can be difficult without fine motor control.
 - The overlay shows state visually and does not steal focus; users of assistive technology hear no announcement besides the sound cues.
-- The app has **not** been audited with VoiceOver or Accessibility Inspector, and no keyboard-only pass has been recorded. Reports are welcome.
+- Warning text in Settings uses system orange, which has low contrast (about 2.2:1) on a light background, and the overlay text is a fixed 11 pt.
+- The app has **not** been tested with VoiceOver, and no keyboard-only pass has been recorded. See [docs/accessibility.md](docs/accessibility.md) for what was checked. Reports are welcome.
 
 ## Language
 
@@ -189,6 +190,15 @@ This proves the app was signed by that Team ID and not altered afterwards. It do
 - **Bugs and feature requests:** [open an issue](https://github.com/trsdn/OpenWritr/issues/new/choose). Support is best-effort by a single maintainer.
 - **Security vulnerabilities:** do not open a public issue; follow the [security policy](https://github.com/trsdn/.github/blob/main/SECURITY.md) and report privately.
 - **Contributing:** every change lands through a pull request; `main` is protected and merges are squashed. Validate with `swift build -c release` and `swift test`; see [AGENTS.md](AGENTS.md) for layout and rules.
+
+## Repository stats
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/trsdn/OpenWritr/stats/.github/stats/repo-card-dark.svg">
+  <img alt="Repository statistics" src="https://raw.githubusercontent.com/trsdn/OpenWritr/stats/.github/stats/repo-card.svg">
+</picture>
+
+Generated daily by [`stats.yml`](.github/workflows/stats.yml) and committed to the `stats` branch, because `main` is protected.
 
 ## Architecture
 

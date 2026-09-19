@@ -5,10 +5,10 @@
 - State: **Needs work**
 - Record: [`.github/conformance.yml`](../.github/conformance.yml)
 
-Result: 64 pass, 14 partial, 5 fail, 21 not applicable.
+Result: 67 pass, 14 partial, 2 fail, 21 not applicable.
 
 The state is **Needs work**: the record tooling does not allow `Healthy` while any
-criterion fails, and five do (`B12`, `P09`, `R05`, `X01`, `X03`). Nothing critical
+criterion fails, and two do (`R05`, `X01`). Nothing critical
 was found: no committed secrets, no open Dependabot alerts, `main` blocks force
 pushes and deletion, and secret scanning is enabled.
 
@@ -52,13 +52,10 @@ and `scripts/build-app.sh`, whose bundle was inspected).
 
 | ID | Result | Evidence | Fix |
 |---|---|---|---|
-| `R05` | fail | [`docs/release-smoke-tests.md`](release-smoke-tests.md) exists as a log but has no entry: earlier releases were tried by hand and not recorded. | Install a published DMG, dictate, paste, and add a dated entry. Only a person with the microphone and the download can do this. |
-| `X01` | fail | No documented keyboard check for the app. | Do and record a keyboard-only pass over the menu bar and Settings. |
-| `X03` | fail | No documented check of contrast, text sizing, or colour-only meaning; the overlay conveys state visually. | Document a check with Accessibility Inspector. |
-| `P09` | fail | No generated, self-hosted activity card. | Adopt `templates/repo-stats/` from `trsdn/.github`. |
-| `B12` | fail | The `trsdn-standard` topic is not set. | `gh repo edit trsdn/OpenWritr --add-topic trsdn-standard` after this is merged. |
-| `B01` | partial | The GitHub description says "Completely local", but Enhanced Mode sends transcript text to Copilot or an OpenAI-compatible API when enabled. | `gh repo edit trsdn/OpenWritr --description "..."` saying transcription is local. |
-| `B06` | partial | The README now states that merges are squashed, but the repository still allows merge commits and rebase merges. | Disable them in Settings → General. |
+| `R05` | fail | [`docs/release-smoke-tests.md`](release-smoke-tests.md) has no entry. The maintainer reports a smoke test was done, but the record must name the version and what was exercised. | Add the dated entry. |
+| `X01` | fail | [`docs/accessibility.md`](accessibility.md) records what could be checked. A tab-order and focus-ring pass could not be observed from automation (System Events reported only the window as focused). | One manual pass with Full Keyboard Access, recorded there. |
+| `X03` | partial | [`docs/accessibility.md`](accessibility.md): every overlay state has a text label and icon, overlay text contrast is 9.6:1 to 13.3:1, Reduce Motion is respected. Settings warnings use system orange (about 2.2:1 on light backgrounds) and the overlay text is a fixed 11 pt. | Use a colour with 4.5:1 contrast for warnings; let overlay text scale. |
+| `P09` | partial | `stats.yml` (reusable workflow from `trsdn/.github`) and the README card are in place, writing to the `stats` branch because `main` is protected. The card does not exist until the workflow first runs on `main`. | Merge, then dispatch `Repository stats`; becomes `pass` once the SVGs exist. |
 | `S02` | partial | Ten unit tests cover the cleanup integrity validator and policy, including failure paths. Audio, hotkey, paste, overlay, and update behavior have no automated tests. | Extract those behaviors behind testable seams and cover them. |
 | `S03` | partial | CI builds with `-warnings-as-errors` under Swift 6 strict concurrency. There is no formatter or linter. | Add `swift-format` or SwiftLint to CI. |
 | `S04` | partial | CI runs on `macos-latest`, not on the macOS 14 minimum. | Add a macOS 14 runner to the matrix. |
@@ -70,7 +67,7 @@ and `scripts/build-app.sh`, whose bundle was inspected).
 | `W01` | partial | Published from `main` `/docs` through GitHub Pages' branch source, documented in `AGENTS.md` but with no deployment workflow. | Deploy through a workflow. |
 | `W03` | partial | The landing view states what the project is and how to get it; status and the privacy sentence sit in the footer, not above the fold. | Move them into the hero. |
 | `W08` | partial | Same repeated build block as `B13`. | Same fix. |
-| `X02` | partial | Standard SwiftUI controls carry implicit names; only the overlay sets an explicit label. No Accessibility Inspector pass. | Audit and record. |
+| `X02` | partial | The accessibility tree was read: all switches and pop-ups are named. Two push buttons showed no title through System Events although the source titles them; VoiceOver was not run. | Confirm with VoiceOver. |
 
 ## Passing criteria
 
@@ -82,6 +79,7 @@ and `scripts/build-app.sh`, whose bundle was inspected).
 - `B09`, `P07`: public, ten topics, homepage set, description present.
 - `B10`: [`.github/CODEOWNERS`](../.github/CODEOWNERS) names `@trsdn` (added here).
 - `B11`: the record itself.
+- `B01`, `B06`, `B12`: the description says transcription is local and cleanup optional; only squash merges are enabled and branches are deleted on merge; `main` requires `Secret Scan` and `Build and test`; the `trsdn-standard` topic is set.
 - `B08`, `R06`: `CHANGELOG.md` covers every release from 1.4.0 to 1.6.4.
 - `B15`: `THIRD_PARTY_NOTICES.md` lists the linked packages; `scripts/build-app.sh` bundles the licence texts under `Contents/Resources/Licenses/` (checked in a built app).
 - `B14`: `AGENTS.md` names each credential class and how it is replaced.
@@ -110,6 +108,4 @@ and `scripts/build-app.sh`, whose bundle was inspected).
 
 ## What only a person can do
 
-`R05` (smoke-test a published DMG), `X01`/`X03` (keyboard and contrast checks),
-and the GitHub settings above (`B01`, `B06`, `B12`) need the maintainer's hands.
-`AGENTS.md` forbids agents from changing repository settings.
+`X01` needs a person watching the focus ring with Full Keyboard Access on.

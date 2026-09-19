@@ -9,18 +9,18 @@ state: "Needs work"
 evidence: "docs/self-assessment.md"
 
 criteria:
-  B01: partial
+  B01: pass
   B02: pass
   B03: pass
   B04: pass
   B05: pass
-  B06: partial
+  B06: pass
   B07: pass
   B08: pass
   B09: pass
   B10: pass
   B11: pass
-  B12: fail
+  B12: pass
   B13: partial
   B14: pass
   B15: pass
@@ -33,7 +33,7 @@ criteria:
   P06: pass
   P07: pass
   P08: partial
-  P09: fail
+  P09: partial
   P10: pass
   P11: pass
   S01: pass
@@ -100,7 +100,7 @@ criteria:
   L07: pass
   X01: fail
   X02: partial
-  X03: fail
+  X03: partial
   X04: na
   X05: pass
   Y01: pass
