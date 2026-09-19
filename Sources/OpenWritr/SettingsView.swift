@@ -9,6 +9,23 @@ private enum PromptTargetChange {
     case openAIModel(String)
 }
 
+/// Keeps the hosting window above other windows, including the floating
+/// recording overlay, and brings it to the front whenever it is shown.
+private struct KeepWindowOnTop: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async { [weak view] in
+            guard let window = view?.window else { return }
+            window.level = NSWindow.Level(rawValue: NSWindow.Level.floating.rawValue + 1)
+            window.collectionBehavior.insert(.moveToActiveSpace)
+            window.makeKeyAndOrderFront(nil)
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {}
+}
+
 struct SettingsView: View {
     @Bindable var viewModel: AppViewModel
     @State private var isEditingPrompt = false
@@ -294,6 +311,7 @@ struct SettingsView: View {
         .formStyle(.grouped)
         .padding(20)
         .frame(width: 520)
+        .background(KeepWindowOnTop())
         .onAppear {
             viewModel.refreshInputDevices()
             viewModel.refreshAppleIntelligenceAvailability()
