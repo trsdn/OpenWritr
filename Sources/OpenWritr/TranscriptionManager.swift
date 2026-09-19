@@ -24,7 +24,9 @@ final class TranscriptionManager: @unchecked Sendable {
         if input.count < Self.minimumSampleCount {
             input.append(contentsOf: repeatElement(0, count: Self.minimumSampleCount - input.count))
         }
-        let result = try await manager.transcribe(input, source: .microphone)
+        // Every recording is an independent utterance, so decode from a fresh state.
+        var decoderState = TdtDecoderState.make(decoderLayers: 2)
+        let result = try await manager.transcribe(input, decoderState: &decoderState)
         return result.text
     }
 }
