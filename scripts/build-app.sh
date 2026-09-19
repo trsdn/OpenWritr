@@ -62,6 +62,21 @@ cp "$PROJECT_DIR/Sources/OpenWritr/Resources/cleanup-prompt-profiles.json" \
     "$APP/Contents/Resources/cleanup-prompt-profiles.json"
 cp "$PROJECT_DIR/Info.plist" "$APP/Contents/Info.plist"
 
+# Licence texts for OpenWritr and the packages linked into the binary, so a
+# recipient of the app has them (Apache-2.0 asks for this).
+mkdir -p "$APP/Contents/Resources/Licenses"
+cp "$PROJECT_DIR/LICENSE" "$APP/Contents/Resources/Licenses/OpenWritr-LICENSE.txt"
+cp "$PROJECT_DIR/THIRD_PARTY_NOTICES.md" "$APP/Contents/Resources/Licenses/THIRD_PARTY_NOTICES.md"
+for checkout in "$PROJECT_DIR"/.build/checkouts/*/; do
+    name="$(basename "$checkout")"
+    for candidate in LICENSE LICENSE.md LICENSE.txt; do
+        if [[ -f "$checkout$candidate" ]]; then
+            cp "$checkout$candidate" "$APP/Contents/Resources/Licenses/$name-LICENSE.txt"
+            break
+        fi
+    done
+done
+
 # AppUpdater ships its Sigstore/TUF trust roots as a SwiftPM resource bundle;
 # it must be present in Contents/Resources for in-app update checks to work.
 APP_UPDATER_BUNDLE="$BUILD_DIR/AppUpdater_AppUpdater.bundle"
@@ -72,7 +87,7 @@ else
 fi
 
 python3 -c "
-import plistlib, sys
+import os, plistlib, sys
 with open('$APP/Contents/Info.plist', 'rb') as f:
     p = plistlib.load(f)
 p['CFBundleExecutable'] = 'OpenWritr'
@@ -81,6 +96,12 @@ p['CFBundlePackageType'] = 'APPL'
 p['CFBundleDisplayName'] = 'OpenWritr'
 p['NSHighResolutionCapable'] = True
 p['LSMinimumSystemVersion'] = '14.0'
+# The release workflow passes the version parsed from the tag, so the bundle
+# identity is derived from the tag rather than maintained by hand.
+version = os.environ.get('OPENWRITR_VERSION')
+if version:
+    p['CFBundleShortVersionString'] = version
+    p['CFBundleVersion'] = version
 with open('$APP/Contents/Info.plist', 'wb') as f:
     plistlib.dump(p, f)
 "

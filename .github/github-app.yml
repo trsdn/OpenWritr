@@ -14,8 +14,8 @@ instructions: |
   2. Never publish a release, create or move tags, or change repository settings.
   3. Never log transcript text, audio, prompts, or API keys.
 
-  Validate with `swift build -c release` before proposing any change.
+  Validate with `swift build -c release -Xswiftc -warnings-as-errors` and `swift test` before proposing any change.
 
 scripts:
   - name: Validate
-    command: swift build -c release
+    command: swift build -c release -Xswiftc -warnings-as-errors && swift test

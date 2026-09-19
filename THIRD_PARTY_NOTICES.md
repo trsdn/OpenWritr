@@ -19,11 +19,10 @@ release assets. Its licence is the publisher's.
 - **Source repository:** the packages are fetched by SwiftPM from their upstream
   repositories and are not vendored, so their licence texts and notices stay with
   the upstream source.
-- **Release artifacts:** the app bundle does **not** yet carry the Apache-2.0
-  licence text or an attribution list. Apache-2.0 asks that recipients of binaries
-  receive a copy of the licence; until the bundle includes these notices, this file
-  is the repository's record and the gap is tracked in the conformance record
-  (`B15`).
+- **Release artifacts:** `scripts/build-app.sh` copies the OpenWritr licence,
+  this file, and the licence text of every SwiftPM checkout into
+  `OpenWritr.app/Contents/Resources/Licenses/`, so recipients of the binary
+  receive the Apache-2.0 and Unlicense texts with it.
 
 Keep this table in step with `Package.resolved` when a dependency is added, removed,
 or upgraded.

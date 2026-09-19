@@ -8,10 +8,11 @@
 <link rel="icon" type="image/x-icon" href="favicon.ico">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,300;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
+@font-face{font-family:'DM Sans';font-style:normal;font-weight:100 1000;font-display:swap;src:url(fonts/dm-sans-latin-wght-normal.woff2) format('woff2')}
+@font-face{font-family:'DM Sans';font-style:italic;font-weight:100 1000;font-display:swap;src:url(fonts/dm-sans-latin-wght-italic.woff2) format('woff2')}
+@font-face{font-family:'JetBrains Mono';font-style:normal;font-weight:400;font-display:swap;src:url(fonts/jetbrains-mono-latin-400-normal.woff2) format('woff2')}
+@font-face{font-family:'JetBrains Mono';font-style:normal;font-weight:500;font-display:swap;src:url(fonts/jetbrains-mono-latin-500-normal.woff2) format('woff2')}
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 
 :root {
@@ -130,6 +131,7 @@ nav a {
   transition: color .2s;
 }
 nav a:hover { color: var(--text); }
+a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
 
 .nav-links { display: flex; gap: 28px; align-items: center; }
 
@@ -696,7 +698,7 @@ footer a:hover { color: var(--accent); }
       Push to talk, release to paste. Local transcription with optional cleanup via Apple Intelligence, GitHub Copilot, or an OpenAI-compatible API.
     </p>
     <div class="hero-actions">
-      <a href="https://github.com/trsdn/OpenWritr/releases/latest/download/OpenWritr-v1.5.0-macOS-arm64.zip" class="btn btn-primary">
+      <a href="https://github.com/trsdn/OpenWritr/releases/latest" class="btn btn-primary">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
         Download
       </a>
@@ -925,7 +927,7 @@ footer a:hover { color: var(--accent); }
     <div class="section-label reveal">Get Started</div>
     <h2 class="reveal">Up and running<br>in 30 seconds</h2>
     <p class="section-desc reveal">
-      Download OpenWritr v1.5.0, or build it from source. Requires macOS 14+ and Apple Silicon. The ASR model (~460 MB) downloads
+      Download the <a href="https://github.com/trsdn/OpenWritr/releases/latest">latest release</a>, or build it from source. Requires macOS 14+ and Apple Silicon. The ASR model (~460 MB) downloads
       automatically on first launch.
     </p>
     <div class="install-block reveal">
@@ -955,6 +957,10 @@ footer a:hover { color: var(--accent); }
     <div class="footer-links">
       <a href="https://github.com/trsdn/OpenWritr">GitHub</a>
       <a href="https://github.com/trsdn/OpenWritr/issues">Issues</a>
+      <a href="https://github.com/trsdn/OpenWritr/blob/main/CHANGELOG.md">Changelog</a>
+      <a href="https://github.com/trsdn/OpenWritr/blob/main/LICENSE">License</a>
+      <a href="https://github.com/trsdn/.github/blob/main/SECURITY.md">Security</a>
+      <a href="https://github.com/trsdn/.github/blob/main/SUPPORT.md">Support</a>
       <a href="https://github.com/FluidInference/FluidAudio">FluidAudio</a>
     </div>
     <p>
@@ -963,7 +969,11 @@ footer a:hover { color: var(--accent); }
       and <a href="https://huggingface.co/FluidInference/parakeet-tdt-0.6b-v3-coreml">Parakeet TDT v3</a>.
     </p>
     <p style="margin-top:4px;font-size:.78rem;">
-      MIT License &middot; &copy; 2026
+      Actively maintained. Audio never leaves your Mac; text is sent to a cleanup provider only if you turn on Enhanced Mode with one. No telemetry, no cookies, no third-party requests from this page.
+      <a href="https://github.com/trsdn/OpenWritr#privacy">Privacy details</a>.
+    </p>
+    <p style="margin-top:4px;font-size:.78rem;">
+      MIT License &middot; &copy; 2026 &middot; Page reviewed 2026-09-19, describes the latest release
     </p>
   </div>
 </footer>

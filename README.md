@@ -1,15 +1,14 @@
 # OpenWritr
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![macOS](https://img.shields.io/badge/macOS-14%2B-black?logo=apple)](https://github.com/trsdn/OpenWritr)
-[![Swift 6](https://img.shields.io/badge/Swift-6-F05138?logo=swift&logoColor=white)](https://swift.org)
-[![Apple Silicon](https://img.shields.io/badge/Apple%20Silicon-M1%2B-333?logo=apple)](https://github.com/trsdn/OpenWritr)
-[![Release](https://img.shields.io/github/v/release/trsdn/OpenWritr)](https://github.com/trsdn/OpenWritr/releases)
-[![Downloads](https://img.shields.io/github/downloads/trsdn/OpenWritr/total?label=downloads)](https://github.com/trsdn/OpenWritr/releases)
+[![macOS 14+](https://img.shields.io/badge/macOS-14%2B-black?logo=apple)](Package.swift)
+[![CI](https://github.com/trsdn/OpenWritr/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/trsdn/OpenWritr/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/trsdn/OpenWritr)](https://github.com/trsdn/OpenWritr/releases/latest)
+[![Conformance](.github/badges/conformance.svg)](.github/conformance.yml)
 
-Native macOS menu bar app for push-to-talk voice-to-text. Core transcription runs locally on the Apple Neural Engine; optional enhancement can use Apple Intelligence, GitHub Copilot, or any OpenAI-compatible API.
+**Status: actively maintained.** Native macOS menu bar app for push-to-talk voice-to-text. Core transcription runs locally on the Apple Neural Engine; optional enhancement can use Apple Intelligence, GitHub Copilot, or any OpenAI-compatible API.
 
-**[Website](https://trsdn.github.io/OpenWritr/)** · **[Download](https://github.com/trsdn/OpenWritr/releases/latest/download/OpenWritr-v1.6.1-macOS-arm64.zip)** · **[Release](https://github.com/trsdn/OpenWritr/releases)**
+**[Website](https://trsdn.github.io/OpenWritr/)** · **[Download](https://github.com/trsdn/OpenWritr/releases/latest)** · **[Changelog](CHANGELOG.md)**
 
 <p align="center">
   <img src="docs/mockup.svg" alt="OpenWritr in action" width="720">
@@ -136,6 +135,60 @@ OpenWritr checks `trsdn/OpenWritr` GitHub Releases for newer, Developer ID-signe
 - Before installing, AppUpdater checks that the downloaded app has the same Developer ID Team ID, signing identifier and bundle identifier as the installed app. Nothing is installed from an unsigned or mismatched build.
 - **OpenWritr 1.6.0 cannot update itself.** It was built to require GitHub Artifact Attestation, which does not work with the current release pipeline (see [#31](https://github.com/trsdn/OpenWritr/issues/31)). It reports the update check as failed. Install the next release manually from the Releases page; later versions update themselves.
 - The release workflow publishes an extra `OpenWritr-{version}.dmg` asset specifically for this update check, alongside the existing versioned ZIP/DMG downloads above.
+
+## Privacy
+
+- **Audio never leaves your Mac.** Recordings are transcribed on-device and are not written to disk.
+- **Transcript text leaves your Mac only if you turn on Enhanced Mode with a remote provider.** Apple Intelligence cleanup stays on-device. GitHub Copilot and an OpenAI-compatible API receive the transcript text you are cleaning up, and nothing else.
+- **No telemetry, analytics, or crash reporting.** OpenWritr has no backend and no account.
+- **Outbound connections**, and why:
+
+  | Destination | Purpose | When |
+  |---|---|---|
+  | Hugging Face (`FluidInference/parakeet-tdt-0.6b-v3-coreml`) | Download the speech model, about 460 MB | First launch |
+  | GitHub Releases (`trsdn/OpenWritr`) | Check for and download updates | About every 24 hours; switch off in **Settings → Updates** |
+  | GitHub Copilot, through the `copilot` CLI | Cleanup, if you chose a Copilot model | Only with Enhanced Mode |
+  | The base URL you enter for an OpenAI-compatible API | Cleanup and model listing | Only with Enhanced Mode on that provider |
+
+- **Stored on your Mac:** preferences and custom cleanup prompts in the `com.openwritr.app` `UserDefaults` domain; API keys in your macOS Keychain; the speech model in `~/Library/Application Support/FluidAudio/Models`. While pasting, the clipboard is saved and restored around the keystroke.
+- **Deleting it:** remove the app, then `defaults delete com.openwritr.app`, delete the Keychain items for OpenWritr in Keychain Access, and delete the `FluidAudio` folder above. Nothing else persists across launches, and no transcript history is kept.
+
+## Accessibility
+
+OpenWritr is a menu bar utility driven by a held hotkey (Fn/Globe or Right Shift). Settings and the menu use standard SwiftUI controls, which expose names and roles to VoiceOver; the recording overlay carries an accessibility label describing its state. Text uses system fonts and colours.
+
+Known limitations, stated rather than left to be discovered:
+
+- Dictating requires **holding** a key. There is no toggle mode, which can be difficult without fine motor control.
+- The overlay shows state visually and does not steal focus; users of assistive technology hear no announcement besides the sound cues.
+- The app has **not** been audited with VoiceOver or Accessibility Inspector, and no keyboard-only pass has been recorded. Reports are welcome.
+
+## Language
+
+The interface, documentation, and contributor surfaces are **English only**; there are no translations or string catalogs. Speech recognition itself supports 25 languages (see above), and cleanup preserves the language you dictated.
+
+## Versioning and compatibility
+
+Releases follow [Semantic Versioning](https://semver.org): patch releases fix bugs, minor releases add features, and a major release would break saved preferences or the update path. OpenWritr requires macOS 14 or later on Apple Silicon; Intel Macs are not supported. Every change is described in the [changelog](CHANGELOG.md), which is also the source of each GitHub release's notes.
+
+## Verifying a download
+
+Releases are built by the [release workflow](.github/workflows/release.yml), signed with a Developer ID certificate (Team ID `G69Z5BNY97`), and notarized by Apple. You can check that yourself:
+
+```sh
+shasum -a 256 -c OpenWritr-vX.Y.Z-macOS-arm64.zip.sha256
+codesign --verify --deep --strict --verbose=2 /Applications/OpenWritr.app
+spctl --assess --type execute --verbose /Applications/OpenWritr.app   # expect: source=Notarized Developer ID
+xcrun stapler validate /Applications/OpenWritr.app
+```
+
+This proves the app was signed by that Team ID and not altered afterwards. It does not prove which source commit it was built from: OpenWritr deliberately publishes no GitHub build attestation (see [#31](https://github.com/trsdn/OpenWritr/issues/31)). Third-party licences are bundled in `OpenWritr.app/Contents/Resources/Licenses/` and listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+## Support and security
+
+- **Bugs and feature requests:** [open an issue](https://github.com/trsdn/OpenWritr/issues/new/choose). Support is best-effort by a single maintainer.
+- **Security vulnerabilities:** do not open a public issue; follow the [security policy](https://github.com/trsdn/.github/blob/main/SECURITY.md) and report privately.
+- **Contributing:** every change lands through a pull request; `main` is protected and merges are squashed. Validate with `swift build -c release` and `swift test`; see [AGENTS.md](AGENTS.md) for layout and rules.
 
 ## Architecture
 

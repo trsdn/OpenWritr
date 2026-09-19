@@ -24,6 +24,10 @@ let package = Package(
                 "ObjCExceptionCatcher"
             ],
             exclude: ["Resources"]
+        ),
+        .testTarget(
+            name: "OpenWritrTests",
+            dependencies: ["OpenWritr"]
         )
     ]
 )

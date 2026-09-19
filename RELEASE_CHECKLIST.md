@@ -5,7 +5,8 @@ Use this checklist for every tagged macOS release.
 ## 1. Preflight
 
 - [ ] Working tree clean (`git status --short`)
-- [ ] Version in `CHANGELOG.md` is final
+- [ ] `CHANGELOG.md` has a section `## [x.y.z] — date` for this version and nothing left under Unreleased (the release workflow fails otherwise)
+- [ ] `Info.plist` `CFBundleShortVersionString` and `CFBundleVersion` equal `x.y.z` (the release workflow fails otherwise)
 - [ ] Developer ID identity available in keychain
 - [ ] Notary profile available (`NOTARY_PROFILE=OpenWritr`) or Apple credentials set
 
@@ -69,7 +70,7 @@ hdiutil detach /Volumes/OpenWritr
   - `OpenWritr-vx.y.z-macOS-arm64.zip.sha256`
   - `OpenWritr-vx.y.z-macOS-arm64.dmg`
   - `OpenWritr-vx.y.z-macOS-arm64.dmg.sha256`
-- [ ] Use `RELEASE_GITHUB_vx.y.z.md` text as release body
+- [ ] Release notes are the changelog section for the version; the release workflow publishes them, so do not write them by hand
 
 ## 6. Post-Release Sanity
 
@@ -77,3 +78,5 @@ hdiutil detach /Volumes/OpenWritr
 - [ ] Verify checksum
 - [ ] Install and launch on a clean user profile or second machine
 - [ ] Confirm app starts and prompts for permissions as expected
+- [ ] Dictate into a text field and confirm the transcript is pasted
+- [ ] Add a dated entry to [docs/release-smoke-tests.md](docs/release-smoke-tests.md) naming the version and what was exercised

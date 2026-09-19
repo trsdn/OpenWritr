@@ -25,9 +25,10 @@ transcript text to the provider the user chose.
 |---|---|
 | `Sources/OpenWritr/` | The app. `OpenWritrApp.swift` holds `AppViewModel` (`@Observable`, `@MainActor`), which owns all state; `AppState` drives the UI. |
 | `Sources/OpenWritr/Resources/` | Bundled cleanup prompt profiles (`cleanup-prompt-profiles.json`). |
+| `Tests/OpenWritrTests/` | Unit tests (Swift Testing) for pure logic. |
 | `Sources/ObjCExceptionCatcher/` | Small Objective-C shim so Swift can catch `NSException`. |
 | `Resources/AppIcon.icns` | The app icon copied into the bundle. |
-| `Info.plist` | Bundle identity; extended by `scripts/build-app.sh`. |
+| `Info.plist` | Bundle identity: name, version, copyright, licence, repository and issue URLs. `Package.swift` has no fields for these, so they live here; the release build overrides the version from the tag. Extended by `scripts/build-app.sh`. |
 | `scripts/` | Build, sign, notarize, DMG, release, and model-evaluation scripts. |
 | `eval/cleanup-cases.json` | Synthetic cleanup-model benchmark cases. Never add private dictation. |
 | `docs/` | GitHub Pages site (`index.html` and assets), served from `main` `/docs`. |
@@ -110,13 +111,14 @@ The build script needs a local Developer ID Application or Apple Development cer
 
 ## Validate before proposing a change
 
-This is the single command that must succeed:
+These commands must both succeed (CI runs them on every pull request):
 
 ```sh
-swift build -c release
+swift build -c release -Xswiftc -warnings-as-errors
+swift test
 ```
 
-It type-checks the whole package under Swift 6 strict concurrency and links the executable, which catches compile errors, concurrency violations, and dependency resolution problems. **It does not exercise behavior:** the repository has no automated tests and no lint or format tooling. For a change to audio, hotkey, paste, or update behavior, also run the built app and check the affected flow by hand, and say in the pull request what you tried.
+The build type-checks the whole package under Swift 6 strict concurrency with warnings as errors, and links the executable. `swift test` runs the unit tests in `Tests/OpenWritrTests/`, which cover the cleanup integrity validator and policy. The tests do **not** cover audio, hotkey, paste, overlay, or update behavior, and there is no formatter or linter. For a change to those areas, also run the built app and check the affected flow by hand, and say in the pull request what you tried.
 
 ## Conventions
 
@@ -125,6 +127,7 @@ It type-checks the whole package under Swift 6 strict concurrency and links the 
 - Log with `os.Logger` (subsystem `com.openwritr.app`, one category per type). Never log transcript text, audio, prompts, API keys, or tokens.
 - User-facing strings are English.
 - Release identity comes from `Info.plist` (`CFBundleShortVersionString` and `CFBundleVersion`). Bump both in a `chore(release): bump version to X.Y.Z` change before tagging.
+- User-facing changes get an entry in `CHANGELOG.md` (`## [x.y.z] — date`). The release workflow publishes that section as the release notes and fails when it is missing or empty, or when Info.plist disagrees with the tag.
 - Commit messages use Conventional Commits (`fix(settings): …`, `chore(release): …`).
 
 ## Do not do these

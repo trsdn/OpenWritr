@@ -42,6 +42,47 @@ jobs:
           ref: ${{ steps.release.outputs.tag }}
           fetch-depth: 0
 
+      # Gate: nothing is built, signed, or published for a tag that cannot
+      # describe itself. Fails before the signing certificate is imported.
+      - name: Verify bundle version and changelog entry
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          plist_short="$(plutil -extract CFBundleShortVersionString raw Info.plist)"
+          plist_build="$(plutil -extract CFBundleVersion raw Info.plist)"
+          if [[ "$plist_short" != "$RELEASE_VERSION" || "$plist_build" != "$RELEASE_VERSION" ]]; then
+            echo "Info.plist is $plist_short (build $plist_build) but the tag is $RELEASE_VERSION." >&2
+            echo "Bump CFBundleShortVersionString and CFBundleVersion before tagging." >&2
+            exit 1
+          fi
+
+          # Entries still held under an unreleased heading would ship in no release notes.
+          held="$(awk '
+            tolower($0) ~ /^##[ \t]+\[?unreleased\]?/ { capture = 1; next }
+            capture && /^## / { exit }
+            capture { print }
+          ' CHANGELOG.md | tr -d '[:space:]')"
+          if [[ -n "$held" ]]; then
+            echo "CHANGELOG.md still holds entries under Unreleased; promote them into $RELEASE_VERSION." >&2
+            exit 1
+          fi
+
+          # The published notes are the maintained changelog entry, never text written here.
+          awk -v version="$RELEASE_VERSION" '
+            BEGIN { gsub(/\./, "\\.", version) }
+            $0 ~ "^## \\[?" version "\\]?([ \t]|$)" { capture = 1; next }
+            capture && /^## / { exit }
+            capture { print }
+          ' CHANGELOG.md > "$RUNNER_TEMP/release-notes.md"
+          if [[ -z "$(tr -d '[:space:]' < "$RUNNER_TEMP/release-notes.md")" ]]; then
+            echo "CHANGELOG.md has no entry for $RELEASE_VERSION." >&2
+            exit 1
+          fi
+          echo "RELEASE_NOTES_FILE=$RUNNER_TEMP/release-notes.md" >> "$GITHUB_ENV"
+
       - name: Import Developer ID certificate
         shell: bash
         env:
@@ -106,6 +147,8 @@ jobs:
 
       - name: Build Developer ID signed app
         shell: bash
+        env:
+          OPENWRITR_VERSION: ${{ steps.release.outputs.version }}
         run: |
           set -euo pipefail
           chmod +x scripts/*.sh
@@ -245,7 +288,10 @@ jobs:
             fi
           done
 
+          # Notes come from the changelog entry checked by the gate above.
           if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release create "$RELEASE_TAG" --title "OpenWritr ${RELEASE_VERSION}" --notes "Signed and notarized macOS DMG and ZIP."
+            gh release create "$RELEASE_TAG" --title "OpenWritr ${RELEASE_VERSION}" --notes-file "$RELEASE_NOTES_FILE"
+          else
+            gh release edit "$RELEASE_TAG" --title "OpenWritr ${RELEASE_VERSION}" --notes-file "$RELEASE_NOTES_FILE"
           fi
           gh release upload "$RELEASE_TAG" "${assets[@]}" --clobber
