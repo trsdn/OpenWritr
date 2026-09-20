@@ -10,6 +10,14 @@
     <string>1.6.4</string>
     <key>CFBundleShortVersionString</key>
     <string>1.6.4</string>
+    <key>NSHumanReadableCopyright</key>
+    <string>Copyright © 2026 Torsten Mahr. Released under the MIT License.</string>
+    <key>OpenWritrLicense</key>
+    <string>MIT</string>
+    <key>OpenWritrRepositoryURL</key>
+    <string>https://github.com/trsdn/OpenWritr</string>
+    <key>OpenWritrIssuesURL</key>
+    <string>https://github.com/trsdn/OpenWritr/issues</string>
     <key>LSUIElement</key>
     <true/>
     <key>NSMicrophoneUsageDescription</key>

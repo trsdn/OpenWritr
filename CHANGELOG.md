@@ -2,6 +2,55 @@
 
 All notable changes to OpenWritr will be documented in this file.
 
+Each release's notes on GitHub are generated from its section here, and the
+release workflow fails when the section for a tag is missing or empty.
+
+## [1.6.4] — 2026-09-19
+
+### Fixed
+- Brought the Settings window to the front when opened and kept it on top of other windows (#42)
+
+## [1.6.3] — 2026-09-19
+
+### Fixed
+- Padded very short recordings so they are transcribed instead of dropped (#40)
+- Pasted the transcript even when the existing clipboard contents could not be read, instead of failing silently (#40)
+
+### Changed
+- Updated the FluidAudio speech framework from 0.13.6 to 0.15.7 (#34)
+
+## [1.6.2] — 2026-09-19
+
+### Fixed
+- Transcription errors no longer block the overlay: it dismisses itself after 2.5 seconds and the hotkey can record again immediately (#39)
+
+## [1.6.1] — 2026-09-16
+
+### Fixed
+- Removed the update attestation policy that made every in-app update check fail (#31, #32). 1.6.0 cannot update itself and has to be replaced manually once.
+
+## [1.6.0] — 2026-09-16
+
+### Added
+- In-app updates: OpenWritr checks GitHub Releases about every 24 hours (Settings → Updates) and installs newer Developer ID-signed builds in place. A manual check is available from the menu bar and Settings (#30)
+
+## [1.5.1] — 2026-09-16
+
+### Fixed
+- Explicit microphone selections now bind directly to the capture input, so the chosen device is the one recorded from
+
+## [1.5.0] — 2026-08-15
+
+### Added
+- Unified voice-reactive waveform overlay for listening, transcribing, enhancing, done, and error states
+- Apple Intelligence cleanup provider (macOS 26+, on-device)
+- Model-tuned cleanup prompts, stored per provider and model
+- Always-enhanced recording mode, with Shift as a one-recording bypass
+- Cleanup-model evaluation tooling
+
+### Changed
+- Resilient microphone routing that follows System Default changes
+
 ## [1.4.0] — 2026-08-11
 
 ### Added

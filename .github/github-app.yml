@@ -1,0 +1,21 @@
+# Repository configuration for the GitHub Copilot app.
+#
+# The authoritative instructions for this repository are in AGENTS.md. This file
+# points at them rather than restating them, so the two cannot drift apart.
+
+instructions: |
+  Read AGENTS.md in the repository root and follow it. It is the authoritative
+  guidance for this repository.
+
+  The rules that are most often broken:
+
+  1. Never add a build-attestation policy to UpdateManager and never attest the
+     update DMG. It crashes shipped apps (see #31).
+  2. Never publish a release, create or move tags, or change repository settings.
+  3. Never log transcript text, audio, prompts, or API keys.
+
+  Validate with `swift build -c release -Xswiftc -warnings-as-errors` and `swift test` before proposing any change.
+
+scripts:
+  - name: Validate
+    command: swift build -c release -Xswiftc -warnings-as-errors && swift test

@@ -1,0 +1,8 @@
+Fonts in this directory are self-hosted so the site loads no third-party resources.
+
+DM Sans (Copyright 2014 The DM Sans Project Authors, https://github.com/googlefonts/dm-fonts)
+JetBrains Mono (Copyright 2020 The JetBrains Mono Project Authors, https://github.com/JetBrains/JetBrainsMono)
+
+Both are licensed under the SIL Open Font License, Version 1.1,
+https://openfontlicense.org — the full text is available at that address.
+Files are the Latin subsets distributed by Fontsource (https://fontsource.org).

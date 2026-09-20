@@ -1,0 +1,11 @@
+# Blank issues are disabled so that the forms are the only way in. Without this,
+# every form can be bypassed with one click and the structure they exist to
+# enforce becomes advisory.
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/trsdn/.github/blob/main/SECURITY.md
+    about: Do not open a public issue. Follow the security policy to report privately.
+  - name: Ask a question or request support
+    url: https://github.com/trsdn/.github/blob/main/SUPPORT.md
+    about: Questions are answered on a best-effort basis. Start here before opening an issue.
