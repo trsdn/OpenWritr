@@ -18,6 +18,8 @@ jobs:
   macos-release:
     name: Build signed and notarized macOS artifacts
     runs-on: macos-latest
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
     steps:
       - name: Resolve release metadata
         id: release
@@ -295,3 +297,13 @@ jobs:
             gh release edit "$RELEASE_TAG" --title "OpenWritr ${RELEASE_VERSION}" --notes-file "$RELEASE_NOTES_FILE"
           fi
           gh release upload "$RELEASE_TAG" "${assets[@]}" --clobber
+
+  # R05: install the published DMG and exercise it, as a consumer would.
+  smoke-test:
+    name: Smoke-test the published release
+    needs: macos-release
+    permissions:
+      contents: read
+    uses: ./.github/workflows/smoke-test.yml
+    with:
+      tag: ${{ needs.macos-release.outputs.tag }}

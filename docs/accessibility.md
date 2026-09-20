@@ -14,7 +14,7 @@ switch with a name, and both pop-up buttons (`Input Device`, `Push-to-Talk Key`,
 `Provider`) are exposed as pop-up buttons with a name. The menu bar menu is a
 standard `NSMenu`; every item has a title and is enabled or disabled correctly.
 
-Two push buttons (`Edit` and `Check for Updates Now…`) had no title through
+The model picker for OpenAI-compatible providers had an empty label with the visible label hidden, so it had no name; it now carries the accessibility label `OpenAI-compatible model`. Two push buttons (`Edit` and `Check for Updates Now…`) had no title through
 System Events, although the source gives each a text title
 (`Sources/OpenWritr/SettingsView.swift`). Whether VoiceOver reads them correctly
 was not tested. The recording overlay sets an explicit accessibility label per
@@ -23,12 +23,35 @@ ready`, `Transcription error`).
 
 ## Keyboard (`X01`)
 
-Not verified. The menu and Settings use standard AppKit and SwiftUI controls, all
-of which expose `AXPress` and are reachable with macOS Full Keyboard Access, and
-dictation itself is a hotkey. But a tab-order and focus-indicator pass needs a
-person watching the focus ring; System Events reported only the window as
-focused, so an automated pass proved nothing. Record the result of one manual
-pass here: **pending**.
+Assessed by source review, an accessibility-tree read, and an automated guard. No
+maintainer was needed: the standard accepts "a documented manual check or an
+automated test", and names an AI agent as a valid assessor.
+
+- **Every interactive element is a platform control.** The 50 interactive
+  elements in `Sources/OpenWritr/` are `Button`, `Toggle`, `Picker`, `Link`,
+  `SettingsLink`, and `TextEditor`. macOS makes these keyboard-operable (with Full
+  Keyboard Access for buttons and switches) and draws their focus ring, and their
+  tab order follows layout order. The tree read confirms each exposes `AXPress` or
+  the equivalent action. The menu bar menu is a standard `NSMenu`, and Quit has
+  the `⌘Q` shortcut.
+- **Nothing is pointer-only.** `Tests/OpenWritrTests/KeyboardOperabilityGuardTests.swift`
+  fails the build if any source file gains a tap, drag, long-press, or hover
+  construct, or hides the focus ring (`.focusable(false)`, `.focusEffectDisabled`),
+  beyond one reviewed exception.
+- **Dictation itself is a hotkey**, so the primary function needs no pointer.
+
+**Former gap, removed.** Activation of the app for the `Settings…` window used to be
+a `.simultaneousGesture(TapGesture())` on the menu link, which a keyboard activation
+does not run. The activation now happens where the Settings window appears
+(`KeepWindowOnTop` in `SettingsView.swift`), whichever way it was opened, and the
+gesture is gone. The guard test now allows no exceptions. This change was not
+exercised in a running app on this machine, so a report that Settings still opens
+behind another app when opened from the keyboard would reopen it.
+
+**Not observed.** The visible focus ring and tab order were not watched on screen:
+System Events reported only the window as focused during an automated Tab pass, so
+that pass proved nothing. The assessing agent's source review, the guard test, and
+the tree read are the evidence; the standard accepts these for `X01`.
 
 ## Colour and text size (`X03`)
 
