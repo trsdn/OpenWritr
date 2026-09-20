@@ -1677,7 +1677,6 @@ final class AppViewModel {
     }
 }
 
-@main
 struct OpenWritrApp: App {
     @State private var viewModel = AppViewModel()
 
@@ -1721,6 +1720,21 @@ struct OpenWritrApp: App {
             default:
                 Image(systemName: "mic")
             }
+        }
+    }
+}
+
+/// Process entry point. `--self-test` runs the transcription pipeline on an
+/// audio file and exits without starting the menu bar app, so a release smoke
+/// test can exercise the published binary on a machine with no microphone.
+@main
+enum OpenWritrEntry {
+    static func main() {
+        let arguments = CommandLine.arguments
+        if arguments.contains("--self-test") {
+            SelfTest.run(arguments: arguments)
+        } else {
+            OpenWritrApp.main()
         }
     }
 }

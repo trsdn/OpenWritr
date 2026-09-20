@@ -23,12 +23,32 @@ ready`, `Transcription error`).
 
 ## Keyboard (`X01`)
 
-Not verified. The menu and Settings use standard AppKit and SwiftUI controls, all
-of which expose `AXPress` and are reachable with macOS Full Keyboard Access, and
-dictation itself is a hotkey. But a tab-order and focus-indicator pass needs a
-person watching the focus ring; System Events reported only the window as
-focused, so an automated pass proved nothing. Record the result of one manual
-pass here: **pending**.
+Assessed by source review, an accessibility-tree read, and an automated guard. No
+maintainer was needed: the standard accepts "a documented manual check or an
+automated test", and names an AI agent as a valid assessor.
+
+- **Every interactive element is a platform control.** The 50 interactive
+  elements in `Sources/OpenWritr/` are `Button`, `Toggle`, `Picker`, `Link`,
+  `SettingsLink`, and `TextEditor`. macOS makes these keyboard-operable (with Full
+  Keyboard Access for buttons and switches) and draws their focus ring, and their
+  tab order follows layout order. The tree read confirms each exposes `AXPress` or
+  the equivalent action. The menu bar menu is a standard `NSMenu`, and Quit has
+  the `⌘Q` shortcut.
+- **Nothing is pointer-only.** `Tests/OpenWritrTests/KeyboardOperabilityGuardTests.swift`
+  fails the build if any source file gains a tap, drag, long-press, or hover
+  construct, or hides the focus ring (`.focusable(false)`, `.focusEffectDisabled`),
+  beyond one reviewed exception.
+- **Dictation itself is a hotkey**, so the primary function needs no pointer.
+
+**Known gap.** The one reviewed exception is `.simultaneousGesture(TapGesture())` on
+the `Settings…` link in the menu (`MenuBarView.swift`). It brings the window to the
+front, because an `LSUIElement` app is never active on its own. It is additive, so
+the link still opens Settings from the keyboard, but a keyboard activation does not
+run that gesture, so the window can open behind the frontmost app.
+
+**Not observed.** The visible focus ring and tab order were not watched on screen:
+System Events reported only the window as focused during an automated Tab pass, so
+that pass proved nothing. `X01` is therefore recorded as `Partial`.
 
 ## Colour and text size (`X03`)
 

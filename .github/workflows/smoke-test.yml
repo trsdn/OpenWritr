@@ -1,0 +1,108 @@
+name: Release smoke test
+
+# Installs the PUBLISHED disk image the way a consumer would and exercises its
+# core function (speech-to-text) through the app's non-interactive --self-test
+# entry point. The job summary is the dated record for criterion R05.
+#
+# Runs after every release (called from release.yml) and on demand for a tag.
+# Releases before the one that introduced --self-test fail the check below.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Published release tag to test, for example v1.6.5
+        required: true
+        type: string
+  workflow_call:
+    inputs:
+      tag:
+        description: Published release tag to test
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: Install and transcribe
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - name: Download the published DMG and checksum
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Tag must look like v1.2.3: $TAG" >&2
+            exit 1
+          fi
+          mkdir -p dl
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir dl \
+            --pattern "OpenWritr-v*-macOS-arm64.dmg" \
+            --pattern "OpenWritr-v*-macOS-arm64.dmg.sha256"
+          (cd dl && shasum -a 256 -c ./*.dmg.sha256)
+
+      - name: Install to /Applications
+        shell: bash
+        run: |
+          set -euo pipefail
+          dmg="$(ls dl/*.dmg)"
+          mountpoint="$RUNNER_TEMP/openwritr-dmg"
+          mkdir -p "$mountpoint"
+          hdiutil attach "$dmg" -nobrowse -readonly -mountpoint "$mountpoint"
+          rm -rf /Applications/OpenWritr.app
+          ditto "$mountpoint/OpenWritr.app" /Applications/OpenWritr.app
+          hdiutil detach "$mountpoint"
+
+      - name: Verify signature and notarization as Gatekeeper sees them
+        shell: bash
+        run: |
+          set -euo pipefail
+          app=/Applications/OpenWritr.app
+          codesign --verify --deep --strict --verbose=2 "$app"
+          spctl --assess --type execute --verbose=2 "$app"
+          xcrun stapler validate "$app"
+
+      - name: Transcribe a spoken phrase with the installed app
+        shell: bash
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          app=/Applications/OpenWritr.app
+          binary="$app/Contents/MacOS/OpenWritr"
+          version="$(plutil -extract CFBundleShortVersionString raw "$app/Contents/Info.plist")"
+          if [[ "v$version" != "$TAG" ]]; then
+            echo "Installed app is $version but the tag is $TAG." >&2
+            exit 1
+          fi
+          if ! grep -aq -- '--self-test' "$binary"; then
+            echo "$TAG predates the --self-test entry point; nothing to exercise." >&2
+            exit 1
+          fi
+
+          phrase="Hello world, this is an OpenWritr smoke test."
+          say -o "$RUNNER_TEMP/smoke.aiff" "$phrase"
+          "$binary" --self-test "$RUNNER_TEMP/smoke.aiff" hello world smoke test | tee "$RUNNER_TEMP/self-test.log"
+
+          {
+            echo "## Release smoke test: OpenWritr $version"
+            echo
+            echo "| Field | Value |"
+            echo "|---|---|"
+            echo "| Date | $(date -u +%F) |"
+            echo "| Version | $version ($TAG) |"
+            echo "| Asset | $(basename "$(ls dl/*.dmg)") from the GitHub release, checksum verified |"
+            echo "| macOS | $(sw_vers -productVersion) on $(uname -m) |"
+            echo "| Exercised | Installed to /Applications, Gatekeeper and notarization checks, transcribed a synthesized phrase with the shipped speech model and required the words: hello world smoke test |"
+            echo "| Result | passed |"
+            echo
+            echo '```'
+            cat "$RUNNER_TEMP/self-test.log"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

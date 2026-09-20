@@ -59,7 +59,7 @@ criteria:
   R02: pass
   R03: pass
   R04: pass
-  R05: fail
+  R05: partial
   R06: pass
   R07: partial
   R08: pass
@@ -98,7 +98,7 @@ criteria:
   L05: pass
   L06: na
   L07: pass
-  X01: fail
+  X01: partial
   X02: partial
   X03: partial
   X04: na
