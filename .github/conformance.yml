@@ -3,8 +3,8 @@
 # Format: https://github.com/trsdn/.github/blob/main/docs/conformance-record.md
 # Per-criterion notes and rationale: docs/self-assessment.md
 
-standard_version: "1.13.0"
-assessed_on: "2026-09-19"
+standard_version: "1.14.0"
+assessed_on: "2026-09-20"
 state: "Needs work"
 evidence: "docs/self-assessment.md"
 
@@ -61,7 +61,7 @@ criteria:
   R04: pass
   R05: fail
   R06: pass
-  R07: partial
+  R07: pass
   R08: pass
   I01: pass
   I02: pass
