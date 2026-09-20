@@ -1,10 +1,10 @@
-# Conformance record for trsdn/OpenWritr.
+# Conformance record for trsdn/OpenWritr, assessed by an AI agent (no maintainer involved).
 #
-# Format: https://github.com/trsdn/.github/blob/main/docs/conformance-record.md
-# Per-criterion notes and rationale: docs/self-assessment.md
+# Format:   https://github.com/trsdn/.github/blob/v1.15.0/docs/conformance-record.md
+# Criteria: https://github.com/trsdn/.github/blob/v1.15.0/docs/repository-quality-standard.md
 
-standard_version: "1.13.0"
-assessed_on: "2026-09-19"
+standard_version: "1.15.0"
+assessed_on: "2026-09-20"
 state: "Needs work"
 evidence: "docs/self-assessment.md"
 
@@ -21,7 +21,7 @@ criteria:
   B10: pass
   B11: pass
   B12: pass
-  B13: partial
+  B13: fail
   B14: pass
   B15: pass
   B16: pass
@@ -33,16 +33,16 @@ criteria:
   P06: pass
   P07: pass
   P08: partial
-  P09: partial
+  P09: pass
   P10: pass
   P11: pass
   S01: pass
   S02: partial
   S03: partial
-  S04: partial
+  S04: pass
   S05: pass
   S06: pass
-  S07: partial
+  S07: pass
   S08: pass
   S09: pass
   S10: pass
@@ -55,26 +55,26 @@ criteria:
   D04: na
   D05: na
   D06: na
-  R01: pass
+  R01: partial
   R02: pass
   R03: pass
   R04: pass
   R05: fail
   R06: pass
-  R07: partial
+  R07: pass
   R08: pass
   I01: pass
-  I02: pass
-  I03: pass
+  I02: fail
+  I03: fail
   I04: pass
   I05: pass
-  I06: partial
+  I06: pass
   T01: na
   T02: na
   T03: na
   T04: na
   T05: na
-  W01: partial
+  W01: pass
   W02: pass
   W03: partial
   W04: pass
@@ -98,11 +98,11 @@ criteria:
   L05: pass
   L06: na
   L07: pass
-  X01: fail
+  X01: partial
   X02: partial
   X03: partial
   X04: na
-  X05: pass
+  X05: partial
   Y01: pass
   Y02: pass
   Y03: pass
