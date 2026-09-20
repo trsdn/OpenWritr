@@ -5,6 +5,16 @@ All notable changes to OpenWritr will be documented in this file.
 Each release's notes on GitHub are generated from its section here, and the
 release workflow fails when the section for a tag is missing or empty.
 
+## [1.6.5] — 2026-09-20
+
+### Added
+- The app bundle now carries its licence texts and third-party notices (`Contents/Resources/Licenses/`), plus its copyright, licence, description, repository, and issue-tracker links in its metadata
+- A `--self-test` command-line option that transcribes an audio file with the built-in speech model and exits, used by the release smoke test
+
+### Fixed
+- The Settings window now comes to the front however it is opened, including from the keyboard
+- The model picker for OpenAI-compatible providers now has an accessible name for screen readers
+
 ## [1.6.4] — 2026-09-19
 
 ### Fixed
