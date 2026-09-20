@@ -5,7 +5,7 @@
 - State: **Needs work**
 - Record: [`.github/conformance.yml`](../.github/conformance.yml)
 
-Result: 67 pass, 14 partial, 2 fail, 21 not applicable.
+Result: 68 pass, 13 partial, 2 fail, 21 not applicable.
 
 The state is **Needs work**: the record tooling does not allow `Healthy` while any
 criterion fails, and two do (`R05`, `X01`). Nothing critical
@@ -55,7 +55,6 @@ and `scripts/build-app.sh`, whose bundle was inspected).
 | `R05` | fail | [`docs/release-smoke-tests.md`](release-smoke-tests.md) has no entry. The maintainer reports a smoke test was done, but the record must name the version and what was exercised. | Add the dated entry. |
 | `X01` | fail | [`docs/accessibility.md`](accessibility.md) records what could be checked. A tab-order and focus-ring pass could not be observed from automation (System Events reported only the window as focused). | One manual pass with Full Keyboard Access, recorded there. |
 | `X03` | partial | [`docs/accessibility.md`](accessibility.md): every overlay state has a text label and icon, overlay text contrast is 9.6:1 to 13.3:1, Reduce Motion is respected. Settings warnings use system orange (about 2.2:1 on light backgrounds) and the overlay text is a fixed 11 pt. | Use a colour with 4.5:1 contrast for warnings; let overlay text scale. |
-| `P09` | partial | `stats.yml` (reusable workflow from `trsdn/.github`) and the README card are in place, writing to the `stats` branch because `main` is protected. The card does not exist until the workflow first runs on `main`. | Merge, then dispatch `Repository stats`; becomes `pass` once the SVGs exist. |
 | `S02` | partial | Ten unit tests cover the cleanup integrity validator and policy, including failure paths. Audio, hotkey, paste, overlay, and update behavior have no automated tests. | Extract those behaviors behind testable seams and cover them. |
 | `S03` | partial | CI builds with `-warnings-as-errors` under Swift 6 strict concurrency. There is no formatter or linter. | Add `swift-format` or SwiftLint to CI. |
 | `S04` | partial | CI runs on `macos-latest`, not on the macOS 14 minimum. | Add a macOS 14 runner to the matrix. |
@@ -79,6 +78,7 @@ and `scripts/build-app.sh`, whose bundle was inspected).
 - `B09`, `P07`: public, ten topics, homepage set, description present.
 - `B10`: [`.github/CODEOWNERS`](../.github/CODEOWNERS) names `@trsdn` (added here).
 - `B11`: the record itself.
+- `P09`: `stats.yml` renders the card daily to the `stats` branch (`main` is protected) and the README shows it; the first run succeeded on 2026-09-20.
 - `B01`, `B06`, `B12`: the description says transcription is local and cleanup optional; only squash merges are enabled and branches are deleted on merge; `main` requires `Secret Scan` and `Build and test`; the `trsdn-standard` topic is set.
 - `B08`, `R06`: `CHANGELOG.md` covers every release from 1.4.0 to 1.6.4.
 - `B15`: `THIRD_PARTY_NOTICES.md` lists the linked packages; `scripts/build-app.sh` bundles the licence texts under `Contents/Resources/Licenses/` (checked in a built app).
