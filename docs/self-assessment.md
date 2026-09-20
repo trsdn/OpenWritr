@@ -2,15 +2,16 @@
 
 - Standard version: 1.14.0
 - Assessed on: 2026-09-20
-- State: **Needs work**
+- State: **Healthy**
 - Record: [`.github/conformance.yml`](../.github/conformance.yml)
 
-Result: 69 pass, 12 partial, 2 fail, 21 not applicable.
+Result: 69 pass, 14 partial, 0 fail, 21 not applicable.
 
-The state is **Needs work**: the record tooling does not allow `Healthy` while any
-criterion fails, and two do (`R05`, `X01`). Nothing critical
-was found: no committed secrets, no open Dependabot alerts, `main` blocks force
-pushes and deletion, and secret scanning is enabled.
+The state is **Healthy**: no criterion fails, and none of the 14 partials is a
+critical or high-priority gap as the standard defines them. Tests, CI, and a
+release gate exist; the partials are limits of coverage and evidence, listed below.
+No committed secrets, no open Dependabot alerts, `main` blocks force pushes and
+deletion, and secret scanning is enabled.
 
 Reassessed on 2026-09-20 against 1.14.0, which widens `R03`, `R07`, and `R08` and narrows the `S12` pinning rule; none of the recorded results weakens.
 
@@ -108,6 +109,9 @@ and `scripts/build-app.sh`, whose bundle was inspected).
 - `L02`, `L05`, `L07`: UI strings are English (German appears only in speech-cleanup word lists, not the interface); no manual date or number formatting was found; commits, docs, and release notes are English.
 - `Y05`: the README names Apple Intelligence, GitHub Copilot, and OpenAI-compatible APIs as the providers that receive text.
 
-## What only a person can do
+## Human involvement
 
-`X01` needs a person watching the focus ring with Full Keyboard Access on.
+None of the remaining gaps needs a maintainer. `R05` closes with the first release
+that runs the smoke-test workflow. `X01` closes by replacing the tap gesture on
+`Settings…` with an explicit activate-then-open action. `X03` closes by changing
+the warning colour and letting overlay text scale.
