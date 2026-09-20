@@ -2,8 +2,8 @@
 
 - Assessed on: 2026-09-20, by an AI agent; no maintainer was asked anything.
 - Repository read: `main` at `34fdc90` (exported without git metadata), plus the GitHub API through `gh` (read-only) and the latest release, `v1.6.4`, downloaded and inspected.
-- State: **Needs work** (`B13`, `R05`, `I02`, `I03` are `Fail`; none is a critical criterion).
-- Result counts: 69 pass, 10 partial, 4 fail, 21 na (104 criteria).
+- State: **Needs work** (`I02`, `I03` are `Fail`; neither is a critical criterion). Updated for the changes in this branch; both close with the next release.
+- Result counts: 72 pass, 9 partial, 2 fail, 21 na (104 criteria).
 
 ## What the assessor did and did not read
 
@@ -60,7 +60,7 @@ Automation Availability does not apply: hosted runners are available and used.
 | B10 | pass | README status sentence; `.github/CODEOWNERS` names `@trsdn`; the account owns the repository. |
 | B11 | pass | This record, dated 2026-09-20. |
 | B12 | pass | Topic `trsdn-standard` is present. |
-| B13 | fail | Two facts are stated in two places and differ. (1) README: "`scripts/build-app.sh` ... requires a locally available Developer ID Application or Apple Development certificate"; `AGENTS.md`: "or it creates a self-signed one" and "Signing uses a self-signed certificate in `.build/signing.keychain-db`, created by the build script". The script exits with an error when no identity exists and creates no keychain, so `AGENTS.md` is wrong. (2) README validation line is `swift build -c release` and `swift test`; `AGENTS.md` and CI use `-Xswiftc -warnings-as-errors`. Beyond that, the validation command, macOS 14 requirement and release secrets are restated by hand across README, `AGENTS.md`, `docs/`. |
+| B13 | partial | The two disagreements found on `main` are fixed: `AGENTS.md` no longer claims the build script creates a self-signed certificate (it exits without a Developer ID or Apple Development identity), and the README no longer restates the validation command, linking `AGENTS.md` instead. The requirements and release secrets are still stated in both the README and `AGENTS.md`, which agree. |
 | B14 | pass | `AGENTS.md` "Credentials and revocation" names each credential class, where it lives and who replaces it. |
 | B15 | pass | `THIRD_PARTY_NOTICES.md` lists the three linked packages and how the obligations are met. The v1.6.4 artifact does not yet carry the licence texts the notice promises; that is recorded under `I03`. |
 | B16 | pass | Branch protection on `main`: `allow_force_pushes` false, `allow_deletions` false. |
@@ -120,7 +120,7 @@ Assessed on the latest release, `v1.6.4` (2026-09-19), assets `OpenWritr-v1.6.4-
 | R02 | pass | README "Versioning and compatibility" names SemVer and states what each kind of release means. |
 | R03 | pass | Tag `v1.6.4` points at commit `a15b547`; `release.yml` triggers on `v*` tags and the run for that tag succeeded. |
 | R04 | pass | Tag `v1.6.4`, bundle `CFBundleShortVersionString` 1.6.4 (read from the download), title "OpenWritr 1.6.4". |
-| R05 | fail | No smoke kit exists on `main`: no script or workflow takes the published file, unpacks it and starts it. `docs/release-smoke-tests.md` describes a manual, operator-run check and has no entries ("No entries yet"), and the README "Verifying a download" commands and the `release.yml` verify step check signatures without starting the app and not against the published file. No dated record names a version launched by hand. The artifact can be checked automatically: the assessor ran `shasum -c`, `codesign --verify --deep --strict`, `spctl --assess` and `stapler validate` on the downloaded ZIP and DMG and all passed, but did not launch it, so this is no record of a launch. No kit was run, because none exists; the row "No kit and no such record exist, and the artifact could be checked automatically" gives `Fail`. |
+| R05 | partial | A smoke kit exists: `.github/workflows/smoke-test.yml` downloads the published DMG, verifies its checksum, installs it, checks Gatekeeper and notarization, and transcribes a synthesized phrase with the shipped model through `--self-test`, without anyone operating the product. `release.yml` calls it after every release. Its steps were dry-run against the real v1.6.4 assets and the self-test was run against a local build, but no workflow run exists for the current build, because v1.6.4 predates `--self-test`. The standard's row "a kit exists and no run or record exists for the current build" gives `Partial`. Closes with the next release. |
 | R06 | pass | Release notes: "### Fixed - Brought the Settings window to the front ... (#42)", specific, nothing breaking to warn about. |
 | R07 | pass | Release body equals the 1.6.4 changelog entry plus a "Full changelog" link; the entry exists and is not empty. `release.yml` on `main` gates on it and passes it as the notes. |
 | R08 | pass | Developer ID signature (Team `G69Z5BNY97`) and stapled notarization verified on the download (`codesign` valid, `spctl` "accepted, source=Notarized Developer ID", `stapler validate` worked); README "Verifying a download" gives the commands and says the attestation is deliberately not published (#31) and that this does not prove the source commit. `gh attestation verify` finds none, as stated. |
@@ -195,11 +195,11 @@ Source review; the running app was not operated.
 
 | ID | Result | Evidence |
 |---|---|---|
-| X01 | partial | Settings, menu and About use standard SwiftUI/AppKit controls, and the main flow is a hotkey. One named gap: `MenuBarView.swift` activates the app for the Settings link with `simultaneousGesture(TapGesture())`, which does not run on keyboard activation, so a keyboard user can open Settings behind another app. No focus indicator is suppressed. `docs/accessibility.md` records the manual pass as pending. |
-| X02 | partial | Toggles, pickers and buttons use standard labelled controls; the overlay sets an accessibility label. One control has no name: the model `Picker("")` with `.labelsHidden()` in `SettingsView.swift` (OpenAI-compatible provider). |
+| X01 | pass | Settings, menu and About use standard SwiftUI/AppKit controls and the main flow is a hotkey; `KeyboardOperabilityGuardTests` fails the build on any pointer-only construct or suppressed focus ring, with no exceptions. The activation of the app for Settings moved from a tap gesture into the window helper so keyboard activation is covered; that change was not exercised in a running app (`docs/accessibility.md`). Reading: source review and an automated test are the evidence the standard names. |
+| X02 | pass | Toggles, pickers and buttons use standard labelled controls, the overlay sets an accessibility label, and the previously unnamed OpenAI-compatible model picker now has one. |
 | X03 | partial | Meaning is not carried by colour alone (each overlay state has text and icon), overlay contrast is above 9:1 and Reduce Motion is respected. Gaps: `Color.orange` warning text is about 2.2:1 on a light background, and overlay text is fixed at 11 pt. |
 | X04 | na | The product has no terminal output (no command-line mode on `main`). |
-| X05 | partial | README "Accessibility" states real limitations (hold to talk, no announcements, orange contrast, fixed size, no VoiceOver or keyboard pass) but omits the keyboard-activation gap on Settings (`X01`) and the unnamed model picker (`X02`). |
+| X05 | pass | README "Accessibility" states the real limitations, including that the keyboard pass was a source review and guard and that a report of Settings opening behind another app would reopen it. |
 
 ## Data Protection And Privacy
 

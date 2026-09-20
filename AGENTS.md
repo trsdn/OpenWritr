@@ -28,7 +28,7 @@ transcript text to the provider the user chose.
 | `Tests/OpenWritrTests/` | Unit tests (Swift Testing) for pure logic. |
 | `Sources/ObjCExceptionCatcher/` | Small Objective-C shim so Swift can catch `NSException`. |
 | `Resources/AppIcon.icns` | The app icon copied into the bundle. |
-| `Info.plist` | Bundle identity: name, version, copyright, licence, repository and issue URLs. `Package.swift` has no fields for these, so they live here; the release build overrides the version from the tag. Extended by `scripts/build-app.sh`. |
+| `Info.plist` | Bundle identity: name, version, description, copyright, licence, repository and issue URLs. `Package.swift` has no fields for these, so they live here; the release build overrides the version from the tag. Extended by `scripts/build-app.sh`. |
 | `scripts/` | Build, sign, notarize, DMG, release, and model-evaluation scripts. |
 | `eval/cleanup-cases.json` | Synthetic cleanup-model benchmark cases. Never add private dictation. |
 | `docs/` | GitHub Pages site (`index.html` and assets), served from `main` `/docs`. |
@@ -59,7 +59,7 @@ Concurrency model: `AppViewModel` is `@MainActor`. `AudioEngine` is `@unchecked 
 
 Preferences live in `UserDefaults` (no separate plist). Custom cleanup prompts use a versioned per-provider/model store so bundled tuned defaults can change without overwriting user text.
 
-Signing uses a self-signed certificate in `.build/signing.keychain-db`, created by the build script. On a fresh machine the keychain is regenerated.
+`scripts/build-app.sh` signs with a Developer ID Application or Apple Development certificate found in the local keychain (or named in `OPENWRITR_SIGNING_IDENTITY`) and exits with an error if there is none; it creates no certificate. Ad-hoc signatures are refused, because macOS would reset the app's permissions.
 
 ## Enhanced Mode
 
@@ -85,7 +85,7 @@ OpenWritr is distributed outside the Mac App Store. `UpdateManager` (AppUpdater 
 
 Anything not listed here is hand-maintained.
 
-- Generated, never hand-edit: `.build/` (SwiftPM output, the ad-hoc signing keychain, and the built `.app`), `dist/` and `.artifacts/` (release and evaluation output), `*.dmg` and `*.dmg.sha256`. All are git-ignored; regenerate with `swift build -c release`, `scripts/build-app.sh`, or the release scripts.
+- Generated, never hand-edit: `.build/` (SwiftPM output and the built `.app`), `dist/` and `.artifacts/` (release and evaluation output), `*.dmg` and `*.dmg.sha256`. All are git-ignored; regenerate with `swift build -c release`, `scripts/build-app.sh`, or the release scripts.
 - Machine-owned: `Package.resolved`. Change it only by updating `Package.swift` or by merging a Dependabot PR.
 - Bundled, edit deliberately: `Sources/OpenWritr/Resources/cleanup-prompt-profiles.json`. Editing it changes shipped prompt defaults for every user.
 
@@ -107,7 +107,7 @@ cp -R .build/release/OpenWritr.app /Applications/
 open /Applications/OpenWritr.app
 ```
 
-The build script needs a local Developer ID Application or Apple Development certificate, or it creates a self-signed one. The app asks for Microphone and Accessibility permission on first use.
+The build script needs a Developer ID Application or Apple Development certificate in the local keychain. The app asks for Microphone and Accessibility permission on first use.
 
 ## Validate before proposing a change
 
@@ -153,7 +153,6 @@ the secret.
 | `APPLE_ID`, `APPLE_TEAM_ID`, `APPLE_APP_PASSWORD` | Actions secrets | Revoke the app-specific password at appleid.apple.com, create a new one, update `APPLE_APP_PASSWORD`. Maintainer only. |
 | Local notary profile (`xcrun notarytool store-credentials`) | The maintainer's login keychain | Revoke the app-specific password as above and store the profile again. |
 | User-entered provider API keys | The user's macOS Keychain (`KeychainStore`) | The user revokes the key with the provider and enters a new one in Settings. The repository holds none. |
-| Self-signed local signing certificate | `.build/signing.keychain-db`, git-ignored | Delete `.build/` and rebuild; the script regenerates it. |
 
 ## Attribution
 

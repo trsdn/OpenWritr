@@ -11,6 +11,8 @@ private enum PromptTargetChange {
 
 /// Keeps the hosting window above other windows, including the floating
 /// recording overlay, and brings it to the front whenever it is shown.
+/// An `LSUIElement` app is never active on its own, so it also activates the app
+/// here rather than in a tap gesture, which keyboard activation would skip.
 private struct KeepWindowOnTop: NSViewRepresentable {
     func makeNSView(context: Context) -> NSView {
         let view = NSView()
@@ -18,6 +20,7 @@ private struct KeepWindowOnTop: NSViewRepresentable {
             guard let window = view?.window else { return }
             window.level = NSWindow.Level(rawValue: NSWindow.Level.floating.rawValue + 1)
             window.collectionBehavior.insert(.moveToActiveSpace)
+            NSApplication.shared.activate(ignoringOtherApps: true)
             window.makeKeyAndOrderFront(nil)
         }
         return view
@@ -193,6 +196,7 @@ struct SettingsView: View {
                         }
                     }
                     .labelsHidden()
+                    .accessibilityLabel("OpenAI-compatible model")
                     .disabled(isEditingPrompt)
 
                     if let message = viewModel.openAIModelRefreshMessage {

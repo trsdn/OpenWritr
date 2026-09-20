@@ -14,11 +14,6 @@ struct MenuBarView: View {
             SettingsLink {
                 Label("Settings…", systemImage: "gearshape")
             }
-            // An LSUIElement app is never active on its own; without this the
-            // Settings window opens behind whichever app was frontmost.
-            .simultaneousGesture(TapGesture().onEnded {
-                NSApplication.shared.activate(ignoringOtherApps: true)
-            })
             Button {
                 openWindow(id: "about")
             } label: {

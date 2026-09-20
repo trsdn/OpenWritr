@@ -78,5 +78,4 @@ hdiutil detach /Volumes/OpenWritr
 - [ ] Verify checksum
 - [ ] Install and launch on a clean user profile or second machine
 - [ ] Confirm app starts and prompts for permissions as expected
-- [ ] Dictate into a text field and confirm the transcript is pasted
-- [ ] Add a dated entry to [docs/release-smoke-tests.md](docs/release-smoke-tests.md) naming the version and what was exercised
+- [ ] The `Smoke-test the published release` job of the release run passed; its job summary is the `R05` record ([docs/release-smoke-tests.md](docs/release-smoke-tests.md))
