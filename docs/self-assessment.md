@@ -2,8 +2,8 @@
 
 - Assessed on: 2026-09-20, by an AI agent; no maintainer was asked anything.
 - Repository read: `main` at `34fdc90` (exported without git metadata), plus the GitHub API through `gh` (read-only) and the latest release, `v1.6.4`, downloaded and inspected.
-- State: **Needs work** (`I02`, `I03` are `Fail`; neither is a critical criterion). Updated for the changes in this branch; both close with the next release.
-- Result counts: 72 pass, 9 partial, 2 fail, 21 na (104 criteria).
+- State: **Healthy**. Updated 2026-09-20 after release `v1.6.5`, which closed `I02`, `I03`, `R01`, and `R05` against the published artifact.
+- Result counts: 76 pass, 7 partial, 0 fail, 21 na (104 criteria).
 
 ## What the assessor did and did not read
 
@@ -116,11 +116,11 @@ Assessed on the latest release, `v1.6.4` (2026-09-19), assets `OpenWritr-v1.6.4-
 
 | ID | Result | Evidence |
 |---|---|---|
-| R01 | partial | Properties and homes: name, version, licence and repository URL are in `Info.plist` on `main` (`CFBundleName`, `CFBundleShortVersionString`, `OpenWritrLicense`, `OpenWritrRepositoryURL`) and `AGENTS.md` states why they live there. The description has no home in the manifest or `Info.plist`; it exists only as GitHub metadata. The published `v1.6.4` bundle carries only name and version (see `I02`, `I03`). |
+| R01 | pass | Name, version, description, copyright, licence, and repository and issue URLs all have a home in `Info.plist`, and `AGENTS.md` states why (`Package.swift` has no fields for them). The published `v1.6.5` bundle carries them, and they agree with the GitHub metadata. |
 | R02 | pass | README "Versioning and compatibility" names SemVer and states what each kind of release means. |
 | R03 | pass | Tag `v1.6.4` points at commit `a15b547`; `release.yml` triggers on `v*` tags and the run for that tag succeeded. |
 | R04 | pass | Tag `v1.6.4`, bundle `CFBundleShortVersionString` 1.6.4 (read from the download), title "OpenWritr 1.6.4". |
-| R05 | partial | A smoke kit exists: `.github/workflows/smoke-test.yml` downloads the published DMG, verifies its checksum, installs it, checks Gatekeeper and notarization, and transcribes a synthesized phrase with the shipped model through `--self-test`, without anyone operating the product. `release.yml` calls it after every release. Its steps were dry-run against the real v1.6.4 assets and the self-test was run against a local build, but no workflow run exists for the current build, because v1.6.4 predates `--self-test`. The standard's row "a kit exists and no run or record exists for the current build" gives `Partial`. Closes with the next release. |
+| R05 | pass | `smoke-test.yml` ran for `v1.6.5` as part of the release run (Actions run 35534329100, job `Smoke-test the published release`, conclusion success): it downloaded the published DMG, verified its checksum, installed it, checked Gatekeeper and notarization, and transcribed a synthesized phrase through `--self-test`, without anyone operating the product. The job summary is the dated record. |
 | R06 | pass | Release notes: "### Fixed - Brought the Settings window to the front ... (#42)", specific, nothing breaking to warn about. |
 | R07 | pass | Release body equals the 1.6.4 changelog entry plus a "Full changelog" link; the entry exists and is not empty. `release.yml` on `main` gates on it and passes it as the notes. |
 | R08 | pass | Developer ID signature (Team `G69Z5BNY97`) and stapled notarization verified on the download (`codesign` valid, `spctl` "accepted, source=Notarized Developer ID", `stapler validate` worked); README "Verifying a download" gives the commands and says the attestation is deliberately not published (#31) and that this does not prove the source commit. `gh attestation verify` finds none, as stated. |
@@ -132,8 +132,8 @@ Read from the downloaded `v1.6.4` ZIP (`OpenWritr.app/Contents/Info.plist`).
 | ID | Result | Evidence |
 |---|---|---|
 | I01 | pass | `CFBundleName` OpenWritr, `CFBundleShortVersionString` and `CFBundleVersion` 1.6.4, equal to the release. |
-| I02 | fail | The published `Info.plist` has no repository or issue URL key, and the bundle contains no other file naming them. `Info.plist` on `main` has `OpenWritrRepositoryURL` and `OpenWritrIssuesURL`, but a value that appears only in source is not evidence. |
-| I03 | fail | The published bundle has no `NSHumanReadableCopyright`, no licence identifier and no licence text (`Contents/Resources` holds only `AppIcon.icns`, `AppUpdater_AppUpdater.bundle`, `cleanup-prompt-profiles.json`). MIT requires the notice in copies, so the text is required. `main` adds these keys and `Resources/Licenses/`, but no release contains them yet. |
+| I02 | pass | The published `v1.6.5` bundle's `Info.plist` carries `OpenWritrRepositoryURL` and `OpenWritrIssuesURL` (read from the downloaded release ZIP). |
+| I03 | pass | The published `v1.6.5` bundle carries `NSHumanReadableCopyright`, `OpenWritrLicense` (`MIT`), and `Contents/Resources/Licenses/` with the OpenWritr licence, the dependency licences, and `THIRD_PARTY_NOTICES.md`. |
 | I04 | pass | Source read, app not operated: `AboutView.swift` shows "Version X", and links the repository, "Report an Issue" and the licence. |
 | I05 | pass | `CFBundleIconFile` = `AppIcon`, `AppIcon.icns` in the bundle; the site's `icon.svg`, `icon-192.png`, `apple-touch-icon.png` and `favicon.ico` show the same icon (compared visually). No store listing exists. |
 | I06 | pass | `release.yml` passes `OPENWRITR_VERSION` from the tag and `build-app.sh` writes it into the bundle after a gate checks `Info.plist` against the tag; the other identity values are constants in `Info.plist`, one source-controlled place the build copies into the artifact. |
