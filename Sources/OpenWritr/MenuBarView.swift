@@ -52,7 +52,7 @@ struct MenuBarView: View {
             } else if let warning = viewModel.lastEnhancementWarning {
                 Text(warning)
                     .font(.caption)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(Color.warningText)
                     .padding(.horizontal, 4)
                     .fixedSize(horizontal: false, vertical: true)
             }

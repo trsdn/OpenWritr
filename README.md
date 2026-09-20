@@ -56,18 +56,9 @@ Enhanced Mode can run on demand with **Shift + hotkey**, or **Always Enhance Rec
 
 Download the latest signed app from [Releases](https://github.com/trsdn/OpenWritr/releases), unzip it, and move `OpenWritr.app` to `/Applications`.
 
-To build from source:
+To build from source, follow **Setup** and **Run** in [AGENTS.md](AGENTS.md#setup). Building the signed app needs a Developer ID Application or Apple Development certificate in your keychain.
 
-```sh
-git clone https://github.com/trsdn/OpenWritr.git
-cd OpenWritr
-swift build -c release
-bash scripts/build-app.sh
-cp -R .build/release/OpenWritr.app /Applications/
-open /Applications/OpenWritr.app
-```
-
-`scripts/build-app.sh` creates the signed `.app` bundle and requires a Developer ID Application or Apple Development certificate in your keychain. The validation command is in [AGENTS.md](AGENTS.md).
+Then grant **Microphone** and **Accessibility** permissions when prompted. The Parakeet model downloads automatically (~460 MB).
 
 ### Cleanup model evaluation
 
@@ -102,13 +93,7 @@ ZIP from that notarized app, then creates and notarizes a DMG. GitHub Releases f
 - notarized DMG + SHA-256 checksum
 - an additional `OpenWritr-{version}.dmg` (same signed/notarized bytes, renamed for [AppUpdater](#in-app-updates))
 
-Required GitHub Actions secrets:
-
-- `MACOS_CERTIFICATE` — base64-encoded Developer ID Application `.p12`
-- `MACOS_CERTIFICATE_PWD` — password for the `.p12`
-- `APPLE_ID` — Apple ID used for notarization
-- `APPLE_TEAM_ID` — Apple Developer Team ID
-- `APPLE_APP_PASSWORD` — app-specific password for notarization
+The required GitHub Actions secrets and what to do if one is exposed are listed in [AGENTS.md](AGENTS.md#credentials-and-revocation).
 
 For local releases, copy the example environment and store a notary profile once:
 
@@ -124,8 +109,6 @@ scripts/release_macos.sh
 
 Important: if you distribute a ZIP, notarize and staple the `.app` before creating the archive. A
 stapled DMG ticket alone does not protect ZIP distribution.
-
-Then grant **Microphone** and **Accessibility** permissions when prompted. The Parakeet model downloads automatically (~460 MB).
 
 ### In-app updates
 
@@ -161,7 +144,7 @@ Known limitations, stated rather than left to be discovered:
 
 - Dictating requires **holding** a key. There is no toggle mode, which can be difficult without fine motor control.
 - The overlay shows state visually and does not steal focus; users of assistive technology hear no announcement besides the sound cues.
-- Warning text in Settings uses system orange, which has low contrast (about 2.2:1) on a light background, and the overlay text is a fixed 11 pt.
+- The recording overlay and the prompt editor use fixed text sizes; macOS has no Dynamic Type for them to follow.
 - The app has **not** been tested with VoiceOver, and the keyboard pass was a source review and an automated guard, not a session at the screen. A report that Settings opens behind another app when opened from the keyboard would mean the activation fix did not work. See [docs/accessibility.md](docs/accessibility.md) for what was checked. Reports are welcome.
 
 ## Language

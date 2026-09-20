@@ -51,7 +51,7 @@ struct SettingsView: View {
 
                 Text(inputDeviceStatusMessage)
                     .font(.caption)
-                    .foregroundStyle(inputDeviceStatusNeedsAttention ? Color.orange : Color.secondary)
+                    .foregroundStyle(inputDeviceStatusNeedsAttention ? Color.warningText : Color.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
                 Picker("Push-to-Talk Key", selection: Binding(
@@ -129,7 +129,7 @@ struct SettingsView: View {
                         .foregroundStyle(
                             viewModel.appleIntelligenceAvailability.isAvailable
                                 ? Color.secondary
-                                : Color.orange
+                                : Color.warningText
                         )
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -276,7 +276,7 @@ struct SettingsView: View {
                 if let warning = viewModel.lastEnhancementWarning {
                     Text(warning)
                         .font(.caption)
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(Color.warningText)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }

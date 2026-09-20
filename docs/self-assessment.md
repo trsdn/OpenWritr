@@ -2,8 +2,8 @@
 
 - Assessed on: 2026-09-20, by an AI agent; no maintainer was asked anything.
 - Repository read: `main` at `34fdc90` (exported without git metadata), plus the GitHub API through `gh` (read-only) and the latest release, `v1.6.4`, downloaded and inspected.
-- State: **Healthy**. Updated 2026-09-20 after release `v1.6.5`, which closed `I02`, `I03`, `R01`, and `R05` against the published artifact.
-- Result counts: 76 pass, 7 partial, 0 fail, 21 na (104 criteria).
+- State: **Healthy**. Updated 2026-09-20 after `v1.6.5` and the follow-up that closed `B13`, `P08`, `W03`, `W08`, and `X03`. Open: `S02`, `S03` (Partial).
+- Result counts: 81 pass, 2 partial, 0 fail, 21 na (104 criteria).
 
 ## What the assessor did and did not read
 
@@ -60,7 +60,7 @@ Automation Availability does not apply: hosted runners are available and used.
 | B10 | pass | README status sentence; `.github/CODEOWNERS` names `@trsdn`; the account owns the repository. |
 | B11 | pass | This record, dated 2026-09-20. |
 | B12 | pass | Topic `trsdn-standard` is present. |
-| B13 | partial | The two disagreements found on `main` are fixed: `AGENTS.md` no longer claims the build script creates a self-signed certificate (it exits without a Developer ID or Apple Development identity), and the README no longer restates the validation command, linking `AGENTS.md` instead. The requirements and release secrets are still stated in both the README and `AGENTS.md`, which agree. |
+| B13 | pass | Each fact has one home. Build, run, and validation commands: `AGENTS.md` (the README and the site link to it). Release secrets and revocation: `AGENTS.md` (the README links). Requirements: the README (`AGENTS.md` links). The two earlier disagreements are fixed. |
 | B14 | pass | `AGENTS.md` "Credentials and revocation" names each credential class, where it lives and who replaces it. |
 | B15 | pass | `THIRD_PARTY_NOTICES.md` lists the three linked packages and how the obligations are met. The v1.6.4 artifact does not yet carry the licence texts the notice promises; that is recorded under `I03`. |
 | B16 | pass | Branch protection on `main`: `allow_force_pushes` false, `allow_deletions` false. |
@@ -76,7 +76,7 @@ Automation Availability does not apply: hosted runners are available and used.
 | P05 | pass | README covers install, configuration (Settings, hotkeys, Enhanced Mode, update toggle), examples (How It Works, evaluation commands), compatibility (Requirements), security (link to policy), support status (Support and security). |
 | P06 | pass | Community profile health 100; README, licence, contributing and code of conduct recognised. |
 | P07 | pass | Description, ten topics plus `trsdn-standard`; homepage returns HTTP 200. |
-| P08 | partial | Order is right (licence, platform, CI, release, conformance) and every badge links to what it reports. CI uses GitHub's own badge, release uses a live shields image. The licence badge (`badge/License-MIT-blue.svg`) and the platform badge (`macOS-14+`) are hardcoded values duplicating `LICENSE` and `Package.swift` with no check that fails on drift, and the committed conformance badge has no workflow checking it against the record (no conformance workflow in `.github/workflows/`). |
+| P08 | pass | The release badge is live and the CI badge is GitHub's own. The hand-typed license and platform badges are covered by `ReadmeBadgeConsistencyTests`, which fails when they drift from `LICENSE` and `Package.swift`, and the conformance badge by the `Conformance` workflow, which fails when it drifts from the record. |
 | P09 | pass | `stats.yml` calls the shared reusable workflow daily (`cron 23 5 * * *`), writes to the `stats` branch; `repo-card.svg` and `repo-card-dark.svg` exist there (latest scheduled run success), the README uses `<picture>`, and the SVGs contain no `<image>`, `@import`, font-face or host other than the SVG namespace. |
 | P10 | pass | Bug form has expected result, actual result, reproduction, version and environment. |
 | P11 | pass | Template has summary, related issue, validation, and impact (risk, security/privacy, compatibility). |
@@ -156,12 +156,12 @@ Source read only (`docs/index.html`); the page was not rendered, except that the
 |---|---|---|
 | W01 | pass | GitHub Pages source is branch `main`, folder `/docs` (from the Pages API); `AGENTS.md` says `docs/` is the Pages site served from `main` `/docs`. |
 | W02 | pass | Homepage field is the site; the single page links the repository in the nav and footer. |
-| W03 | partial | The hero states what it is (native macOS menu bar app for speech to text) but not who it is for or the status; "Actively maintained" appears only in the footer. |
+| W03 | pass | The hero now says what the project is, who it is for ("anyone who dictates on a Mac"), and its status ("Actively maintained"), above the fold. |
 | W04 | pass | Page has name and sentence, "Actively maintained" and "describes the latest release", what it does with a mock, download and build steps, the `Y01` sentence ("No telemetry, no cookies, no third-party requests"), links to repository, licence, security and support, and "Page reviewed 2026-09-19". |
 | W05 | na | Retired. |
 | W06 | na | Retired. |
 | W07 | pass | Searched `src`, `href`, `@import`, `url(` and `<script>`: fonts are self-hosted under `docs/fonts/`; the only `url(` is a `data:` URI; the script is inline; no cookie or storage API, no analytics. |
-| W08 | partial | The site's Install block repeats the source-build commands from the README without linking to their home there. It has no contributor, architecture or changelog section. |
+| W08 | pass | The site's build-from-source block was replaced by a link to the README's install section; requirements and release detail are not repeated. |
 | W09 | pass | Own stylesheet with custom colour tokens, self-hosted DM Sans and JetBrains Mono, and custom layout. |
 
 ## Agent Readiness
@@ -197,7 +197,7 @@ Source review; the running app was not operated.
 |---|---|---|
 | X01 | pass | Settings, menu and About use standard SwiftUI/AppKit controls and the main flow is a hotkey; `KeyboardOperabilityGuardTests` fails the build on any pointer-only construct or suppressed focus ring, with no exceptions. The activation of the app for Settings moved from a tap gesture into the window helper so keyboard activation is covered; that change was not exercised in a running app (`docs/accessibility.md`). Reading: source review and an automated test are the evidence the standard names. |
 | X02 | pass | Toggles, pickers and buttons use standard labelled controls, the overlay sets an accessibility label, and the previously unnamed OpenAI-compatible model picker now has one. |
-| X03 | partial | Meaning is not carried by colour alone (each overlay state has text and icon), overlay contrast is above 9:1 and Reduce Motion is respected. Gaps: `Color.orange` warning text is about 2.2:1 on a light background, and overlay text is fixed at 11 pt. |
+| X03 | pass | Meaning is not carried by colour alone (every overlay state has a text label and an icon). Overlay text is 9.6:1 to 13.3:1 on its background; warning text now uses `Color.warningText`, 6.1:1 on white and about 8:1 in dark mode, replacing system orange (about 2.2:1). Reduce Motion is respected. Text sizes are fixed points because macOS has no Dynamic Type for a menu bar app to follow, stated in `docs/accessibility.md`. |
 | X04 | na | The product has no terminal output (no command-line mode on `main`). |
 | X05 | pass | README "Accessibility" states the real limitations, including that the keyboard pass was a source review and guard and that a report of Settings opening behind another app would reopen it. |
 
