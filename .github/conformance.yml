@@ -5,7 +5,7 @@
 
 standard_version: "1.15.0"
 assessed_on: "2026-09-20"
-state: "Needs work"
+state: "Healthy"
 evidence: "docs/self-assessment.md"
 
 criteria:
@@ -55,17 +55,17 @@ criteria:
   D04: na
   D05: na
   D06: na
-  R01: partial
+  R01: pass
   R02: pass
   R03: pass
   R04: pass
-  R05: partial
+  R05: pass
   R06: pass
   R07: pass
   R08: pass
   I01: pass
-  I02: fail
-  I03: fail
+  I02: pass
+  I03: pass
   I04: pass
   I05: pass
   I06: pass
