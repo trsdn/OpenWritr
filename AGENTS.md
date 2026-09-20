@@ -158,5 +158,4 @@ the secret.
 
 Agent-authored commits carry the `Co-Authored-By` trailer for the model that
 wrote them, and pull request descriptions state that they were generated with an
-agent. Every change lands through a pull request that the maintainer reviews;
-agents do not merge their own work or push to `main`.
+agent. Every change lands through a pull request; agents do not push to `main`.
