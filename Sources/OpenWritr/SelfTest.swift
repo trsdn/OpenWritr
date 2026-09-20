@@ -1,4 +1,4 @@
-import AVFoundation
+@preconcurrency import AVFoundation
 import Foundation
 
 /// Non-interactive check of the shipped transcription pipeline.
@@ -73,14 +73,14 @@ enum SelfTest {
         guard let output = AVAudioPCMBuffer(pcmFormat: target, frameCapacity: capacity) else {
             throw SelfTestError.unreadableAudio
         }
-        var supplied = false
+        let feed = ConverterFeed()
         var conversionError: NSError?
         converter.convert(to: output, error: &conversionError) { _, status in
-            if supplied {
+            if feed.supplied {
                 status.pointee = .endOfStream
                 return nil
             }
-            supplied = true
+            feed.supplied = true
             status.pointee = .haveData
             return input
         }
@@ -88,6 +88,12 @@ enum SelfTest {
         guard let channel = output.floatChannelData?[0] else { throw SelfTestError.unreadableAudio }
         return Array(UnsafeBufferPointer(start: channel, count: Int(output.frameLength)))
     }
+}
+
+/// Tracks whether the single input buffer was handed to the converter; the
+/// converter calls its input block from its own context.
+private final class ConverterFeed: @unchecked Sendable {
+    var supplied = false
 }
 
 enum SelfTestError: Error, LocalizedError {
