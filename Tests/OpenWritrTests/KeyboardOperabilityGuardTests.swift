@@ -5,9 +5,6 @@ import Testing
 /// control (`Button`, `Toggle`, `Picker`, `Link`, `TextEditor`, `SettingsLink`),
 /// which macOS makes keyboard-operable and gives a focus ring. Interaction that
 /// only a pointer can trigger, or that hides the focus ring, would break that.
-///
-/// The one existing gesture is additive: `SettingsLink` keeps its own activation,
-/// and the tap gesture only brings the window forward (see docs/accessibility.md).
 @Suite("Keyboard operability guard")
 struct KeyboardOperabilityGuardTests {
     private static let pointerOnlyPatterns = [
@@ -16,9 +13,7 @@ struct KeyboardOperabilityGuardTests {
     ]
 
     /// File name → number of occurrences that were reviewed and accepted.
-    private static let reviewedExceptions: [String: Int] = [
-        "MenuBarView.swift": 1,  // .simultaneousGesture(TapGesture()...) on SettingsLink
-    ]
+    private static let reviewedExceptions: [String: Int] = [:]
 
     private static var sourcesDirectory: URL {
         URL(fileURLWithPath: #filePath)

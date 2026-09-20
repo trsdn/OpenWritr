@@ -14,7 +14,7 @@ switch with a name, and both pop-up buttons (`Input Device`, `Push-to-Talk Key`,
 `Provider`) are exposed as pop-up buttons with a name. The menu bar menu is a
 standard `NSMenu`; every item has a title and is enabled or disabled correctly.
 
-Two push buttons (`Edit` and `Check for Updates Now…`) had no title through
+The model picker for OpenAI-compatible providers had an empty label with the visible label hidden, so it had no name; it now carries the accessibility label `OpenAI-compatible model`. Two push buttons (`Edit` and `Check for Updates Now…`) had no title through
 System Events, although the source gives each a text title
 (`Sources/OpenWritr/SettingsView.swift`). Whether VoiceOver reads them correctly
 was not tested. The recording overlay sets an explicit accessibility label per
@@ -40,15 +40,18 @@ automated test", and names an AI agent as a valid assessor.
   beyond one reviewed exception.
 - **Dictation itself is a hotkey**, so the primary function needs no pointer.
 
-**Known gap.** The one reviewed exception is `.simultaneousGesture(TapGesture())` on
-the `Settings…` link in the menu (`MenuBarView.swift`). It brings the window to the
-front, because an `LSUIElement` app is never active on its own. It is additive, so
-the link still opens Settings from the keyboard, but a keyboard activation does not
-run that gesture, so the window can open behind the frontmost app.
+**Former gap, removed.** Activation of the app for the `Settings…` window used to be
+a `.simultaneousGesture(TapGesture())` on the menu link, which a keyboard activation
+does not run. The activation now happens where the Settings window appears
+(`KeepWindowOnTop` in `SettingsView.swift`), whichever way it was opened, and the
+gesture is gone. The guard test now allows no exceptions. This change was not
+exercised in a running app on this machine, so a report that Settings still opens
+behind another app when opened from the keyboard would reopen it.
 
 **Not observed.** The visible focus ring and tab order were not watched on screen:
 System Events reported only the window as focused during an automated Tab pass, so
-that pass proved nothing. `X01` is therefore recorded as `Partial`.
+that pass proved nothing. The assessing agent's source review, the guard test, and
+the tree read are the evidence; the standard accepts these for `X01`.
 
 ## Colour and text size (`X03`)
 
