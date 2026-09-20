@@ -1,18 +1,20 @@
 # Self-Assessment: trsdn/OpenWritr
 
-- Standard version: 1.13.0
-- Assessed on: 2026-09-19
+- Standard version: 1.14.0
+- Assessed on: 2026-09-20
 - State: **Needs work**
 - Record: [`.github/conformance.yml`](../.github/conformance.yml)
 
-Result: 67 pass, 14 partial, 2 fail, 21 not applicable.
+Result: 69 pass, 12 partial, 2 fail, 21 not applicable.
 
 The state is **Needs work**: the record tooling does not allow `Healthy` while any
 criterion fails, and two do (`R05`, `X01`). Nothing critical
 was found: no committed secrets, no open Dependabot alerts, `main` blocks force
 pushes and deletion, and secret scanning is enabled.
 
-The first assessment on the same day recorded 42 pass, 20 partial, and 21 fail.
+Reassessed on 2026-09-20 against 1.14.0, which widens `R03`, `R07`, and `R08` and narrows the `S12` pinning rule; none of the recorded results weakens.
+
+The first assessment on 2026-09-19 recorded 42 pass, 20 partial, and 21 fail.
 The gaps a repository change can close were then closed in the same pull request:
 CI and unit tests, a changelog-driven release gate, the version taken from the tag,
 bundled licence texts, README privacy, accessibility, language, versioning, and
@@ -55,12 +57,10 @@ and `scripts/build-app.sh`, whose bundle was inspected).
 | `R05` | partial | [`smoke-test.yml`](../.github/workflows/smoke-test.yml) installs the published DMG, checks Gatekeeper and notarization, and transcribes a spoken phrase with the shipped model through `--self-test`; `release.yml` runs it after every release. Verified locally: the download, checksum, mount, and Gatekeeper steps against the real 1.6.4 DMG, and `--self-test` against a built app. No workflow run exists yet because 1.6.4 predates `--self-test`. See [release-smoke-tests.md](release-smoke-tests.md). | Passes when the first release built from this version has run it. |
 | `X01` | partial | [`docs/accessibility.md`](accessibility.md): all 50 interactive elements are platform controls, a guard test forbids pointer-only interaction, and dictation is a hotkey. One known gap: the tap gesture that brings Settings to the front does not run on keyboard activation. The focus ring was not observed on screen. | Replace the gesture with an explicit activate-then-open action; watch the focus ring once. |
 | `X03` | partial | [`docs/accessibility.md`](accessibility.md): every overlay state has a text label and icon, overlay text contrast is 9.6:1 to 13.3:1, Reduce Motion is respected. Settings warnings use system orange (about 2.2:1 on light backgrounds) and the overlay text is a fixed 11 pt. | Use a colour with 4.5:1 contrast for warnings; let overlay text scale. |
-| `P09` | partial | `stats.yml` (reusable workflow from `trsdn/.github`) and the README card are in place, writing to the `stats` branch because `main` is protected. The card does not exist until the workflow first runs on `main`. | Merge, then dispatch `Repository stats`; becomes `pass` once the SVGs exist. |
 | `S02` | partial | Ten unit tests cover the cleanup integrity validator and policy, including failure paths. Audio, hotkey, paste, overlay, and update behavior have no automated tests. | Extract those behaviors behind testable seams and cover them. |
 | `S03` | partial | CI builds with `-warnings-as-errors` under Swift 6 strict concurrency. There is no formatter or linter. | Add `swift-format` or SwiftLint to CI. |
 | `S04` | partial | CI runs on `macos-latest`, not on the macOS 14 minimum. | Add a macOS 14 runner to the matrix. |
 | `S07` | partial | Logging uses `os.Logger` and a review found no call that logs transcripts, prompts, or keys, but nothing enforces it. | A test or lint rule, or a documented logging policy beyond `AGENTS.md`. |
-| `R07` | partial | The release workflow now fails without a changelog section for the tag and publishes that section as the notes, but no release has gone through it yet, so no published release demonstrates the match. | Passes with the next release; verify the notes on the release page. |
 | `I06` | partial | The version comes from the tag through `OPENWRITR_VERSION`; the copyright, licence, and URLs are still constants in `Info.plist`. | Acceptable to leave; record it as a deviation. |
 | `P08` | partial | The platform badge repeats `macOS 14+` by hand; the other four required badges are live. | No authoritative badge source exists for a Swift package platform. |
 | `B13` | partial | The site still repeats the source-build commands that live in the README. | Link instead. |
@@ -79,6 +79,7 @@ and `scripts/build-app.sh`, whose bundle was inspected).
 - `B09`, `P07`: public, ten topics, homepage set, description present.
 - `B10`: [`.github/CODEOWNERS`](../.github/CODEOWNERS) names `@trsdn` (added here).
 - `B11`: the record itself.
+- `P09`: `stats.yml` renders the card daily to the `stats` branch (`main` is protected) and the README shows it; the first run succeeded on 2026-09-20.
 - `B01`, `B06`, `B12`: the description says transcription is local and cleanup optional; only squash merges are enabled and branches are deleted on merge; `main` requires `Secret Scan` and `Build and test`; the `trsdn-standard` topic is set.
 - `B08`, `R06`: `CHANGELOG.md` covers every release from 1.4.0 to 1.6.4.
 - `B15`: `THIRD_PARTY_NOTICES.md` lists the linked packages; `scripts/build-app.sh` bundles the licence texts under `Contents/Resources/Licenses/` (checked in a built app).
@@ -92,6 +93,7 @@ and `scripts/build-app.sh`, whose bundle was inspected).
 - `S10`: architecture is in `AGENTS.md`, the README, and `plan/`, including the non-obvious update-attestation constraint.
 - `S11`, `S12`: all three workflows declare `permissions`; every `uses:` reference satisfies the table.
 - `R01`, `I02`, `I03`: `Info.plist` holds name, version, copyright, licence, repository, and issue URLs (verified in the built bundle); the licence text is bundled.
+- `R07`: every published release from 1.5.0 to 1.6.4 carries its changelog entry or links to it (1.6.x notes were replaced with the entries on 2026-09-20), and the release workflow fails a tag without an entry.
 - `R02`: SemVer and the macOS 14 / Apple Silicon requirement are stated in the README.
 - `R04`: the release workflow fails when `Info.plist` differs from the tag, and derives the title and asset names from it.
 - `R08`: the README says what `codesign`, `spctl`, and `stapler` prove and that no build attestation is published, and why.
