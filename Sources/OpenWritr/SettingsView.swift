@@ -11,6 +11,7 @@ private enum PromptTargetChange {
 
 struct SettingsSnapshotConfiguration {
     let automaticUpdatesEnabled: Bool
+    let inputDevicePickerEnabled: Bool
 }
 
 /// Keeps the hosting window above other windows, including the floating
@@ -52,7 +53,7 @@ struct SettingsView: View {
                         Text(device.name).tag(device.id)
                     }
                 }
-                .disabled(!viewModel.canChangeInputDevice)
+                .disabled(!(snapshotConfiguration?.inputDevicePickerEnabled ?? viewModel.canChangeInputDevice))
 
                 Text(inputDeviceStatusMessage)
                     .font(.caption)

@@ -9,10 +9,11 @@ swift build -c release
 
 The command runs on the main actor and captures production SwiftUI/AppKit views
 through an offscreen `NSWindow` and `NSHostingView`. It uses fixed logical sizes
-and a 2x scale, freezes the overlay animation phase, and exits with an error when
-the output directory is missing or a PNG cannot be produced. It does not run app
-setup, open the microphone, request Accessibility permission, read or write
-Keychain values, make network calls, or persist `UserDefaults` changes.
+and a 2x scale, freezes the overlay animation phase, creates the output directory
+when needed, and exits with an error when its argument is missing or a PNG cannot
+be produced. It does not run app setup, open the microphone, request Accessibility
+permission, read or write Keychain values, make network calls, or persist
+`UserDefaults` changes.
 
 The 16 PNGs cover:
 

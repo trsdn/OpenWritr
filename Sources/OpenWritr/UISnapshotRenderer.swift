@@ -170,7 +170,8 @@ enum UISnapshotRenderer {
                 SettingsView(
                     viewModel: viewModel,
                     snapshotConfiguration: SettingsSnapshotConfiguration(
-                        automaticUpdatesEnabled: true
+                        automaticUpdatesEnabled: true,
+                        inputDevicePickerEnabled: true
                     )
                 )
             )
