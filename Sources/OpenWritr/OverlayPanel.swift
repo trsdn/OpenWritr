@@ -80,7 +80,7 @@ final class OverlayPanel {
 
 @MainActor
 @Observable
-final class OverlayPresentation {
+private final class OverlayPresentation {
     var state: OverlayState = .listening(enhanced: false)
     var rawRMS: CGFloat = 0
     var isVisible = false
@@ -126,29 +126,22 @@ final class OverlayPresentation {
     }
 }
 
-struct OverlayContentView: View {
+private struct OverlayContentView: View {
     private static let barCount = 22
 
     @Bindable var presentation: OverlayPresentation
-    var snapshotPhase: TimeInterval?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        Group {
-            if let snapshotPhase {
-                capsule(phase: snapshotPhase)
-            } else {
-                TimelineView(
-                    .animation(
-                        minimumInterval: 1.0 / 30.0,
-                        paused: !presentation.isVisible
-                            || reduceMotion
-                            || (!presentation.isListening && !presentation.isProcessing)
-                    )
-                ) { context in
-                    capsule(phase: reduceMotion ? 0 : context.date.timeIntervalSinceReferenceDate)
-                }
-            }
+        TimelineView(
+            .animation(
+                minimumInterval: 1.0 / 30.0,
+                paused: !presentation.isVisible
+                    || reduceMotion
+                    || (!presentation.isListening && !presentation.isProcessing)
+            )
+        ) { context in
+            capsule(phase: reduceMotion ? 0 : context.date.timeIntervalSinceReferenceDate)
         }
         .frame(width: 248, height: 66)
     }

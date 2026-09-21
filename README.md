@@ -147,18 +147,6 @@ Known limitations, stated rather than left to be discovered:
 - The recording overlay and the prompt editor use fixed text sizes; macOS has no Dynamic Type for them to follow.
 - The app has **not** been tested with VoiceOver, and the keyboard pass was a source review and an automated guard, not a session at the screen. A report that Settings opens behind another app when opened from the keyboard would mean the activation fix did not work. See [docs/accessibility.md](docs/accessibility.md) for what was checked. Reports are welcome.
 
-Maintainers can generate deterministic light, dark, and larger-text UI evidence
-without granting permissions or starting the app:
-
-```sh
-swift build -c release
-.build/release/OpenWritr --render-ui-snapshots .artifacts/ui-snapshots
-```
-
-Relevant pull requests run the same renderer and a read-only GitHub Agentic
-Workflow HIG review. See [Automated UI snapshots and HIG review](docs/ui-snapshot-review.md)
-for the captured surfaces, preview limitations, and one-time token setup.
-
 ## Language
 
 The interface, documentation, and contributor surfaces are **English only**; there are no translations or string catalogs. Speech recognition itself supports 25 languages (see above), and cleanup preserves the language you dictated.

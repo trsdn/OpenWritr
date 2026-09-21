@@ -2,18 +2,7 @@ import AppKit
 import SwiftUI
 
 struct AboutView: View {
-    private let versionTextOverride: String?
-    private let iconOverride: NSImage?
-
-    init(versionTextOverride: String? = nil, iconOverride: NSImage? = nil) {
-        self.versionTextOverride = versionTextOverride
-        self.iconOverride = iconOverride
-    }
-
     private var versionText: String {
-        if let versionTextOverride {
-            return versionTextOverride
-        }
         let info = Bundle.main.infoDictionary
         let version = info?["CFBundleShortVersionString"] as? String ?? "Unknown"
         let build = info?["CFBundleVersion"] as? String ?? version
@@ -22,7 +11,7 @@ struct AboutView: View {
 
     var body: some View {
         VStack(spacing: 18) {
-            Image(nsImage: iconOverride ?? NSApplication.shared.applicationIconImage)
+            Image(nsImage: NSApplication.shared.applicationIconImage)
                 .resizable()
                 .frame(width: 96, height: 96)
                 .accessibilityHidden(true)

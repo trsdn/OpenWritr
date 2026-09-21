@@ -10,7 +10,6 @@ release workflow fails when the section for a tag is missing or empty.
 ### Added
 - The app bundle now carries its licence texts and third-party notices (`Contents/Resources/Licenses/`), plus its copyright, licence, description, repository, and issue-tracker links in its metadata
 - A `--self-test` command-line option that transcribes an audio file with the built-in speech model and exits, used by the release smoke test
-- Deterministic UI screenshot generation and a pull-request-only agentic Apple HIG review for maintainer-facing visual regression checks
 
 ### Fixed
 - The Settings window now comes to the front however it is opened, including from the keyboard
