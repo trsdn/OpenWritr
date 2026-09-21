@@ -5,11 +5,7 @@ on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
     paths:
-      - "Sources/OpenWritr/**/*View.swift"
-      - "Sources/OpenWritr/OpenWritrApp.swift"
-      - "Sources/OpenWritr/OverlayPanel.swift"
-      - "Sources/OpenWritr/UISnapshotRenderer.swift"
-      - "Sources/OpenWritr/WarningColor.swift"
+      - "Sources/OpenWritr/**/*.swift"
       - "Tests/OpenWritrTests/UISnapshotPlanTests.swift"
       - "Resources/AppIcon.icns"
       - "Info.plist"
@@ -28,6 +24,7 @@ engine:
   agent: apple-hig-reviewer
 network: {}
 tools:
+  edit: false
   cli-proxy: false
   bash:
     - cat
@@ -39,6 +36,15 @@ tools:
     - shasum
     - wc
 safe-outputs:
+  noop:
+    report-as-issue: false
+  missing-tool:
+    create-issue: false
+  missing-data:
+    create-issue: false
+  report-incomplete: false
+  report-failure-as-issue: false
+  report-failed-jobs: false
   submit-pull-request-review:
     max: 1
     allowed-events: [COMMENT]
@@ -153,6 +159,10 @@ Submit exactly one pull-request review with event `COMMENT`:
   correction.
 - If no qualifying findings exist, state that no high-confidence actionable HIG
   defects were found and list the rendered surfaces and variants reviewed.
+
+Do not test the safe-output tool or construct its payload with shell commands.
+After the review body is final, invoke `submit_pull_request_review` exactly once
+with that final body.
 
 Do not edit code, create commits, push branches, create issues, or emit any other
 safe output.

@@ -153,6 +153,7 @@ enum UISnapshotRenderer {
         viewModel.alwaysEnhancedEnabled = false
         viewModel.enhancedProvider = .copilot
         viewModel.enhancedModel = .luna
+        viewModel.appleIntelligenceAvailability = .available
         viewModel.launchAtLogin = false
         viewModel.debugModeEnabled = false
         return viewModel
