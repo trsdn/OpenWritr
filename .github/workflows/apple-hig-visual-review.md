@@ -55,6 +55,8 @@ jobs:
       - name: Checkout
         # actions/checkout v7
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
 
       - name: Build snapshot renderer
         run: swift build -c release -Xswiftc -warnings-as-errors
