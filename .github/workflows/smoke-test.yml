@@ -1,36 +1,47 @@
 name: Release smoke test
 
-# Installs the PUBLISHED disk image the way a consumer would and exercises its
+# Installs the release's disk image the way a consumer would and exercises its
 # core function (speech-to-text) through the app's non-interactive --self-test
 # entry point. The job summary is the dated record for criterion R05.
 #
-# Runs after every release (called from release.yml) and on demand for a tag.
+# release.yml runs it against the DRAFT release, before it is made public, so a
+# failing build is never offered to anyone. It also runs on demand for any tag.
+# The downloaded assets are the same files a consumer gets after publishing; the
+# publish job re-verifies the public download against its checksum.
 # Releases before the one that introduced --self-test fail the check below.
 
 on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Published release tag to test, for example v1.6.5
+        description: Release tag to test, draft or published, for example v1.6.5
         required: true
         type: string
   workflow_call:
     inputs:
       tag:
-        description: Published release tag to test
+        description: Release tag to test, draft or published
         required: true
         type: string
+    outputs:
+      dmg_sha256:
+        description: SHA-256 of the DMG that was installed and tested
+        value: ${{ jobs.smoke.outputs.dmg_sha256 }}
 
 permissions:
-  contents: read
+  # Drafts are only visible with write access; this workflow only downloads.
+  contents: write
 
 jobs:
   smoke:
     name: Install and transcribe
     runs-on: macos-latest
     timeout-minutes: 30
+    outputs:
+      dmg_sha256: ${{ steps.download.outputs.dmg_sha256 }}
     steps:
-      - name: Download the published DMG and checksum
+      - name: Download the release DMG and checksum
+        id: download
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -46,6 +57,7 @@ jobs:
             --pattern "OpenWritr-v*-macOS-arm64.dmg" \
             --pattern "OpenWritr-v*-macOS-arm64.dmg.sha256"
           (cd dl && shasum -a 256 -c ./*.dmg.sha256)
+          echo "dmg_sha256=$(shasum -a 256 dl/*.dmg | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
 
       - name: Install to /Applications
         shell: bash
@@ -97,7 +109,7 @@ jobs:
             echo "|---|---|"
             echo "| Date | $(date -u +%F) |"
             echo "| Version | $version ($TAG) |"
-            echo "| Asset | $(basename "$(ls dl/*.dmg)") from the GitHub release, checksum verified |"
+            echo "| Asset | $(basename "$(ls dl/*.dmg)") from the GitHub release (draft or public), checksum verified |"
             echo "| macOS | $(sw_vers -productVersion) on $(uname -m) |"
             echo "| Exercised | Installed to /Applications, Gatekeeper and notarization checks, transcribed a synthesized phrase with the shipped speech model and required the words: hello world smoke test |"
             echo "| Result | passed |"
