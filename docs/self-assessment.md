@@ -80,7 +80,7 @@ Automation Availability does not apply: hosted runners are available and used.
 | P09 | pass | `stats.yml` calls the shared reusable workflow daily (`cron 23 5 * * *`), writes to the `stats` branch; `repo-card.svg` and `repo-card-dark.svg` exist there (latest scheduled run success), the README uses `<picture>`, and the SVGs contain no `<image>`, `@import`, font-face or host other than the SVG namespace. |
 | P10 | pass | Bug form has expected result, actual result, reproduction, version and environment. |
 | P11 | pass | Template has summary, related issue, validation, and impact (risk, security/privacy, compatibility). |
-| P12 | pass | Read with the two commands the standard names: `gh api repos/trsdn/OpenWritr/vulnerability-alerts` returns 204 (enabled) and `gh api repos/trsdn/OpenWritr/automated-security-fixes` returns `{"enabled":true,"paused":false}`. |
+| P12 | pass | Read with the two commands the standard names: `gh api -i repos/trsdn/OpenWritr/vulnerability-alerts` answers `HTTP/2.0 204 No Content` (enabled; without `-i` the empty body prints nothing) and `gh api repos/trsdn/OpenWritr/automated-security-fixes` returns `{"enabled":true,"paused":false}`. |
 | P13 | pass | CodeQL supports Swift, the main language, and also Python and Actions. `.github/workflows/codeql.yml` (advanced setup, `swift build -c release` as the build, weekly and on pushes to `main`) analyzed all three: the run on this change's merge ref uploaded `/language:swift`, `/language:python`, and `/language:actions` analyses with no errors and 0 results (`gh api repos/trsdn/OpenWritr/code-scanning/analyses`). The default setup was tried first and its Swift autobuild failed, so it was switched off. |
 
 ## Software
