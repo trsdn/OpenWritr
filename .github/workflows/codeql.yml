@@ -1,0 +1,72 @@
+name: CodeQL
+
+# Advanced setup instead of GitHub's default setup: the default setup's Swift
+# autobuild failed on this package, and building with the same command as CI
+# (swift build -c release -Xswiftc -warnings-as-errors) is deterministic and
+# analyzes exactly what CI and the release build. Criterion P13.
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+    # The Swift analysis builds the package and takes about half an hour, so
+    # pull requests run it only when code or workflows change. Pushes to main and
+    # the weekly schedule always run it.
+    paths:
+      - Sources/**
+      - Tests/**
+      - Package.swift
+      - Package.resolved
+      - scripts/**
+      - .github/workflows/**
+  schedule:
+    - cron: "41 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: macos-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: actions
+            build-mode: none
+          - language: python
+            build-mode: none
+          - language: swift
+            build-mode: manual
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+
+      - name: Build (Swift)
+        if: matrix.language == 'swift'
+        run: swift build -c release -Xswiftc -warnings-as-errors
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:${{ matrix.language }}"
