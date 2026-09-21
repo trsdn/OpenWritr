@@ -1,0 +1,27 @@
+# A deliberately small rule set: every rule here passes on the whole codebase
+# today, so a violation is a regression. Formatting and style rules are left off
+# on purpose; the compiler already enforces Swift 6 strict concurrency with
+# warnings as errors (see .github/workflows/ci.yml).
+only_rules:
+  - force_cast
+  - force_try
+  - unused_optional_binding
+  - unused_closure_parameter
+  - empty_count
+  - empty_string
+  - redundant_optional_initialization
+  - redundant_string_enum_value
+  - duplicate_imports
+  - trailing_whitespace
+  - legacy_constructor
+  - discarded_notification_center_observer
+  - weak_delegate
+  - unused_enumerated
+  - overridden_super_call
+  - unneeded_break_in_switch
+  - redundant_discardable_let
+  - unowned_variable_capture
+
+included:
+  - Sources
+  - Tests

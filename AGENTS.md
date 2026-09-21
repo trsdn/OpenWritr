@@ -111,14 +111,15 @@ The build script needs a Developer ID Application or Apple Development certifica
 
 ## Validate before proposing a change
 
-These commands must both succeed (CI runs them on every pull request):
+These commands must all succeed (CI runs them on every pull request):
 
 ```sh
 swift build -c release -Xswiftc -warnings-as-errors
+swiftlint lint --strict
 swift test
 ```
 
-The build type-checks the whole package under Swift 6 strict concurrency with warnings as errors, and links the executable. `swift test` runs the unit tests in `Tests/OpenWritrTests/`, which cover the cleanup integrity validator and policy. The tests do **not** cover audio, hotkey, paste, overlay, or update behavior, and there is no formatter or linter. For a change to those areas, also run the built app and check the affected flow by hand, and say in the pull request what you tried.
+`swiftlint lint --strict` (config in `.swiftlint.yml`, a small rule set that passes today so any violation is a regression; install with `brew install swiftlint`) catches force casts and tries, unused bindings, and similar mistakes. The build type-checks the whole package under Swift 6 strict concurrency with warnings as errors, and links the executable. `swift test` runs the unit tests in `Tests/OpenWritrTests/`, which cover the cleanup integrity validator and policy. The tests do **not** cover audio, hotkey, paste, overlay, or update behavior, and there is no formatter. For a change to those areas, also run the built app and check the affected flow by hand, and say in the pull request what you tried.
 
 ## Conventions
 

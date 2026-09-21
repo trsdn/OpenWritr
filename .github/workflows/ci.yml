@@ -27,5 +27,10 @@ jobs:
       - name: Build (release, warnings as errors)
         run: swift build -c release -Xswiftc -warnings-as-errors
 
+      - name: Lint
+        run: |
+          command -v swiftlint >/dev/null || brew install swiftlint
+          swiftlint lint --strict
+
       - name: Test
         run: swift test
