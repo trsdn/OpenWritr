@@ -6,6 +6,7 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - "Sources/OpenWritr/**/*.swift"
+      - "Sources/OpenWritr/Resources/cleanup-prompt-profiles.json"
       - "Tests/OpenWritrTests/UISnapshotPlanTests.swift"
       - "Resources/AppIcon.icns"
       - "Info.plist"
