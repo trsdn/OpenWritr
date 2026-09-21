@@ -81,7 +81,7 @@ Automation Availability does not apply: hosted runners are available and used.
 | P10 | pass | Bug form has expected result, actual result, reproduction, version and environment. |
 | P11 | pass | Template has summary, related issue, validation, and impact (risk, security/privacy, compatibility). |
 | P12 | pass | Read with the two commands the standard names: `gh api -i repos/trsdn/OpenWritr/vulnerability-alerts` answers `HTTP/2.0 204 No Content` (enabled; without `-i` the empty body prints nothing) and `gh api repos/trsdn/OpenWritr/automated-security-fixes` returns `{"enabled":true,"paused":false}`. |
-| P13 | pass | CodeQL supports Swift, the main language, and also Python and Actions. `.github/workflows/codeql.yml` (advanced setup, `swift build -c release` as the build, weekly and on pushes to `main`) analyzed all three: the run on this change's merge ref uploaded `/language:swift`, `/language:python`, and `/language:actions` analyses with no errors and 0 results (`gh api repos/trsdn/OpenWritr/code-scanning/analyses`). The default setup was tried first and its Swift autobuild failed, so it was switched off. |
+| P13 | pass | CodeQL supports Swift, the main language, and also Python and Actions. `.github/workflows/codeql.yml` (advanced setup, `swift build -c release -Xswiftc -warnings-as-errors` as the build (the same as CI), weekly and on pushes to `main`) analyzed all three: the run on this change's merge ref uploaded `/language:swift`, `/language:python`, and `/language:actions` analyses with no errors and 0 results (`gh api repos/trsdn/OpenWritr/code-scanning/analyses`). The default setup was tried first and its Swift autobuild failed, so it was switched off. |
 
 ## Software
 
