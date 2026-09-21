@@ -4,4 +4,4 @@ Read `AGENTS.md` in the repository root and follow it. It is the authoritative
 guidance for this repository (layout, architecture, the validation command, and
 what not to do); this file does not restate it so the two cannot drift apart.
 
-Validate with `swift build -c release -Xswiftc -warnings-as-errors` and `swift test` before proposing a change.
+Validate with `swift build -c release -Xswiftc -warnings-as-errors`, `swiftlint lint --strict`, and `swift test` before proposing a change.

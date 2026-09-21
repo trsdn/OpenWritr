@@ -516,9 +516,9 @@ struct SettingsView: View {
 }
 
 enum HotkeyChoice: String, CaseIterable, Identifiable, Sendable {
-    case fn = "fn"
-    case rightOption = "rightOption"
-    case rightCommand = "rightCommand"
+    case fn
+    case rightOption
+    case rightCommand
 
     var id: String { rawValue }
 
