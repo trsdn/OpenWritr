@@ -3,8 +3,8 @@
 # Format:   https://github.com/trsdn/.github/blob/v1.15.0/docs/conformance-record.md
 # Criteria: https://github.com/trsdn/.github/blob/v1.15.0/docs/repository-quality-standard.md
 
-standard_version: "1.15.0"
-assessed_on: "2026-09-20"
+standard_version: "1.16.0"
+assessed_on: "2026-09-21"
 state: "Healthy"
 evidence: "docs/self-assessment.md"
 
@@ -36,6 +36,8 @@ criteria:
   P09: pass
   P10: pass
   P11: pass
+  P12: pass
+  P13: partial
   S01: pass
   S02: partial
   S03: pass

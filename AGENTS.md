@@ -33,7 +33,7 @@ transcript text to the provider the user chose.
 | `eval/cleanup-cases.json` | Synthetic cleanup-model benchmark cases. Never add private dictation. |
 | `docs/` | GitHub Pages site (`index.html` and assets), served from `main` `/docs`. |
 | `plan/` | Working implementation plans. |
-| `.github/` | Workflows, Dependabot, issue forms, PR template, conformance record. |
+| `.github/` | Workflows, Dependabot, issue forms, PR template, conformance record, and maintained Copilot path-specific instructions and custom reviewers. |
 
 ## Architecture
 
