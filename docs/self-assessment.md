@@ -1,9 +1,9 @@
-# Assessment of trsdn/OpenWritr against the Repository Quality Standard 1.15.0
+# Assessment of trsdn/OpenWritr against the Repository Quality Standard 1.16.0
 
 - Assessed on: 2026-09-20, by an AI agent; no maintainer was asked anything.
 - Repository read: `main` at `34fdc90` (exported without git metadata), plus the GitHub API through `gh` (read-only) and the latest release, `v1.6.4`, downloaded and inspected.
-- State: **Healthy**. Updated 2026-09-20 after `v1.6.5` and the follow-up that closed `B13`, `P08`, `W03`, `W08`, and `X03`. Open: `S02` (Partial).
-- Result counts: 82 pass, 1 partial, 0 fail, 21 na (104 criteria).
+- State: **Healthy**. Updated 2026-09-20 after `v1.6.5` and the follow-up that closed `B13`, `P08`, `W03`, `W08`, and `X03`. Open: `S02` (Partial). Reassessed on 2026-09-21 against 1.16.0, which adds `P12` and `P13`.
+- Result counts: 84 pass, 1 partial, 0 fail, 21 na (106 criteria).
 
 ## What the assessor did and did not read
 
@@ -80,6 +80,8 @@ Automation Availability does not apply: hosted runners are available and used.
 | P09 | pass | `stats.yml` calls the shared reusable workflow daily (`cron 23 5 * * *`), writes to the `stats` branch; `repo-card.svg` and `repo-card-dark.svg` exist there (latest scheduled run success), the README uses `<picture>`, and the SVGs contain no `<image>`, `@import`, font-face or host other than the SVG namespace. |
 | P10 | pass | Bug form has expected result, actual result, reproduction, version and environment. |
 | P11 | pass | Template has summary, related issue, validation, and impact (risk, security/privacy, compatibility). |
+| P12 | pass | Read with the two commands the standard names: `gh api -i repos/trsdn/OpenWritr/vulnerability-alerts` answers `HTTP/2.0 204 No Content` (enabled; without `-i` the empty body prints nothing) and `gh api repos/trsdn/OpenWritr/automated-security-fixes` returns `{"enabled":true,"paused":false}`. |
+| P13 | pass | CodeQL supports Swift, the main language, and also Python and Actions. `.github/workflows/codeql.yml` (advanced setup, `swift build -c release -Xswiftc -warnings-as-errors` as the build (the same as CI), weekly and on pushes to `main`) analyzed all three: the run on this change's merge ref uploaded `/language:swift`, `/language:python`, and `/language:actions` analyses with no errors and 0 results (`gh api repos/trsdn/OpenWritr/code-scanning/analyses`). The default setup was tried first and its Swift autobuild failed, so it was switched off. |
 
 ## Software
 
@@ -120,7 +122,7 @@ Assessed on the latest release, `v1.6.4` (2026-09-19), assets `OpenWritr-v1.6.4-
 | R02 | pass | README "Versioning and compatibility" names SemVer and states what each kind of release means. |
 | R03 | pass | Tag `v1.6.4` points at commit `a15b547`; `release.yml` triggers on `v*` tags and the run for that tag succeeded. |
 | R04 | pass | Tag `v1.6.4`, bundle `CFBundleShortVersionString` 1.6.4 (read from the download), title "OpenWritr 1.6.4". |
-| R05 | pass | `smoke-test.yml` ran for `v1.6.5` in the release run (Actions run 35534329100, job `Smoke-test the published release`, conclusion success): it downloaded the published DMG, verified its checksum, installed it, checked Gatekeeper and notarization, and transcribed a synthesized phrase through `--self-test`, without anyone operating the product. The job summary is the dated record. |
+| R05 | pass | `smoke-test.yml` ran for `v1.6.5` in the release run (which published first; since #56 it runs against the draft and publishing depends on it) (Actions run 35534329100, job `Smoke-test the published release`, conclusion success): it downloaded the published DMG, verified its checksum, installed it, checked Gatekeeper and notarization, and transcribed a synthesized phrase through `--self-test`, without anyone operating the product. The job summary is the dated record. |
 | R06 | pass | Release notes: "### Fixed - Brought the Settings window to the front ... (#42)", specific, nothing breaking to warn about. |
 | R07 | pass | Release body equals the 1.6.4 changelog entry plus a "Full changelog" link; the entry exists and is not empty. `release.yml` on `main` gates on it and passes it as the notes. |
 | R08 | pass | Developer ID signature (Team `G69Z5BNY97`) and stapled notarization verified on the download (`codesign` valid, `spctl` "accepted, source=Notarized Developer ID", `stapler validate` worked); README "Verifying a download" gives the commands and says the attestation is deliberately not published (#31) and that this does not prove the source commit. `gh attestation verify` finds none, as stated. |
