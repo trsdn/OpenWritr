@@ -690,11 +690,11 @@ footer a:hover { color: var(--accent); }
   <div class="wrap">
     <div class="hero-badge">
       <span class="dot"></span>
-      macOS &middot; Apple Silicon &middot; Local Transcription
+      macOS &middot; Apple Silicon &middot; Local Transcription &middot; Actively maintained
     </div>
     <h1>Your voice.<br><span class="accent">Instant text.</span></h1>
     <p class="hero-sub">
-      Native macOS menu bar app that turns speech into text in under a second.
+      Native macOS menu bar app for anyone who dictates on a Mac: it turns speech into text in under a second.
       Push to talk, release to paste. Local transcription with optional cleanup via Apple Intelligence, GitHub Copilot, or an OpenAI-compatible API.
     </p>
     <div class="hero-actions">
@@ -927,7 +927,7 @@ footer a:hover { color: var(--accent); }
     <div class="section-label reveal">Get Started</div>
     <h2 class="reveal">Up and running<br>in 30 seconds</h2>
     <p class="section-desc reveal">
-      Download the <a href="https://github.com/trsdn/OpenWritr/releases/latest">latest release</a>, or build it from source. Requires macOS 14+ and Apple Silicon. The ASR model (~460 MB) downloads
+      Download the <a href="https://github.com/trsdn/OpenWritr/releases/latest">latest release</a>, or <a href="https://github.com/trsdn/OpenWritr#install">build it from source</a>. Requires macOS 14+ and Apple Silicon. The ASR model (~460 MB) downloads
       automatically on first launch.
     </p>
     <div class="install-block reveal">
@@ -936,16 +936,10 @@ footer a:hover { color: var(--accent); }
         Terminal
       </div>
       <div class="install-body">
-<pre><span class="comment"># Clone and build</span>
-<span class="cmd">git clone https://github.com/trsdn/OpenWritr.git</span>
-<span class="cmd">cd OpenWritr</span>
-<span class="cmd">swift build -c release</span>
-
-<span class="comment"># Run</span>
-<span class="cmd">.build/release/OpenWritr</span>
-
+<pre><span class="comment"># Download, move OpenWritr.app to /Applications, then open it</span>
 <span class="comment"># Grant Microphone + Accessibility permissions when prompted</span>
-<span class="comment"># Hold <span class="accent">Fn</span> to speak, release to paste</span></pre>
+<span class="comment"># Hold <span class="accent">Fn</span> to speak, release to paste</span>
+<span class="comment"># Build from source: see the README</span></pre>
       </div>
     </div>
   </div>

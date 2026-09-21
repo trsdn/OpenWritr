@@ -1,0 +1,25 @@
+name: Conformance
+
+# Validates .github/conformance.yml and the committed badge with the shared
+# check from trsdn/.github, so the record and the badge cannot drift apart and
+# an overdue assessment turns this red (criteria B11 and P08).
+
+on:
+  pull_request:
+    paths:
+      - .github/conformance.yml
+      - .github/badges/**
+      - .github/workflows/conformance.yml
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  conformance:
+    uses: trsdn/.github/.github/workflows/conformance.yml@main

@@ -97,7 +97,7 @@ cd OpenWritr
 swift build -c release
 ```
 
-Requires macOS 14+, Apple Silicon, and a Swift 6 toolchain (`swift-tools-version: 6.0` in `Package.swift`). Dependencies are pinned in `Package.resolved`.
+Requirements are in the README; the toolchain is Swift 6 (`swift-tools-version: 6.0` in `Package.swift`). Dependencies are pinned in `Package.resolved`.
 
 ## Run
 

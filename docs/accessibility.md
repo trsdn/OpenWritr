@@ -61,17 +61,17 @@ the tree read are the evidence; the standard accepts these for `X01`.
 - **Overlay contrast** (WCAG relative luminance, text against the overlay's
   near-black background, `0.075` white): 13.3:1 listening, 9.6:1 listening with
   enhancement, 12.7:1 done, 9.7:1 error. All exceed 7:1.
-- **Settings warnings use `Color.orange`** for input-device and provider attention
-  text at caption size. System orange is about 2.2:1 on a white window
-  background, below the 4.5:1 that small text needs; on a dark background it is
-  about 8:1. This is a real weakness in light mode.
+- **Settings and menu warnings use `Color.warningText`**: a darker orange in light
+  mode (6.1:1 on white, 5.2:1 on the grey window background, both above 4.5:1) and
+  system orange in dark mode (about 8:1). System orange alone was about 2.2:1 on
+  white, which is why it was replaced.
 - **Reduce Motion is respected** in the overlay (`accessibilityReduceMotion`).
-- **Text size is fixed** in the overlay (11 pt) and in the monospaced prompt editor
-  (12 pt). macOS has no Dynamic Type, but these do not follow larger-text
-  settings either.
+- **Text sizes are fixed points.** macOS has no Dynamic Type, so there is no
+  platform text-size setting for these to follow; the overlay (11 pt) and the
+  monospaced prompt editor (12 pt) do not scale, and that is a limit of the platform
+  rather than something the app overrides. Everything else uses system text styles.
 
 ## Known limitations
 
 These are the ones the README states under **Accessibility**: hold-to-talk with no
-toggle mode, no announcement other than sound cues, orange warning text in light
-mode, fixed-size overlay text, and no VoiceOver pass.
+toggle mode, no announcement other than sound cues, fixed-size overlay text, and no VoiceOver pass.
