@@ -44,6 +44,9 @@ jobs:
           languages: swift
           build-mode: manual
 
+      # A plain debug build is enough for CodeQL to trace and index the source;
+      # it does not need the release optimizations or the warnings-as-errors
+      # gate that AGENTS.md's validation build uses, and it builds faster here.
       - name: Build
         run: swift build
 
