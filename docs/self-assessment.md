@@ -3,7 +3,7 @@
 - Assessed on: 2026-09-20, by an AI agent; no maintainer was asked anything.
 - Repository read: `main` at `34fdc90` (exported without git metadata), plus the GitHub API through `gh` (read-only) and the latest release, `v1.6.4`, downloaded and inspected.
 - State: **Healthy**. Updated 2026-09-20 after `v1.6.5` and the follow-up that closed `B13`, `P08`, `W03`, `W08`, and `X03`. Open: `S02` (Partial). Reassessed on 2026-09-21 against 1.16.0, which adds `P12` and `P13`.
-- Result counts: 83 pass, 2 partial, 0 fail, 21 na (106 criteria).
+- Result counts: 84 pass, 1 partial, 0 fail, 21 na (106 criteria).
 
 ## What the assessor did and did not read
 
@@ -81,7 +81,7 @@ Automation Availability does not apply: hosted runners are available and used.
 | P10 | pass | Bug form has expected result, actual result, reproduction, version and environment. |
 | P11 | pass | Template has summary, related issue, validation, and impact (risk, security/privacy, compatibility). |
 | P12 | pass | Read with the two commands the standard names: `gh api repos/trsdn/OpenWritr/vulnerability-alerts` returns 204 (enabled) and `gh api repos/trsdn/OpenWritr/automated-security-fixes` returns `{"enabled":true,"paused":false}`. |
-| P13 | partial | CodeQL supports Swift, the repository's main language (about 288 KB of 345 KB, plus Python and Actions workflows). Default setup was enabled on 2026-09-21 for Python and Actions only, and adding Swift failed in autobuild. `.github/workflows/codeql.yml` replaces it with an advanced setup that builds Swift with `swift build -c release`; the result is `Pass` once a Swift analysis has completed on `main`. |
+| P13 | pass | CodeQL supports Swift, the main language, and also Python and Actions. `.github/workflows/codeql.yml` (advanced setup, `swift build -c release` as the build, weekly and on pushes to `main`) analyzed all three: the run on this change's merge ref uploaded `/language:swift`, `/language:python`, and `/language:actions` analyses with no errors and 0 results (`gh api repos/trsdn/OpenWritr/code-scanning/analyses`). The default setup was tried first and its Swift autobuild failed, so it was switched off. |
 
 ## Software
 
