@@ -63,7 +63,7 @@ hdiutil detach /Volumes/OpenWritr
 
 ## 5. GitHub Release
 
-- [ ] Push tag `vx.y.z`. The release workflow builds, signs, and notarizes, creates the GitHub release as a **draft**, smoke-tests the draft, and only then publishes it. If the smoke test fails the release stays a draft: read the job summary, fix, and re-run the workflow (`workflow_dispatch` with the tag) or delete the draft
+- [ ] Push tag `vx.y.z`. The release workflow builds, signs, and notarizes, creates the GitHub release as a **draft**, smoke-tests the draft, and only then publishes it. If the smoke test fails the release stays a draft and nothing is public. Re-running the workflow for the same tag (`workflow_dispatch`) rebuilds the same commit, so it only recovers from a transient failure (runner, network, notarization service). A fix to code, scripts, or the changelog needs a **new version**: delete the draft, bump `Info.plist`, add a changelog entry, and tag again. A tag that already has a public release is refused
 - [ ] Upload artifacts:
   - `OpenWritr-vx.y.z-macOS-arm64.zip`
   - `OpenWritr-vx.y.z-macOS-arm64.zip.sha256`

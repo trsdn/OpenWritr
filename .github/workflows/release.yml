@@ -14,6 +14,12 @@ on:
 permissions:
   contents: write
 
+# One release run per tag at a time: two overlapping runs could test one set of
+# assets while the other replaces them before the publish job runs.
+concurrency:
+  group: release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
 jobs:
   macos-release:
     name: Build signed and notarized macOS artifacts
@@ -296,8 +302,13 @@ jobs:
           # below makes it public. An existing release keeps its state.
           if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release create "$RELEASE_TAG" --draft --title "OpenWritr ${RELEASE_VERSION}" --notes-file "$RELEASE_NOTES_FILE"
-          else
+          elif [[ "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" == "true" ]]; then
             gh release edit "$RELEASE_TAG" --title "OpenWritr ${RELEASE_VERSION}" --notes-file "$RELEASE_NOTES_FILE"
+          else
+            # Replacing the assets of a public release would expose untested
+            # files, and a failing smoke test could not take them back.
+            echo "Release $RELEASE_TAG is already public; refusing to replace its assets. Publish a new version instead." >&2
+            exit 1
           fi
           gh release upload "$RELEASE_TAG" "${assets[@]}" --clobber
 
@@ -333,13 +344,23 @@ jobs:
             exit 1
           fi
 
-      - name: Verify the public download matches its checksum
+      - name: Verify the public download is the file that was tested
         env:
           RELEASE_TAG: ${{ needs.macos-release.outputs.tag }}
+          TESTED_SHA256: ${{ needs.smoke-test.outputs.dmg_sha256 }}
         run: |
           set -euo pipefail
+          if [[ -z "$TESTED_SHA256" ]]; then
+            echo "The smoke test did not report the digest it tested." >&2
+            exit 1
+          fi
           base="https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}"
           name="OpenWritr-${RELEASE_TAG}-macOS-arm64.dmg"
           mkdir public && cd public
           curl --fail --silent --show-error --location --retry 5 --retry-delay 5 -O "$base/$name" -O "$base/$name.sha256"
           shasum -a 256 -c "$name.sha256"
+          public_sha="$(shasum -a 256 "$name" | cut -d' ' -f1)"
+          if [[ "$public_sha" != "$TESTED_SHA256" ]]; then
+            echo "The public DMG ($public_sha) is not the file the smoke test ran ($TESTED_SHA256)." >&2
+            exit 1
+          fi

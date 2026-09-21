@@ -23,6 +23,10 @@ on:
         description: Release tag to test, draft or published
         required: true
         type: string
+    outputs:
+      dmg_sha256:
+        description: SHA-256 of the DMG that was installed and tested
+        value: ${{ jobs.smoke.outputs.dmg_sha256 }}
 
 permissions:
   # Drafts are only visible with write access; this workflow only downloads.
@@ -33,8 +37,11 @@ jobs:
     name: Install and transcribe
     runs-on: macos-latest
     timeout-minutes: 30
+    outputs:
+      dmg_sha256: ${{ steps.download.outputs.dmg_sha256 }}
     steps:
       - name: Download the release DMG and checksum
+        id: download
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -50,6 +57,7 @@ jobs:
             --pattern "OpenWritr-v*-macOS-arm64.dmg" \
             --pattern "OpenWritr-v*-macOS-arm64.dmg.sha256"
           (cd dl && shasum -a 256 -c ./*.dmg.sha256)
+          echo "dmg_sha256=$(shasum -a 256 dl/*.dmg | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
 
       - name: Install to /Applications
         shell: bash
