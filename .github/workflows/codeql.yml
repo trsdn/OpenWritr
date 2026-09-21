@@ -1,0 +1,53 @@
+name: CodeQL
+
+# Advanced setup, not GitHub's automatic "default setup". Default setup left
+# this repository's CodeQL configuration showing no selected language and no
+# completed run: SwiftPM packages need an explicit build step, which default
+# setup does not infer for Swift. This workflow builds the package with
+# `swift build` in manual build mode so CodeQL actually analyzes the source.
+#
+# Requires the repository's code scanning setting to be switched from
+# "Default" to "Advanced" (Settings -> Code security -> Code scanning) before
+# this workflow can upload results; the two setups cannot run at once. That
+# switch, like other repository settings, is a maintainer action.
+#
+# Do not add "CodeQL" as a required status check until several scheduled and
+# pull-request runs have completed successfully; see AGENTS.md.
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  schedule:
+    - cron: '17 3 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  analyze:
+    name: Analyze (swift)
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: swift
+          build-mode: manual
+
+      - name: Build
+        run: swift build
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: '/language:swift'

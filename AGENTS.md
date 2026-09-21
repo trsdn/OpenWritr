@@ -131,6 +131,13 @@ swift test
 - User-facing changes get an entry in `CHANGELOG.md` (`## [x.y.z] — date`). The release workflow publishes that section as the release notes and fails when it is missing or empty, or when Info.plist disagrees with the tag.
 - Commit messages use Conventional Commits (`fix(settings): …`, `chore(release): …`).
 
+## Security scanning
+
+- `.github/workflows/secret-scan.yml` (custom `Secret Scan` check) is the required branch-protection check on `main`. Keep it required until GitHub's native secret scanning — with non-provider patterns and validity checks enabled — demonstrably covers the same generic-pattern detection; that comparison and the required-check change are the maintainer's call.
+- `.github/workflows/codeql.yml` is an advanced-setup CodeQL workflow that builds the SwiftPM package with `swift build` (manual build mode) and analyzes Swift. It exists because GitHub's automatic default setup could not select a language or complete a run for this repository — SwiftPM needs an explicit build step that default setup does not infer. It only produces results once the repository's code scanning setting is switched from "Default" to "Advanced" in Settings → Code security, which is a repository setting and therefore the maintainer's action, not something an agent changes.
+- Do not mark `CodeQL` as a required status check until several scheduled and pull-request runs have completed successfully. A required check for a workflow that cannot yet run is worse than no check.
+- Non-provider secret patterns, validity checks, push protection, Dependabot security updates, vulnerability alerts, and private vulnerability reporting are all toggled in Settings → Code security; they are repository settings and the maintainer enables or confirms them, not an agent.
+
 ## Do not do these
 
 - Do not rewrite history, force push, or delete branches. `main` blocks force pushes and deletion and requires the `Secret Scan` check.
