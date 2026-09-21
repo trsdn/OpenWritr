@@ -34,8 +34,8 @@ an offscreen mock would be misleading rather than faithful.
 Workflow source. `gh aw compile apple-hig-visual-review` generates the committed
 `.lock.yml`; do not edit the lock file directly.
 
-For pull requests that change UI, snapshot, HIG instruction, reviewer, icon, or
-bundle metadata files, the workflow:
+For pull requests that change app Swift sources, snapshot tests, HIG instruction,
+reviewer, icon, or bundle metadata files, the workflow:
 
 1. Builds the release executable with Swift warnings treated as errors.
 2. Generates and validates all 16 non-empty PNGs.
@@ -45,10 +45,16 @@ bundle metadata files, the workflow:
 5. Publishes exactly one `COMMENT` review containing only high-confidence,
    actionable findings, or a clear no-findings result.
 
-The workflow has read-only access during agent execution. The separate safe
-output handler receives only the pull-request permission needed to submit the
-review. The agent cannot edit files or push changes. Fork pull requests are
-skipped by the framework's default security policy.
+The broad Swift trigger is deliberate: visible Settings and overlay values come
+from managers and state types outside the view files, so complete coverage is
+preferred over saving occasional macOS runner minutes.
+
+The workflow has no repository checkout during agent execution. A deterministic
+job prepares an isolated artifact containing the PNGs, the untrusted PR diff,
+and HIG criteria read from the base revision. The separate safe-output handler
+receives only the pull-request permission needed to submit the review. The agent
+cannot edit files or push changes. Fork pull requests are skipped by the
+framework's default security policy.
 
 ## One-time maintainer setup
 
