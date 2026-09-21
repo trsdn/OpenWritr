@@ -63,8 +63,7 @@ hdiutil detach /Volumes/OpenWritr
 
 ## 5. GitHub Release
 
-- [ ] Create tag `vx.y.z`
-- [ ] Create GitHub Release for `vx.y.z`
+- [ ] Push tag `vx.y.z`. The release workflow builds, signs, and notarizes, creates the GitHub release as a **draft**, smoke-tests the draft, and only then publishes it. If the smoke test fails the release stays a draft: read the job summary, fix, and re-run the workflow (`workflow_dispatch` with the tag) or delete the draft
 - [ ] Upload artifacts:
   - `OpenWritr-vx.y.z-macOS-arm64.zip`
   - `OpenWritr-vx.y.z-macOS-arm64.zip.sha256`
@@ -78,4 +77,4 @@ hdiutil detach /Volumes/OpenWritr
 - [ ] Verify checksum
 - [ ] Install and launch on a clean user profile or second machine
 - [ ] Confirm app starts and prompts for permissions as expected
-- [ ] The `Smoke-test the published release` job of the release run passed; its job summary is the `R05` record ([docs/release-smoke-tests.md](docs/release-smoke-tests.md))
+- [ ] The `Smoke-test the release before publishing` and `Publish the release` jobs of the release run passed; its job summary is the `R05` record ([docs/release-smoke-tests.md](docs/release-smoke-tests.md))
