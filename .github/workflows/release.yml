@@ -5,11 +5,6 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
-    inputs:
-      tag:
-        description: Existing tag to build, for example v1.2.1
-        required: true
-        type: string
 
 permissions:
   contents: read
@@ -17,54 +12,92 @@ permissions:
 # One release run per tag at a time: two overlapping runs could test one set of
 # assets while the other replaces them before the publish job runs.
 concurrency:
-  group: release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  group: release-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
+  validate-release-ref:
+    name: Validate release tag reference
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions: {}
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
+      version: ${{ steps.release.outputs.version }}
+      artifact_name: ${{ steps.release.outputs.artifact_name }}
+    steps:
+      - name: Resolve release metadata from the triggering tag
+        id: release
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_REF_TYPE" != "tag" || "$GITHUB_REF" != refs/tags/* ]]; then
+            echo "Release runs must be triggered from an existing tag, not $GITHUB_REF." >&2
+            exit 1
+          fi
+
+          tag="$GITHUB_REF_NAME"
+          if [[ "$GITHUB_REF" != "refs/tags/$tag" ]]; then
+            echo "Release ref does not match its tag name: $GITHUB_REF" >&2
+            exit 1
+          fi
+          if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Release tag must be a version such as v1.2.1: $tag" >&2
+            exit 1
+          fi
+
+          version="${tag#v}"
+          {
+            echo "tag=$tag"
+            echo "version=$version"
+            echo "artifact_name=OpenWritr-v${version}-macOS-arm64"
+          } >> "$GITHUB_OUTPUT"
+
   sign-and-notarize:
     name: Build signed and notarized macOS artifacts
+    needs: validate-release-ref
     runs-on: macos-15
     timeout-minutes: 90
     environment: release
     permissions:
       contents: read
     outputs:
-      tag: ${{ steps.release.outputs.tag }}
-      version: ${{ steps.release.outputs.version }}
-      artifact_name: ${{ steps.release.outputs.artifact_name }}
+      tag: ${{ needs.validate-release-ref.outputs.tag }}
+      version: ${{ needs.validate-release-ref.outputs.version }}
+      artifact_name: ${{ needs.validate-release-ref.outputs.artifact_name }}
     steps:
-      - name: Resolve release metadata
-        id: release
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            tag="${{ inputs.tag }}"
-          else
-            tag="${GITHUB_REF_NAME}"
-          fi
-          if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$ ]]; then
-            echo "Release tag must be a version such as v1.2.1: $tag"
-            exit 1
-          fi
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
-          version="${tag#v}"
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "artifact_name=OpenWritr-v${version}-macOS-arm64" >> "$GITHUB_OUTPUT"
-
       - name: Checkout
         uses: actions/checkout@v7
         with:
-          ref: ${{ steps.release.outputs.tag }}
+          ref: refs/tags/${{ needs.validate-release-ref.outputs.tag }}
           fetch-depth: 0
           persist-credentials: false
+
+      - name: Verify checkout matches the release tag
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ needs.validate-release-ref.outputs.tag }}
+        run: |
+          set -euo pipefail
+          tag_ref="refs/tags/$RELEASE_TAG"
+          if ! git show-ref --verify --quiet "$tag_ref"; then
+            echo "Checked-out repository does not contain $tag_ref." >&2
+            exit 1
+          fi
+
+          tag_commit="$(git rev-parse --verify "${tag_ref}^{commit}")"
+          checked_out_commit="$(git rev-parse --verify HEAD)"
+          if [[ "$checked_out_commit" != "$tag_commit" ]]; then
+            echo "Checked-out HEAD $checked_out_commit does not match $tag_ref ($tag_commit)." >&2
+            exit 1
+          fi
 
       # Gate: nothing is built, signed, or published for a tag that cannot
       # describe itself. Fails before the signing certificate is imported.
       - name: Verify bundle version and changelog entry
         shell: bash
         env:
-          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+          RELEASE_VERSION: ${{ needs.validate-release-ref.outputs.version }}
         run: |
           set -euo pipefail
 
@@ -175,7 +208,7 @@ jobs:
       - name: Build Developer ID signed app
         shell: bash
         env:
-          OPENWRITR_VERSION: ${{ steps.release.outputs.version }}
+          OPENWRITR_VERSION: ${{ needs.validate-release-ref.outputs.version }}
         run: |
           set -euo pipefail
           chmod +x scripts/*.sh
@@ -188,7 +221,7 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
           APP_PATH: .build/release/OpenWritr.app
-          ZIP_PATH: dist/OpenWritr-v${{ steps.release.outputs.version }}-macOS-arm64.zip
+          ZIP_PATH: dist/OpenWritr-v${{ needs.validate-release-ref.outputs.version }}-macOS-arm64.zip
         run: |
           set -euo pipefail
           scripts/notarize_app.sh
@@ -197,7 +230,7 @@ jobs:
         shell: bash
         env:
           APP_PATH: .build/release/OpenWritr.app
-          DMG_PATH: dist/OpenWritr-v${{ steps.release.outputs.version }}-macOS-arm64.dmg
+          DMG_PATH: dist/OpenWritr-v${{ needs.validate-release-ref.outputs.version }}-macOS-arm64.dmg
           REQUIRE_NOTARIZED_APP: "true"
         run: |
           set -euo pipefail
@@ -209,7 +242,7 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
-          DMG_PATH: dist/OpenWritr-v${{ steps.release.outputs.version }}-macOS-arm64.dmg
+          DMG_PATH: dist/OpenWritr-v${{ needs.validate-release-ref.outputs.version }}-macOS-arm64.dmg
         run: |
           set -euo pipefail
           scripts/notarize_dmg.sh
@@ -217,7 +250,7 @@ jobs:
       - name: Create AppUpdater-named DMG copy
         shell: bash
         env:
-          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+          RELEASE_VERSION: ${{ needs.validate-release-ref.outputs.version }}
         run: |
           set -euo pipefail
           # AppUpdater (in-app updater) expects a release DMG named
@@ -247,8 +280,8 @@ jobs:
         shell: bash
         env:
           APP_PATH: .build/release/OpenWritr.app
-          ASSET_BASE: dist/OpenWritr-v${{ steps.release.outputs.version }}-macOS-arm64
-          APPUPDATER_DMG: dist/OpenWritr-${{ steps.release.outputs.version }}.dmg
+          ASSET_BASE: dist/OpenWritr-v${{ needs.validate-release-ref.outputs.version }}-macOS-arm64
+          APPUPDATER_DMG: dist/OpenWritr-${{ needs.validate-release-ref.outputs.version }}.dmg
         run: |
           set -euo pipefail
           artifacts=(
@@ -283,14 +316,14 @@ jobs:
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ steps.release.outputs.artifact_name }}
+          name: ${{ needs.validate-release-ref.outputs.artifact_name }}
           if-no-files-found: error
           path: |
-            dist/OpenWritr-v${{ steps.release.outputs.version }}-macOS-arm64.zip
-            dist/OpenWritr-v${{ steps.release.outputs.version }}-macOS-arm64.zip.sha256
-            dist/OpenWritr-v${{ steps.release.outputs.version }}-macOS-arm64.dmg
-            dist/OpenWritr-v${{ steps.release.outputs.version }}-macOS-arm64.dmg.sha256
-            dist/OpenWritr-${{ steps.release.outputs.version }}.dmg
+            dist/OpenWritr-v${{ needs.validate-release-ref.outputs.version }}-macOS-arm64.zip
+            dist/OpenWritr-v${{ needs.validate-release-ref.outputs.version }}-macOS-arm64.zip.sha256
+            dist/OpenWritr-v${{ needs.validate-release-ref.outputs.version }}-macOS-arm64.dmg
+            dist/OpenWritr-v${{ needs.validate-release-ref.outputs.version }}-macOS-arm64.dmg.sha256
+            dist/OpenWritr-${{ needs.validate-release-ref.outputs.version }}.dmg
             dist/release-notes.md
 
   create-draft:
@@ -336,7 +369,7 @@ jobs:
           # below makes it public. An existing release keeps its state.
           if ! gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
-              --draft --title "OpenWritr ${RELEASE_VERSION}" \
+              --verify-tag --draft --title "OpenWritr ${RELEASE_VERSION}" \
               --notes-file release-candidate/release-notes.md
           elif [[ "$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
             --json isDraft --jq .isDraft)" == "true" ]]; then

@@ -88,16 +88,19 @@ installed clients (see #31).
 - [ ] Confirm the release page is public and lists all five exact asset names.
 
 If signing, notarization, networking, or a runner fails transiently, rerun the
-existing tag with `workflow_dispatch`, selecting the same `vx.y.z` tag as both
-the workflow ref and the `tag` input. For example:
+existing tag with `workflow_dispatch`, selecting that `vx.y.z` tag as the
+workflow ref. For example:
 
 ```sh
-gh workflow run release.yml --ref vx.y.z -f tag=vx.y.z
+gh workflow run release.yml --ref vx.y.z
 ```
 
 Using the tag as the workflow ref is required by the `release` environment's
-`v*` deployment restriction. The rerun rebuilds the immutable tagged commit and
-may replace assets only while the release remains a draft.
+`v*` deployment restriction. There is no independent version input: the workflow
+derives the release identity from the triggering tag, checks out its fully
+qualified `refs/tags/vx.y.z` ref, and verifies that `HEAD` is that tag's commit.
+The rerun rebuilds the immutable tagged commit and may replace assets only while
+the release remains a draft.
 
 The workflow refuses to overwrite an already-public release. If code, scripts,
 metadata, release notes, or assets need a fix, prepare and tag a **new version**.
