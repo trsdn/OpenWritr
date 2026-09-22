@@ -32,7 +32,7 @@ struct PasteManagerTests {
         #expect(poster.postCount == 0)
     }
 
-    @Test func unreadableClipboardDataStillAllowsPaste() {
+    @Test func unreadableRepresentationCancelsPasteToPreserveWholeItem() {
         let pasteboard = FakePasteboard(
             items: [
                 .mixed(
@@ -46,13 +46,10 @@ struct PasteManagerTests {
 
         manager.pasteText("Synthetic transcript")
 
-        #expect(pasteboard.text == "Synthetic transcript")
-        #expect(poster.postCount == 1)
-
-        manager.flushPendingRestore()
-
         #expect(pasteboard.text == "Restorable clipboard")
-        #expect(pasteboard.items.first?.pasteboardTypes == [.string])
+        #expect(pasteboard.items.first?.pasteboardTypes == [.string, .fileURL])
+        #expect(pasteboard.clearCount == 0)
+        #expect(poster.postCount == 0)
     }
 
     @Test func unreadableOnlyClipboardCancelsPasteWithoutClearing() {

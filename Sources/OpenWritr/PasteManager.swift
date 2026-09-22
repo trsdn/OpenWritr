@@ -203,11 +203,13 @@ final class PasteManager: TextPasting {
 
             for type in item.pasteboardTypes {
                 // Some representations cannot be read: protected content (e.g. from
-                // managed apps) or promised data that never materialises. Skip them
-                // rather than dropping an otherwise restorable pasteboard item.
+                // managed apps) or promised data that never materialises. Cancel the
+                // paste rather than restore an incomplete version of the clipboard.
                 guard let data = item.pasteboardData(forType: type) else {
-                    pasteLog.notice("Skipping unreadable clipboard representation \(type.rawValue, privacy: .public)")
-                    continue
+                    pasteLog.notice(
+                        "Clipboard representation \(type.rawValue, privacy: .public) could not be preserved; cancelling paste"
+                    )
+                    return nil
                 }
 
                 representations.append(.init(type: type, data: data))
