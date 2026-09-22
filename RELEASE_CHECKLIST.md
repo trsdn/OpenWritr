@@ -61,8 +61,9 @@ The workflow performs these actions without maintainer intervention:
 4. Downloads the same immutable workflow artifact without release-write access,
    installs its DMG, verifies Gatekeeper and notarization, and runs the
    transcription smoke test.
-5. Publishes the draft only after the smoke test passes, then verifies the
-   public DMG is the tested file.
+5. After the smoke test, resolves the live remote tag again and requires it
+   still points to the triggering commit before publishing the draft, then
+   verifies the public DMG is the tested file.
 
 The release contains exactly these five public assets:
 

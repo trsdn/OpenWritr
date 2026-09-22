@@ -346,6 +346,14 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Checkout tag verification helper
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.sign-and-notarize.outputs.triggering_sha }}
+          persist-credentials: false
+          sparse-checkout: scripts/verify_remote_release_tag.sh
+          sparse-checkout-cone-mode: false
+
       - name: Download verified release artifacts
         uses: actions/download-artifact@v8
         with:
@@ -376,30 +384,8 @@ jobs:
             fi
           done
 
-          read -r remote_type remote_sha < <(
-            gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" \
-              --jq '[.object.type, .object.sha] | @tsv'
-          )
-          tag_depth=0
-          while [[ "$remote_type" == "tag" ]]; do
-            ((tag_depth += 1))
-            if ((tag_depth > 5)); then
-              echo "Remote tag $RELEASE_TAG has too many nested tag objects." >&2
-              exit 1
-            fi
-            read -r remote_type remote_sha < <(
-              gh api "repos/$GITHUB_REPOSITORY/git/tags/$remote_sha" \
-                --jq '[.object.type, .object.sha] | @tsv'
-            )
-          done
-          if [[ "$remote_type" != "commit" ]]; then
-            echo "Remote tag $RELEASE_TAG resolves to $remote_type, not a commit." >&2
-            exit 1
-          fi
-          if [[ "$remote_sha" != "$TRIGGERING_SHA" ]]; then
-            echo "Remote tag $RELEASE_TAG moved from $TRIGGERING_SHA to $remote_sha." >&2
-            exit 1
-          fi
+          bash scripts/verify_remote_release_tag.sh \
+            "$RELEASE_TAG" "$TRIGGERING_SHA" "$GITHUB_REPOSITORY"
 
           # Notes come from the changelog entry checked by the gate above. A new
           # release is created as a DRAFT: nobody, including the in-app updater,
@@ -444,12 +430,23 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Checkout tag verification helper
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.sign-and-notarize.outputs.triggering_sha }}
+          persist-credentials: false
+          sparse-checkout: scripts/verify_remote_release_tag.sh
+          sparse-checkout-cone-mode: false
+
       - name: Make the tested draft public
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ needs.sign-and-notarize.outputs.tag }}
+          TRIGGERING_SHA: ${{ needs.sign-and-notarize.outputs.triggering_sha }}
         run: |
           set -euo pipefail
+          bash scripts/verify_remote_release_tag.sh \
+            "$RELEASE_TAG" "$TRIGGERING_SHA" "$GITHUB_REPOSITORY"
           gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false
           if [[ "$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)" != "false" ]]; then
             echo "Release $RELEASE_TAG is still a draft." >&2

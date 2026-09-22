@@ -21,10 +21,11 @@ demand for any published tag (`Actions → Release smoke test → Run workflow`)
    shipped speech model and transcribes the file through the same code path as a
    recording, without a microphone (`Sources/OpenWritr/SelfTest.swift`).
 
-After it passes, `release.yml`'s `publish` job makes the draft public and
-downloads the DMG through its public URL to verify it against its checksum. If the
-smoke test fails, the release stays a draft, so nobody, including the in-app
-updater, is offered a build that could not be installed and run.
+After it passes, `release.yml`'s `publish` job re-resolves the remote tag and
+requires it still points to the commit that triggered the release before making
+the draft public. It then downloads the DMG through its public URL to verify it
+against its checksum. If the smoke test fails or the tag moved, the release stays
+a draft, so nobody, including the in-app updater, is offered an unverified build.
 
 The smoke-test job has only `contents: read`. It never needs permission to
 create, edit, upload to, or publish a GitHub release.
