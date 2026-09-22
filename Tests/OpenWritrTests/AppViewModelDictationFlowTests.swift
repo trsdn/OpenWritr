@@ -112,6 +112,11 @@ struct AppViewModelDictationFlowTests {
 
         #expect(isRuntimeError(viewModel.state, kind: .transcription))
         #expect(dependencies.overlay.didShowError("Transcription failed"))
+        #expect(
+            dependencies.errorLogger.messages.contains {
+                $0.hasPrefix("Transcription failed for 16000 captured samples:")
+            }
+        )
 
         await waitUntil { viewModel.state.isReady }
 
@@ -148,6 +153,11 @@ struct AppViewModelDictationFlowTests {
 
         dependencies.audio.onFailure?(.inputDeviceUnavailable(42))
         await waitUntil { isRuntimeError(viewModel.state, kind: .audio) }
+        #expect(
+            dependencies.errorLogger.messages.contains {
+                $0.hasPrefix("Runtime audio failure invalidated capture generation 1:")
+            }
+        )
         viewModel.retryMicrophone()
         #expect(viewModel.state.isReady)
 
@@ -259,7 +269,8 @@ struct AppViewModelDictationFlowTests {
             transcriber: FakeTranscriber(behaviors: transcriptions),
             enhancer: FakeEnhancer(results: enhancements),
             paster: FakeTextPaster(outcomes: pasteOutcomes),
-            overlay: FakeOverlayPresenter()
+            overlay: FakeOverlayPresenter(),
+            errorLogger: RecordingErrorLogger()
         )
     }
 
@@ -318,6 +329,7 @@ private struct DictationDependencies {
     let enhancer: FakeEnhancer
     let paster: FakeTextPaster
     let overlay: FakeOverlayPresenter
+    let errorLogger: RecordingErrorLogger
 
     func makeViewModel(
         transientErrorDisplayDuration: Duration = .milliseconds(10)
@@ -328,10 +340,20 @@ private struct DictationDependencies {
             grammarEnhancer: enhancer,
             pasteManager: paster,
             overlayPanel: overlay,
+            errorLogger: errorLogger,
             startsOperational: true,
             doneDisplayDuration: .milliseconds(1),
             transientErrorDisplayDuration: transientErrorDisplayDuration
         )
+    }
+}
+
+@MainActor
+private final class RecordingErrorLogger: ErrorLogging {
+    private(set) var messages: [String] = []
+
+    func logError(_ message: String) {
+        messages.append(message)
     }
 }
 

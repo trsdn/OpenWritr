@@ -97,6 +97,7 @@ final class AppViewModel {
     private let captureDrainTimeout: Duration = .milliseconds(350)
     private let doneDisplayDuration: Duration
     private let transientErrorDisplayDuration: Duration
+    private let errorLogger: any ErrorLogging
     private var didConfigure = false
     private var didAttemptInitialSetup = false
     private var isInitializing = false
@@ -125,6 +126,7 @@ final class AppViewModel {
         grammarEnhancer: any TranscriptEnhancing = GrammarEnhancer(),
         pasteManager: any TextPasting = PasteManager(),
         overlayPanel: any OverlayPresenting = OverlayPanel(),
+        errorLogger: any ErrorLogging = UnifiedErrorLogger(category: "AppViewModel"),
         startsOperational: Bool = false,
         doneDisplayDuration: Duration = AppViewModel.defaultDoneDisplayDuration,
         transientErrorDisplayDuration: Duration = AppViewModel.defaultTransientErrorDisplayDuration
@@ -134,6 +136,7 @@ final class AppViewModel {
         self.grammarEnhancer = grammarEnhancer
         self.pasteManager = pasteManager
         self.overlayPanel = overlayPanel
+        self.errorLogger = errorLogger
         self.doneDisplayDuration = doneDisplayDuration
         self.transientErrorDisplayDuration = transientErrorDisplayDuration
         if startsOperational {
@@ -274,8 +277,8 @@ final class AppViewModel {
                 }
                 modelsLoaded = true
             } catch {
-                appLog.error(
-                    "Model initialization failed: \(error.localizedDescription, privacy: .public)"
+                errorLogger.logError(
+                    "Model initialization failed: \(error.localizedDescription)"
                 )
                 presentInitializationError(
                     errorPresentation(
@@ -303,7 +306,7 @@ final class AppViewModel {
 
         state = .loading
         if case .failure(let error) = prepareAudioForStartup() {
-            appLog.error("Audio initialization failed: \(error.localizedDescription, privacy: .public)")
+            errorLogger.logError("Audio initialization failed: \(error.localizedDescription)")
             presentInitializationError(
                 errorPresentation(kind: .audio, title: "Microphone Initialization Failed", error: error)
             )
@@ -312,7 +315,7 @@ final class AppViewModel {
         updateInputDeviceStatusMessage()
 
         if case .failure(let error) = hotkeyManager.start() {
-            appLog.error("Hotkey initialization failed: \(error.localizedDescription, privacy: .public)")
+            errorLogger.logError("Hotkey initialization failed: \(error.localizedDescription)")
             presentInitializationError(
                 errorPresentation(kind: .audio, title: "Push-to-Talk Initialization Failed", error: error)
             )
@@ -721,7 +724,7 @@ final class AppViewModel {
                     state = .ready
                 }
             case .failure(let error):
-                appLog.error("Input device validation failed: \(error.localizedDescription, privacy: .public)")
+                errorLogger.logError("Input device validation failed: \(error.localizedDescription)")
                 if device == nil {
                     scheduleSystemDefaultRecovery(showTransientError: true, initialError: error)
                 } else {
@@ -736,7 +739,7 @@ final class AppViewModel {
                 clearSelectedInputDevice()
                 inputDeviceStatusMessage = "The previous macOS system input could not be restored."
             }
-            appLog.error("Input device selection failed: \(error.localizedDescription, privacy: .public)")
+            errorLogger.logError("Input device selection failed: \(error.localizedDescription)")
             if device == nil {
                 scheduleSystemDefaultRecovery(showTransientError: true, initialError: error)
             } else {
@@ -776,8 +779,8 @@ final class AppViewModel {
         guard !didShutdown, isOperational else { return }
 
         if let operationID = captureOperationID, captureHandle == nil {
-            appLog.error(
-                "Runtime audio failure invalidated pending capture: \(error.localizedDescription, privacy: .public)"
+            errorLogger.logError(
+                "Runtime audio failure invalidated pending capture: \(error.localizedDescription)"
             )
             pendingStartTask?.cancel()
             invalidateCaptureOperation(ifCurrent: operationID)
@@ -795,7 +798,7 @@ final class AppViewModel {
         guard let operationID = captureOperationID,
               let handle = captureHandle
         else {
-            appLog.error("Runtime audio failure: \(error.localizedDescription, privacy: .public)")
+            errorLogger.logError("Runtime audio failure: \(error.localizedDescription)")
             inputDeviceStatusMessage = "The microphone configuration failed: \(error.localizedDescription)"
             if selectedInputDeviceID == nil {
                 scheduleSystemDefaultRecovery(showTransientError: true, initialError: error)
@@ -808,8 +811,8 @@ final class AppViewModel {
             return
         }
 
-        appLog.error(
-            "Runtime audio failure invalidated capture generation \(handle.generation): \(error.localizedDescription, privacy: .public)"
+        errorLogger.logError(
+            "Runtime audio failure invalidated capture generation \(handle.generation): \(error.localizedDescription)"
         )
         activeProcessingTask?.cancel()
         pendingStartTask?.cancel()
@@ -847,7 +850,7 @@ final class AppViewModel {
             overlayPanel.dismiss()
             state = .ready
         case .failure(let error):
-            appLog.error("Microphone retry validation failed: \(error.localizedDescription, privacy: .public)")
+            errorLogger.logError("Microphone retry validation failed: \(error.localizedDescription)")
             if selectedInputDeviceID == nil {
                 scheduleSystemDefaultRecovery(showTransientError: true, initialError: error)
             } else {
@@ -1110,7 +1113,7 @@ final class AppViewModel {
             prompts: customEnhancementPrompts
         )
         guard let data = try? JSONEncoder().encode(store) else {
-            appLog.error("Failed to encode custom enhancement prompts")
+            errorLogger.logError("Failed to encode custom enhancement prompts")
             return
         }
         UserDefaults.standard.set(data, forKey: Self.customPromptsPreferenceKey)
@@ -1130,8 +1133,8 @@ final class AppViewModel {
             }
         } catch {
             launchAtLogin = SMAppService.mainApp.status == .enabled
-            appLog.error(
-                "Launch-at-login update failed: \(error.localizedDescription, privacy: .public)"
+            errorLogger.logError(
+                "Launch-at-login update failed: \(error.localizedDescription)"
             )
             if isOperational {
                 presentRuntimeError(
@@ -1272,7 +1275,7 @@ final class AppViewModel {
                   !Task.isCancelled,
                   case .preparingMicrophone = state
             else { return }
-            appLog.error("Microphone start failed: \(error.localizedDescription, privacy: .public)")
+            errorLogger.logError("Microphone start failed: \(error.localizedDescription)")
             if selectedInputDeviceID == nil {
                 scheduleSystemDefaultRecovery(showTransientError: true, initialError: error)
             } else {
@@ -1363,7 +1366,7 @@ final class AppViewModel {
             expectedState: expectedState
         ) else { return }
         guard let samples else {
-            appLog.error("Capture generation \(handle.generation) stopped without samples")
+            errorLogger.logError("Capture generation \(handle.generation) stopped without samples")
             invalidateCaptureOperation(ifCurrent: operationID)
             presentRuntimeError(
                 AppErrorPresentation(
@@ -1431,8 +1434,8 @@ final class AppViewModel {
                 handle: handle,
                 expectedState: .transcribing
             ) else { return }
-            appLog.error(
-                "Transcription failed for \(samples.count) captured samples: \(error.localizedDescription, privacy: .public)"
+            errorLogger.logError(
+                "Transcription failed for \(samples.count) captured samples: \(error.localizedDescription)"
             )
             clearCaptureOperation(ifCurrent: operationID)
             presentRuntimeError(
@@ -1531,7 +1534,7 @@ final class AppViewModel {
         } catch is CancellationError {
             return
         } catch {
-            appLog.error("Done overlay delay failed: \(error.localizedDescription, privacy: .public)")
+            errorLogger.logError("Done overlay delay failed: \(error.localizedDescription)")
         }
 
         guard isOperational, !didShutdown else { return }
