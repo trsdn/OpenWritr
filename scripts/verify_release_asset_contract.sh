@@ -52,7 +52,9 @@ asset_output="$(
 )"
 current_assets=()
 while IFS= read -r name; do
-  [[ -n "$name" ]] && current_assets+=("$name")
+  if [[ -n "$name" ]]; then
+    current_assets+=("$name")
+  fi
 done <<< "$asset_output"
 
 for name in "${current_assets[@]-}"; do
