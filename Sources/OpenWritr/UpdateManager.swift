@@ -52,9 +52,11 @@ final class UpdateManager {
 
     /// No `GitHubAttestationPolicy`, for two reasons (see #31):
     ///
-    /// - AppUpdater only accepts a branch ref (`refs/heads/…`) as the attested source,
-    ///   and releases are built by a tag push, whose provenance names `refs/tags/vX.Y.Z`.
-    ///   Every release would be rejected.
+    /// - Release signing runs in `trsdn/macos-notarization-broker`, not this source
+    ///   repository, so broker provenance cannot satisfy a source-repository policy.
+    ///   The broker also deliberately never attests either OpenWritr DMG: the updater
+    ///   alias and versioned DMG share one digest, and 1.6.0 can crash if that digest
+    ///   has an attestation.
     /// - It loads its Sigstore trust roots through SwiftPM's `Bundle.module`, which, in a
     ///   `swift build` product, only looks at the `.app` root and the build machine's
     ///   `.build` path, never at `Contents/Resources`. Verifying an attestation therefore

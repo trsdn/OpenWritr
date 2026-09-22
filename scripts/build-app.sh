@@ -3,18 +3,10 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-ENV_FILE="${RELEASE_ENV_FILE:-$PROJECT_DIR/.release.env}"
 BUILD_DIR="$PROJECT_DIR/.build/release"
 APP="$BUILD_DIR/OpenWritr.app"
 DEFAULT_BUNDLE_ID="com.openwritr.app"
 PREFERRED_IDENTITY="${OPENWRITR_SIGNING_IDENTITY:-${CODE_SIGN_IDENTITY:-}}"
-
-if [[ -f "$ENV_FILE" ]]; then
-    set -a
-    . "$ENV_FILE"
-    set +a
-    PREFERRED_IDENTITY="${OPENWRITR_SIGNING_IDENTITY:-${CODE_SIGN_IDENTITY:-$PREFERRED_IDENTITY}}"
-fi
 
 find_signing_identity() {
     if [[ -n "$PREFERRED_IDENTITY" ]]; then
@@ -96,8 +88,8 @@ p['CFBundlePackageType'] = 'APPL'
 p['CFBundleDisplayName'] = 'OpenWritr'
 p['NSHighResolutionCapable'] = True
 p['LSMinimumSystemVersion'] = '14.0'
-# The release workflow passes the version parsed from the tag, so the bundle
-# identity is derived from the tag rather than maintained by hand.
+# The broker passes the version parsed from the immutable tag for release
+# builds. Local diagnostic builds normally use the checked-in version.
 version = os.environ.get('OPENWRITR_VERSION')
 if version:
     p['CFBundleShortVersionString'] = version

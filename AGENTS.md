@@ -10,7 +10,7 @@ OpenWritr is a macOS menu bar app (`LSUIElement`) for push-to-talk voice-to-text
 built with Swift Package Manager for macOS 14+ on Apple Silicon. End users install
 the signed, notarized DMG/ZIP from GitHub Releases and receive updates in place
 through the app itself, so a bad release reaches every installed copy within about
-a day. Changes to `UpdateManager`, the release workflow, or signing can strand
+a day. Changes to `UpdateManager`, the broker profile/publication handoff, or signing can strand
 users on an old version.
 
 ## What this repository is not
@@ -29,7 +29,7 @@ transcript text to the provider the user chose.
 | `Sources/ObjCExceptionCatcher/` | Small Objective-C shim so Swift can catch `NSException`. |
 | `Resources/AppIcon.icns` | The app icon copied into the bundle. |
 | `Info.plist` | Bundle identity: name, version, description, copyright, licence, repository and issue URLs. `Package.swift` has no fields for these, so they live here; the release build overrides the version from the tag. Extended by `scripts/build-app.sh`. |
-| `scripts/` | Build, sign, notarize, DMG, release, and model-evaluation scripts. |
+| `scripts/` | Local diagnostic build/DMG tools, broker release verification/publication handoff, and model-evaluation scripts. |
 | `eval/cleanup-cases.json` | Synthetic cleanup-model benchmark cases. Never add private dictation. |
 | `docs/` | GitHub Pages site (`index.html` and assets), served from `main` `/docs`. |
 | `plan/` | Working implementation plans. |
@@ -59,7 +59,7 @@ Concurrency model: `AppViewModel` is `@MainActor`. `AudioEngine` is `@unchecked 
 
 Preferences live in `UserDefaults` (no separate plist). Custom cleanup prompts use a versioned per-provider/model store so bundled tuned defaults can change without overwriting user text.
 
-`scripts/build-app.sh` signs with a Developer ID Application or Apple Development certificate found in the local keychain (or named in `OPENWRITR_SIGNING_IDENTITY`) and exits with an error if there is none; it creates no certificate. Ad-hoc signatures are refused, because macOS would reset the app's permissions.
+`scripts/build-app.sh` is a local diagnostic build. It signs with a Developer ID Application or Apple Development certificate found in the local keychain (or named in `OPENWRITR_SIGNING_IDENTITY`) and exits with an error if there is none; it creates no certificate. Ad-hoc signatures are refused, because macOS would reset the app's permissions. Distributable builds do not use this script or any OpenWritr workflow: they are assembled, signed, notarized, and packaged by `trsdn/macos-notarization-broker` profile `openwritr`.
 
 ## Enhanced Mode
 
@@ -74,10 +74,10 @@ Enhanced activation has two modes: on demand (`Shift + hotkey`) and always-enhan
 OpenWritr is distributed outside the Mac App Store. `UpdateManager` (AppUpdater 4.x) checks `trsdn/OpenWritr` GitHub Releases for a newer, Developer ID-signed DMG and installs it in place.
 
 - Automatic checks run roughly every 24 hours (Settings → Updates, on by default). A manual check is in the menu bar and Settings.
-- Asset naming: the release workflow publishes an extra DMG named `OpenWritr-{semver}.dmg` (no `v` prefix, no arch suffix) beside the `OpenWritr-v{version}-macOS-arm64.{dmg,zip}` assets. AppUpdater looks for this exact name.
+- Asset naming: the broker profile creates an extra DMG named `OpenWritr-{semver}.dmg` (no `v` prefix, no arch suffix) as a byte-identical copy of `OpenWritr-v{version}-macOS-arm64.dmg`. AppUpdater looks for this exact name.
 - Verification: AppUpdater checks the downloaded DMG's Developer ID identity, Team ID, and bundle identifier against the installed app.
 - **No attestation policy — do not add one back** (#31). AppUpdater accepts only a `refs/heads/…` source ref, but releases run on tag pushes, so provenance names `refs/tags/vX.Y.Z`. It also loads its Sigstore trust roots through `Bundle.module`, which for a `swift build` product only looks at the `.app` root and the CI machine's `.build` path, so verification hits `fatalError` in a shipped app. Re-enabling it needs an upstream AppUpdater fix and releases dispatched from `main`.
-- **Never attest the update DMG.** 1.6.0 shipped with the policy. It reaches the crashing code only if GitHub has an attestation for the new DMG's digest; without one it rejects the update cleanly. 1.6.0 users have to update manually once.
+- **Never attest either OpenWritr DMG.** The updater alias is byte-identical to the versioned DMG, so an attestation for either filename covers the same digest. 1.6.0 shipped with the policy and reaches the crashing code only if GitHub has an attestation for the new DMG's digest; without one it rejects the update cleanly. The broker must attest only the OpenWritr ZIP. 1.6.0 users have to update manually once.
 - `scripts/build-app.sh` still copies `AppUpdater_AppUpdater.bundle` into `Contents/Resources/`. It is unused without an attestation policy but keeps the layout AppUpdater documents.
 - Quiescing: before installing, `UpdateManager` calls `AppViewModel.quiesceForUpdateInstall()` so a swap-and-relaunch cannot interrupt an in-flight capture.
 
@@ -85,7 +85,7 @@ OpenWritr is distributed outside the Mac App Store. `UpdateManager` (AppUpdater 
 
 Anything not listed here is hand-maintained.
 
-- Generated, never hand-edit: `.build/` (SwiftPM output and the built `.app`), `dist/` and `.artifacts/` (release and evaluation output), `*.dmg` and `*.dmg.sha256`. All are git-ignored; regenerate with `swift build -c release`, `scripts/build-app.sh`, or the release scripts.
+- Generated, never hand-edit: `.build/` (SwiftPM output and the built `.app`), `dist/` and `.artifacts/` (local build, broker download, and evaluation output), `*.dmg` and `*.dmg.sha256`. All are git-ignored; regenerate with `swift build -c release`, `scripts/build-app.sh`, or the broker request.
 - Generated by `gh aw compile`, never hand-edit: `.github/workflows/*.lock.yml` and `.github/aw/actions-lock.json`. Edit the matching agentic workflow Markdown file and recompile it instead.
 - Machine-owned: `Package.resolved`. Change it only by updating `Package.swift` or by merging a Dependabot PR.
 - Bundled, edit deliberately: `Sources/OpenWritr/Resources/cleanup-prompt-profiles.json`. Editing it changes shipped prompt defaults for every user.
@@ -108,7 +108,7 @@ cp -R .build/release/OpenWritr.app /Applications/
 open /Applications/OpenWritr.app
 ```
 
-The build script needs a Developer ID Application or Apple Development certificate in the local keychain. The app asks for Microphone and Accessibility permission on first use.
+The local diagnostic build script needs a Developer ID Application or Apple Development certificate in the local keychain. The app asks for Microphone and Accessibility permission on first use. Release signing and notarization happen only in the broker.
 
 ## Validate before proposing a change
 
@@ -131,16 +131,22 @@ swift test
 - Pin external actions and reusable workflows in hand-maintained workflows to
   full commit SHAs with readable version comments. Update generated agentic
   workflow locks only through `gh aw compile`.
+- The checkout-free release smoke job is the only release workflow with
+  `contents: write`, because GitHub requires push-level access to download
+  draft assets. It must run from trusted `main`, remain bound to the fixed
+  maintainer/repository IDs plus exact digests and a unique nonce, and must
+  never mutate a release.
 - Release identity comes from `Info.plist` (`CFBundleShortVersionString` and `CFBundleVersion`). Bump both in a `chore(release): bump version to X.Y.Z` change before tagging.
-- User-facing changes get an entry in `CHANGELOG.md` (`## [x.y.z] — date`). The release workflow publishes that section as the release notes and fails when it is missing or empty, or when Info.plist disagrees with the tag.
+- User-facing changes get an entry in `CHANGELOG.md` (`## [x.y.z] — date`). The secretless publication handoff publishes that section as the release notes and fails when it is missing or empty. The broker verifies the tagged bundle version.
 - Commit messages use Conventional Commits (`fix(settings): …`, `chore(release): …`).
 
 ## Do not do these
 
 - Do not rewrite history, force push, or delete branches. `main` blocks force pushes and deletion and requires the `Secret Scan` check.
-- Do not commit secrets, tokens, credentials, certificates, or personal data. `.release.env` is git-ignored; `.release.env.example` is the template.
-- Do not publish a release, create or move tags, dispatch the release workflow, or change repository settings. The maintainer (`@trsdn`) does this.
-- Do not add a build-attestation policy to `UpdateManager` or attest the update DMG (see In-app updates).
+- Do not commit secrets, tokens, credentials, certificates, notary profiles, or personal data.
+- Do not publish a release, create or move tags, dispatch the notarization broker, run the publication handoff, or change repository settings. The explicitly authorized maintainer (`@trsdn`, numeric actor ID `24534196`) does this.
+- Do not add a build-attestation policy to `UpdateManager`, and do not attest either OpenWritr DMG (see In-app updates).
+- Do not add Apple credentials, certificates, notary profiles, release environments, or credential-reading workflows to OpenWritr. The broker is the only home for release credentials.
 - Do not add private dictation or real transcripts to `eval/cleanup-cases.json`; synthetic or explicitly approved text only.
 - Do not run destructive commands against the user's machine or data: no `defaults delete com.openwritr.app`, no removal of `~/Library` state, no `tccutil reset`, no `security delete-keychain` outside `.build/`.
 - Do not hand-edit the generated paths listed above.
@@ -148,17 +154,18 @@ swift test
 
 ## Credentials and revocation
 
-Release credentials are held as secrets in the GitHub `release` environment and
-are never in the tree. Only the signing/notarization job uses that environment.
-If one is exposed, revoke it at its source first, then update the environment
-secret.
+OpenWritr has no release credential. `MACOS_CERTIFICATE`,
+`MACOS_CERTIFICATE_PWD`, `APPLE_ID`, `APPLE_TEAM_ID`, and
+`APPLE_APP_PASSWORD` live only in the broker's protected `macos-signing`
+environment. Those five names must not exist as OpenWritr repository or
+environment secrets. The broker's security policy owns their rotation and
+revocation procedure.
 
-| Credential | Where it lives | If exposed |
-|---|---|---|
-| `MACOS_CERTIFICATE`, `MACOS_CERTIFICATE_PWD` (Developer ID Application `.p12`) | GitHub `release` environment secrets | Revoke the certificate in the Apple Developer portal, issue a new one, re-export the `.p12`, update both secrets. Maintainer only. |
-| `APPLE_ID`, `APPLE_TEAM_ID`, `APPLE_APP_PASSWORD` | GitHub `release` environment secrets | Revoke the app-specific password at appleid.apple.com, create a new one, update `APPLE_APP_PASSWORD`. Maintainer only. |
-| Local notary profile (`xcrun notarytool store-credentials`) | The maintainer's login keychain | Revoke the app-specific password as above and store the profile again. |
-| User-entered provider API keys | The user's macOS Keychain (`KeychainStore`) | The user revokes the key with the provider and enters a new one in Settings. The repository holds none. |
+A local signing identity may exist in a maintainer's login keychain for
+diagnostic builds, but OpenWritr scripts never export, upload, or configure it
+and no local notary profile is part of the release path. User-entered provider
+API keys remain in the user's macOS Keychain (`KeychainStore`); if exposed, the
+user revokes the key with the provider and enters a new one in Settings.
 
 ## Attribution
 

@@ -51,7 +51,7 @@ Automation Availability does not apply: hosted runners are available and used.
 | B01 | pass | Description says what it is: native macOS menu bar app for push-to-talk voice-to-text, local Parakeet transcription, optional cleanup. |
 | B02 | pass | README states purpose, status ("actively maintained"), install and usage, and links (site, download, changelog, licence). Audience is stated through purpose and the Requirements section (macOS 14+, Apple Silicon). |
 | B03 | pass | `LICENSE` is MIT, detected by GitHub. |
-| B04 | pass | `.gitignore` covers `.build/`, `.swiftpm/`, `DerivedData/`, `dist/`, `.artifacts/`, `.release.env`, disk images, Xcode output. Searched the tree for key, token and private-key patterns: only variable initialisation in `scripts/setup_notarization.sh` and `openssl rand` in the workflow. `.release.env.example` holds a Team ID and identity name, not a secret. The committed badge SVG is generated output the record documents. |
+| B04 | pass | `.gitignore` covers `.build/`, `.swiftpm/`, `DerivedData/`, `dist/`, `.artifacts/`, disk images, and Xcode output. OpenWritr contains no Apple credential setup script, release environment, certificate import, or notarization secret surface; those exist only in the public broker. The committed badge SVG is generated output the record documents. |
 | B05 | pass | `AGENTS.md` documents `swift build -c release -Xswiftc -warnings-as-errors` and `swift test`. The latest `CI` run on `main` (push, `34fdc90`) is green. The assessor also ran both commands from a clean copy and both exited 0. |
 | B06 | pass | Merge commits and rebase merges are disabled, only squash is on; `main` is protected with required checks; README states squash merges. No open critical Dependabot alert, no open secret-scanning alert, code scanning not enabled. |
 | B07 | pass | `Package.swift` declares `swift-tools-version: 6.0`, `.macOS(.v14)` and both dependencies; `Package.resolved` pins them; README states macOS 14+ and Apple Silicon. |
@@ -60,8 +60,8 @@ Automation Availability does not apply: hosted runners are available and used.
 | B10 | pass | README status sentence; `.github/CODEOWNERS` names `@trsdn`; the account owns the repository. |
 | B11 | pass | This record, dated 2026-09-20. |
 | B12 | pass | Topic `trsdn-standard` is present. |
-| B13 | pass | Each fact has one home. Build, run, and validation commands: `AGENTS.md` (the README and the site link to it). Release secrets and revocation: `AGENTS.md` (the README links). Requirements: the README (`AGENTS.md` links). The two earlier disagreements are fixed. |
-| B14 | pass | `AGENTS.md` "Credentials and revocation" names each credential class, where it lives and who replaces it. |
+| B13 | pass | Each fact has one home. Build, run, and validation commands: `AGENTS.md` (the README and the site link to it). The broker-owned release credential boundary and prohibition on OpenWritr secrets: `AGENTS.md`; the maintainer release procedure: `RELEASE_CHECKLIST.md`. Requirements: the README (`AGENTS.md` links). |
+| B14 | pass | `AGENTS.md` states that OpenWritr owns no release credentials, names the five obsolete OpenWritr secret names, and points revocation/rotation to the broker security policy. |
 | B15 | pass | `THIRD_PARTY_NOTICES.md` lists the three linked packages and how the obligations are met. The v1.6.4 artifact does not yet carry the licence texts the notice promises; that is recorded under `I03`. |
 | B16 | pass | Branch protection on `main`: `allow_force_pushes` false, `allow_deletions` false. |
 
@@ -97,9 +97,9 @@ Automation Availability does not apply: hosted runners are available and used.
 | S08 | pass | `.github/dependabot.yml` covers `github-actions` and `swift`, weekly; single maintainer owns triage. |
 | S09 | pass | `main` protection requires `Secret Scan` and `Build and test`, strict; both checks exist and run. |
 | S10 | pass | `AGENTS.md` names components and constraints (update attestation must not be added, asset naming AppUpdater needs, `Package.resolved` machine-owned, release identity from `Info.plist`). |
-| S11 | pass | All four workflows declare `permissions` (`contents: read`, and `contents: write` for `release.yml`, which creates releases, and `stats.yml`, which commits the card). |
-| S12 | pass | `actions/checkout@v7` and `actions/upload-artifact@v7` are GitHub-published, major tags; `trsdn/.github/.github/workflows/repo-stats.yml@main` is within the same account. |
-| S13 | na | No workflow uses `pull_request_target` or `workflow_run` (all four workflows read). |
+| S11 | pass | Every workflow declares permissions. Release mutation happens only in the explicitly authorized maintainer-side script with the maintainer's `gh` credentials. The checkout-free smoke job is the sole release-related workflow exception: it has job-scoped `contents: write` because GitHub requires push-level access to read draft release assets, is fixed to the numeric repository/maintainer identities and `refs/heads/main`, receives exact digests plus a nonce, and never creates, edits, uploads, or publishes a release. `stats.yml` separately writes only to the generated stats branch. |
+| S12 | pass | Hand-maintained workflow actions are pinned to full commit SHAs, and the shared conformance/stats workflows are pinned to reviewed commits. |
+| S13 | na | No workflow uses `pull_request_target` or `workflow_run`. |
 
 ## Deployable
 
@@ -120,12 +120,12 @@ Assessed on the latest release, `v1.6.4` (2026-09-19), assets `OpenWritr-v1.6.4-
 |---|---|---|
 | R01 | pass | Name, version, description, copyright, licence, and repository and issue URLs all have a home in `Info.plist`, and `AGENTS.md` states why (`Package.swift` has no fields for them). The published `v1.6.5` bundle carries them, and they agree with the GitHub metadata. |
 | R02 | pass | README "Versioning and compatibility" names SemVer and states what each kind of release means. |
-| R03 | pass | Tag `v1.6.4` points at commit `a15b547`; `release.yml` triggers on `v*` tags and the run for that tag succeeded. |
+| R03 | pass | Existing release tags are immutable. New releases use the public broker's manually authorized `openwritr` request; both the broker and the OpenWritr publication handoff resolve the tag to a full commit and fail if it moves. |
 | R04 | pass | Tag `v1.6.4`, bundle `CFBundleShortVersionString` 1.6.4 (read from the download), title "OpenWritr 1.6.4". |
-| R05 | pass | `smoke-test.yml` ran for `v1.6.5` in the release run (which published first; since #56 it runs against the draft and publishing depends on it) (Actions run 35534329100, job `Smoke-test the published release`, conclusion success): it downloaded the published DMG, verified its checksum, installed it, checked Gatekeeper and notarization, and transcribed a synthesized phrase through `--self-test`, without anyone operating the product. The job summary is the dated record. |
+| R05 | pass | `publish_broker_release.sh` binds the candidate to a successful fixed-identity broker run and GitHub artifact digest. It refuses any pre-existing release/draft, creates a single-use exact five-asset draft without clobbering, and byte-compares all five downloaded draft assets with the authenticated broker output. It dispatches the checkout-free smoke workflow from trusted `main` with exact DMG/checksum digests and a unique nonce, then correlates that exact run. `smoke-test.yml` verifies those bytes, bundle identifier, Developer ID Team, Gatekeeper acceptance and notarization, then transcribes a synthesized phrase through `--self-test` without an operator. The handoff rechecks the immutable tag and all five draft bytes, publishes, and verifies the exact public contract plus all five bytes again. |
 | R06 | pass | Release notes: "### Fixed - Brought the Settings window to the front ... (#42)", specific, nothing breaking to warn about. |
-| R07 | pass | Release body equals the 1.6.4 changelog entry plus a "Full changelog" link; the entry exists and is not empty. `release.yml` on `main` gates on it and passes it as the notes. |
-| R08 | pass | Developer ID signature (Team `G69Z5BNY97`) and stapled notarization verified on the download (`codesign` valid, `spctl` "accepted, source=Notarized Developer ID", `stapler validate` worked); README "Verifying a download" gives the commands and says the attestation is deliberately not published (#31) and that this does not prove the source commit. `gh attestation verify` finds none, as stated. |
+| R07 | pass | Release notes come from the tagged `CHANGELOG.md` section. The publication handoff fails when the entry is missing, empty, or still under `Unreleased`; it never accepts freestanding notes. |
+| R08 | pass | Developer ID signature (Team `G69Z5BNY97`) and stapled notarization are verified by the broker and smoke test. Broker provenance records the immutable source commit. The broker may attest the ZIP only and statically excludes both OpenWritr DMGs, because their shared digest must have no attestation (#31). |
 
 ## Product Identity
 
@@ -138,7 +138,7 @@ Read from the downloaded `v1.6.4` ZIP (`OpenWritr.app/Contents/Info.plist`).
 | I03 | pass | The published `v1.6.5` bundle carries `NSHumanReadableCopyright`, `OpenWritrLicense` (`MIT`), and `Contents/Resources/Licenses/` with the OpenWritr licence, the dependency licences, and `THIRD_PARTY_NOTICES.md`. |
 | I04 | pass | Source read, app not operated: `AboutView.swift` shows "Version X", and links the repository, "Report an Issue" and the licence. |
 | I05 | pass | `CFBundleIconFile` = `AppIcon`, `AppIcon.icns` in the bundle; the site's `icon.svg`, `icon-192.png`, `apple-touch-icon.png` and `favicon.ico` show the same icon (compared visually). No store listing exists. |
-| I06 | pass | `release.yml` passes `OPENWRITR_VERSION` from the tag and `build-app.sh` writes it into the bundle after a gate checks `Info.plist` against the tag; the other identity values are constants in `Info.plist`, one source-controlled place the build copies into the artifact. |
+| I06 | pass | The broker resolves the immutable tag, requires the source `Info.plist` version to match through its `openwritr` adapter, and stamps the release bundle from that request. Other identity values remain constants in the source-controlled plist and reviewed broker profile. |
 
 ## Documentation
 
@@ -172,7 +172,7 @@ Source read only (`docs/index.html`); the page was not rendered, except that the
 |---|---|---|
 | G01 | pass | `AGENTS.md` at the root. |
 | G02 | pass | Purpose, layout and commands are stated, and validation is named as the one to use. The command was run by the assessor from a clean copy and succeeded. Build and run commands are stated (`scripts/build-app.sh`, `open`). |
-| G03 | pass | "Do not do these" covers history rewriting, force pushes, secrets, releases (no tags, no dispatching the release workflow), and data-destructive commands (`defaults delete`, `tccutil reset`, keychain deletion). Deployments were treated as not applicable: nothing is deployed. |
+| G03 | pass | "Do not do these" covers history rewriting, force pushes, secrets, releases (no tags, broker dispatch, or publication handoff), and data-destructive commands (`defaults delete`, `tccutil reset`, keychain deletion). Deployments were treated as not applicable: nothing is deployed. |
 | G04 | pass | `CLAUDE.md` imports `@AGENTS.md` and adds nothing. `.github/copilot-instructions.md` points at `AGENTS.md` and repeats its validation command; the repetition agrees, so it is not divergence under 1.15.0. |
 | G05 | pass | `AGENTS.md` names the validation command; CI runs it green on `main`. |
 | G06 | pass | `AGENTS.md` "Generated, vendored, and machine-owned paths" lists `.build/`, `dist/`, `.artifacts/`, disk images and `Package.resolved`; these are also in `.gitignore`. |
