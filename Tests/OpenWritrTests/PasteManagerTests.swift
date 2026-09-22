@@ -5,6 +5,22 @@ import Testing
 @MainActor
 @Suite("PasteManager")
 struct PasteManagerTests {
+    @Test func emptyClipboardPastesAndRestoresEmpty() {
+        let pasteboard = FakePasteboard(items: [], returnsNilItemsWhenEmpty: true)
+        let poster = FakePasteCommandPoster()
+        let manager = PasteManager(pasteboard: pasteboard, commandPoster: poster)
+
+        manager.pasteText("Synthetic transcript")
+
+        #expect(pasteboard.text == "Synthetic transcript")
+        #expect(poster.postCount == 1)
+
+        manager.flushPendingRestore()
+
+        #expect(pasteboard.items.isEmpty)
+        #expect(pasteboard.clearCount == 2)
+    }
+
     @Test func savesReplacesPastesAndRestoresClipboard() {
         let pasteboard = FakePasteboard(items: [.text("Original clipboard")])
         let poster = FakePasteCommandPoster()
@@ -126,12 +142,20 @@ private final class FakePasteboard: PasteboardManaging {
     private(set) var clearCount = 0
     private(set) var items: [FakePasteboardItem]
     var mutateWhenReading: [FakePasteboardItem]?
+    private let returnsNilItemsWhenEmpty: Bool
 
-    init(items: [FakePasteboardItem]) {
+    init(
+        items: [FakePasteboardItem],
+        returnsNilItemsWhenEmpty: Bool = false
+    ) {
         self.items = items
+        self.returnsNilItemsWhenEmpty = returnsNilItemsWhenEmpty
     }
 
     var pasteboardItems: [any PasteboardItemReading]? {
+        if returnsNilItemsWhenEmpty, items.isEmpty {
+            return nil
+        }
         let currentItems = items
         if let mutation = mutateWhenReading {
             mutateWhenReading = nil

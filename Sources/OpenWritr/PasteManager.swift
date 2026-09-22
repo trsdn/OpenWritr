@@ -192,10 +192,7 @@ final class PasteManager: TextPasting {
     }
 
     private func snapshot(of pasteboard: any PasteboardManaging) -> PasteboardSnapshot? {
-        guard let pasteboardItems = pasteboard.pasteboardItems else {
-            pasteLog.notice("Clipboard items could not be read; cancelling paste")
-            return nil
-        }
+        let pasteboardItems = pasteboard.pasteboardItems ?? []
         var snapshotItems: [PasteboardItemContent] = []
 
         for item in pasteboardItems {
