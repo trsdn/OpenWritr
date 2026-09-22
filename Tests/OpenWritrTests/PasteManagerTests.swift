@@ -67,6 +67,23 @@ struct PasteManagerTests {
         #expect(poster.postCount == 0)
     }
 
+    @Test func unreadableItemAmongReadableItemsCancelsPasteWithoutClearing() {
+        let pasteboard = FakePasteboard(
+            items: [
+                .text("Restorable clipboard"),
+                .unreadable(type: .fileURL)
+            ]
+        )
+        let poster = FakePasteCommandPoster()
+        let manager = PasteManager(pasteboard: pasteboard, commandPoster: poster)
+
+        manager.pasteText("Synthetic transcript")
+
+        #expect(pasteboard.items.map(\.pasteboardTypes) == [[.string], [.fileURL]])
+        #expect(pasteboard.clearCount == 0)
+        #expect(poster.postCount == 0)
+    }
+
     @Test func secondPasteRestoresOriginalClipboardAfterPendingRestore() {
         let pasteboard = FakePasteboard(items: [.text("Original clipboard")])
         let poster = FakePasteCommandPoster()

@@ -213,14 +213,12 @@ final class PasteManager: TextPasting {
                 representations.append(.init(type: type, data: data))
             }
 
-            if !representations.isEmpty {
-                snapshotItems.append(PasteboardItemContent(representations: representations))
+            guard !representations.isEmpty else {
+                pasteLog.notice("Clipboard item has no restorable representations; cancelling paste")
+                return nil
             }
-        }
 
-        guard pasteboardItems.isEmpty || !snapshotItems.isEmpty else {
-            pasteLog.notice("Clipboard contains data but no restorable representations; cancelling paste")
-            return nil
+            snapshotItems.append(PasteboardItemContent(representations: representations))
         }
 
         return PasteboardSnapshot(items: snapshotItems)
