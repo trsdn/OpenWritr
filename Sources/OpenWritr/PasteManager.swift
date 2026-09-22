@@ -24,10 +24,15 @@ protocol PasteboardManaging: AnyObject {
     var changeCount: Int { get }
     var pasteboardItems: [any PasteboardItemReading]? { get }
 
+    func prepareWrite(_ items: [PasteboardItemContent]) -> (any PreparedPasteboardWrite)?
+
     @discardableResult
     func clearContents() -> Int
+}
 
-    func writeItems(_ items: [PasteboardItemContent]) -> Bool
+@MainActor
+protocol PreparedPasteboardWrite {
+    func write() -> Bool
 }
 
 @MainActor
@@ -53,6 +58,20 @@ extension NSPasteboardItem: PasteboardItemReading {
 
 @MainActor
 final class SystemPasteboard: PasteboardManaging {
+    private final class PreparedWrite: PreparedPasteboardWrite {
+        private let pasteboard: NSPasteboard
+        private let items: [NSPasteboardItem]
+
+        init(pasteboard: NSPasteboard, items: [NSPasteboardItem]) {
+            self.pasteboard = pasteboard
+            self.items = items
+        }
+
+        func write() -> Bool {
+            items.isEmpty || pasteboard.writeObjects(items)
+        }
+    }
+
     private let pasteboard: NSPasteboard
 
     init(_ pasteboard: NSPasteboard = .general) {
@@ -67,12 +86,7 @@ final class SystemPasteboard: PasteboardManaging {
         pasteboard.pasteboardItems
     }
 
-    @discardableResult
-    func clearContents() -> Int {
-        pasteboard.clearContents()
-    }
-
-    func writeItems(_ items: [PasteboardItemContent]) -> Bool {
+    func prepareWrite(_ items: [PasteboardItemContent]) -> (any PreparedPasteboardWrite)? {
         let pasteboardItems = items.compactMap { item -> NSPasteboardItem? in
             let pasteboardItem = NSPasteboardItem()
             for representation in item.representations {
@@ -83,9 +97,14 @@ final class SystemPasteboard: PasteboardManaging {
             return pasteboardItem
         }
         guard pasteboardItems.count == items.count else {
-            return false
+            return nil
         }
-        return pasteboard.writeObjects(pasteboardItems)
+        return PreparedWrite(pasteboard: pasteboard, items: pasteboardItems)
+    }
+
+    @discardableResult
+    func clearContents() -> Int {
+        pasteboard.clearContents()
     }
 }
 
@@ -150,8 +169,18 @@ final class PasteManager: TextPasting {
             return
         }
 
+        guard let preparedTranscript = pasteboard.prepareWrite([transcriptItem]) else {
+            pasteLog.error("Failed to prepare transcript for the pasteboard")
+            return
+        }
+
+        guard pasteboard.changeCount == originalChangeCount else {
+            pasteLog.notice("Clipboard changed while the transcript was being prepared; cancelling paste")
+            return
+        }
+
         let transcriptOwnershipChangeCount = pasteboard.clearContents()
-        guard pasteboard.writeItems([transcriptItem]) else {
+        guard preparedTranscript.write() else {
             pasteLog.error("Failed to write transcript to the pasteboard")
             _ = restore(snapshot, to: pasteboard, ifUnchangedSince: transcriptOwnershipChangeCount)
             return
@@ -228,13 +257,18 @@ final class PasteManager: TextPasting {
         to pasteboard: any PasteboardManaging,
         ifUnchangedSince expectedChangeCount: Int
     ) -> Bool {
+        guard let preparedRestore = pasteboard.prepareWrite(snapshot.items) else {
+            pasteLog.error("Failed to prepare clipboard contents for restoration")
+            return false
+        }
+
         guard pasteboard.changeCount == expectedChangeCount else {
             return true
         }
 
         pasteboard.clearContents()
 
-        guard snapshot.items.isEmpty || pasteboard.writeItems(snapshot.items) else {
+        guard preparedRestore.write() else {
             pasteLog.error("Failed to restore clipboard contents")
             return false
         }

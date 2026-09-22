@@ -125,6 +125,20 @@ struct PasteManagerTests {
         #expect(pasteboard.text == "External clipboard")
         #expect(poster.postCount == 1)
     }
+
+    @Test func restorePreparationFailureLeavesCurrentClipboardUntouched() {
+        let pasteboard = FakePasteboard(items: [.text("Original clipboard")])
+        let poster = FakePasteCommandPoster()
+        let manager = PasteManager(pasteboard: pasteboard, commandPoster: poster)
+
+        manager.pasteText("Synthetic transcript")
+        pasteboard.failNextPreparation = true
+        manager.flushPendingRestore()
+
+        #expect(pasteboard.text == "Synthetic transcript")
+        #expect(pasteboard.clearCount == 1)
+        #expect(poster.postCount == 1)
+    }
 }
 
 @MainActor
@@ -142,6 +156,7 @@ private final class FakePasteboard: PasteboardManaging {
     private(set) var clearCount = 0
     private(set) var items: [FakePasteboardItem]
     var mutateWhenReading: [FakePasteboardItem]?
+    var failNextPreparation = false
     private let returnsNilItemsWhenEmpty: Bool
 
     init(
@@ -169,6 +184,19 @@ private final class FakePasteboard: PasteboardManaging {
         return String(data: data, encoding: .utf8)
     }
 
+    func prepareWrite(_ items: [PasteboardItemContent]) -> (any PreparedPasteboardWrite)? {
+        if failNextPreparation {
+            failNextPreparation = false
+            return nil
+        }
+        return FakePreparedPasteboardWrite(pasteboard: self, items: items)
+    }
+
+    func replaceExternally(with items: [FakePasteboardItem]) {
+        self.items = items
+        changeCount += 1
+    }
+
     @discardableResult
     func clearContents() -> Int {
         items = []
@@ -177,15 +205,25 @@ private final class FakePasteboard: PasteboardManaging {
         return changeCount
     }
 
-    func writeItems(_ items: [PasteboardItemContent]) -> Bool {
+    fileprivate func writeItems(_ items: [PasteboardItemContent]) -> Bool {
         self.items = items.map(FakePasteboardItem.init)
         changeCount += 1
         return true
     }
+}
 
-    func replaceExternally(with items: [FakePasteboardItem]) {
+@MainActor
+private final class FakePreparedPasteboardWrite: PreparedPasteboardWrite {
+    private unowned let pasteboard: FakePasteboard
+    private let items: [PasteboardItemContent]
+
+    init(pasteboard: FakePasteboard, items: [PasteboardItemContent]) {
+        self.pasteboard = pasteboard
         self.items = items
-        changeCount += 1
+    }
+
+    func write() -> Bool {
+        pasteboard.writeItems(items)
     }
 }
 
