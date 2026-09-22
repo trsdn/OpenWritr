@@ -5,6 +5,7 @@ on:
     paths:
       - Package.swift
       - Package.resolved
+      - .github/workflows/**
 
 permissions:
   contents: read
