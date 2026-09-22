@@ -1,5 +1,5 @@
 name: Release smoke test
-run-name: Smoke-test OpenWritr ${{ inputs.tag }}
+run-name: Smoke-test OpenWritr ${{ inputs.tag }} (${{ inputs.nonce }})
 
 # Installs the release's disk image the way a consumer would and exercises its
 # core function (speech-to-text) through the app's non-interactive --self-test
@@ -16,24 +16,64 @@ on:
         description: Draft or published release tag to test, for example v1.6.5
         required: true
         type: string
+      expected_dmg_sha256:
+        description: SHA-256 of the exact versioned DMG in the draft
+        required: true
+        type: string
+      expected_checksum_sha256:
+        description: SHA-256 of the exact DMG checksum file in the draft
+        required: true
+        type: string
+      nonce:
+        description: Unique request correlation nonce
+        required: true
+        type: string
 
-permissions:
-  contents: read
+permissions: {}
 
 jobs:
   smoke:
     name: Install and transcribe
     runs-on: macos-15
     timeout-minutes: 30
+    # GitHub exposes draft releases only to identities with push-level access.
+    # This checkout-free job needs contents: write solely to download the
+    # maintainer-created draft. It never creates, edits, uploads, or publishes
+    # a release, and dispatch is bound to trusted main plus immutable digests.
+    permissions:
+      contents: write
     steps:
-      - name: Validate release tag
+      - name: Authorize trusted dispatch and immutable inputs
         shell: bash
         env:
+          ACTOR_ID: ${{ github.actor_id }}
+          EVENT_NAME: ${{ github.event_name }}
+          EXPECTED_CHECKSUM_SHA256: ${{ inputs.expected_checksum_sha256 }}
+          EXPECTED_DMG_SHA256: ${{ inputs.expected_dmg_sha256 }}
+          NONCE: ${{ inputs.nonce }}
+          REF: ${{ github.ref }}
+          REPOSITORY_ID: ${{ github.repository_id }}
           TAG: ${{ inputs.tag }}
         run: |
           set -euo pipefail
+          if [[ "$EVENT_NAME" != "workflow_dispatch" ||
+                "$REF" != "refs/heads/main" ||
+                "$ACTOR_ID" != "24534196" ||
+                "$REPOSITORY_ID" != "1165782217" ]]; then
+            echo "Release smoke tests require an authorized dispatch from trusted main." >&2
+            exit 1
+          fi
           if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$ ]]; then
             echo "Tag must look like v1.2.3: $TAG" >&2
+            exit 1
+          fi
+          if [[ ! "$EXPECTED_DMG_SHA256" =~ ^[0-9a-f]{64}$ ||
+                ! "$EXPECTED_CHECKSUM_SHA256" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "Expected release digests must be lowercase SHA-256 values." >&2
+            exit 1
+          fi
+          if [[ ! "$NONCE" =~ ^smoke-[0-9a-f]{32}$ ]]; then
+            echo "Smoke request nonce is invalid." >&2
             exit 1
           fi
 
@@ -44,15 +84,18 @@ jobs:
           TAG: ${{ inputs.tag }}
         run: |
           set -euo pipefail
+          version="${TAG#v}"
           mkdir -p dl
           gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir dl \
-            --pattern "OpenWritr-v*-macOS-arm64.dmg" \
-            --pattern "OpenWritr-v*-macOS-arm64.dmg.sha256"
+            --pattern "OpenWritr-v${version}-macOS-arm64.dmg" \
+            --pattern "OpenWritr-v${version}-macOS-arm64.dmg.sha256"
 
       - name: Verify downloaded DMG
         id: verify-download
         shell: bash
         env:
+          EXPECTED_CHECKSUM_SHA256: ${{ inputs.expected_checksum_sha256 }}
+          EXPECTED_DMG_SHA256: ${{ inputs.expected_dmg_sha256 }}
           TAG: ${{ inputs.tag }}
         run: |
           set -euo pipefail
@@ -60,6 +103,13 @@ jobs:
           checksum="$dmg.sha256"
           if [[ ! -f "$dmg" || ! -f "$checksum" ]]; then
             echo "Expected smoke-test DMG or checksum is missing for $TAG." >&2
+            exit 1
+          fi
+          dmg_sha256="$(shasum -a 256 "$dmg" | cut -d' ' -f1)"
+          checksum_sha256="$(shasum -a 256 "$checksum" | cut -d' ' -f1)"
+          if [[ "$dmg_sha256" != "$EXPECTED_DMG_SHA256" ||
+                "$checksum_sha256" != "$EXPECTED_CHECKSUM_SHA256" ]]; then
+            echo "Draft release bytes do not match the authenticated broker candidate." >&2
             exit 1
           fi
           (cd dl && shasum -a 256 -c "$(basename "$checksum")")

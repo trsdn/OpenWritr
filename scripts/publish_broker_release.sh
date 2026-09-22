@@ -93,6 +93,7 @@ fi
 
 work_dir="$(mktemp -d)"
 notes_file="$work_dir/release-notes.md"
+changelog_file="$work_dir/CHANGELOG.md"
 artifact_zip="$work_dir/broker-artifact.zip"
 verified_dir="$work_dir/verified"
 cleanup() {
@@ -165,34 +166,11 @@ verify_release_bytes() {
   done
 }
 
-changelog="$(
-  gh api "repos/$REPOSITORY/contents/CHANGELOG.md?ref=$tag" \
-    -H "Accept: application/vnd.github.raw"
-)"
-held="$(
-  printf '%s\n' "$changelog" | awk '
-    tolower($0) ~ /^##[ \t]+\[?unreleased\]?/ { capture = 1; next }
-    capture && /^## / { exit }
-    capture { print }
-  ' | tr -d '[:space:]'
-)"
-if [[ -n "$held" ]]; then
-  echo "CHANGELOG.md still holds entries under Unreleased; promote them into $version." >&2
-  exit 1
-fi
-notes="$(
-  printf '%s\n' "$changelog" | awk -v version="$version" '
-    BEGIN { gsub(/\./, "\\.", version) }
-    $0 ~ "^## \\[?" version "\\]?([ \t]|$)" { capture = 1; next }
-    capture && /^## / { exit }
-    capture { print }
-  '
-)"
-if [[ -z "${notes//[[:space:]]/}" ]]; then
-  echo "CHANGELOG.md has no non-empty entry for $version." >&2
-  exit 1
-fi
-printf '%s\n' "$notes" > "$notes_file"
+gh api --method GET "repos/$REPOSITORY/contents/CHANGELOG.md" \
+  --raw-field "ref=$tag" \
+  -H "Accept: application/vnd.github.raw" > "$changelog_file"
+python3 "$SCRIPT_DIR/extract_release_notes.py" \
+  "$changelog_file" "$version" > "$notes_file"
 
 if gh release view "$tag" --repo "$REPOSITORY" >/dev/null 2>&1; then
   echo "Release or draft $tag already exists; refusing an overlapping or resumed handoff." >&2
@@ -209,11 +187,17 @@ bash "$SCRIPT_DIR/verify_release_asset_contract.sh" \
   exact "$tag" "$REPOSITORY" "${asset_names[@]}"
 verify_release_bytes "draft-before-smoke"
 
-existing_runs="$(
-  gh run list --repo "$REPOSITORY" --workflow smoke-test.yml \
-    --event workflow_dispatch --limit 30 --json databaseId --jq '.[].databaseId'
+smoke_nonce="$(python3 -c 'import uuid; print(\"smoke-\" + uuid.uuid4().hex)')"
+expected_dmg_sha256="$(shasum -a 256 "$artifact_dir/$asset_base.dmg" | cut -d' ' -f1)"
+expected_checksum_sha256="$(
+  shasum -a 256 "$artifact_dir/$asset_base.dmg.sha256" | cut -d' ' -f1
 )"
-gh workflow run smoke-test.yml --repo "$REPOSITORY" --ref main --field "tag=$tag"
+expected_smoke_title="Smoke-test OpenWritr $tag ($smoke_nonce)"
+gh workflow run smoke-test.yml --repo "$REPOSITORY" --ref main \
+  --field "tag=$tag" \
+  --field "expected_dmg_sha256=$expected_dmg_sha256" \
+  --field "expected_checksum_sha256=$expected_checksum_sha256" \
+  --field "nonce=$smoke_nonce"
 
 run_id=""
 for _ in $(seq 1 30); do
@@ -221,19 +205,25 @@ for _ in $(seq 1 30); do
     gh run list --repo "$REPOSITORY" --workflow smoke-test.yml \
       --event workflow_dispatch --branch main --limit 30 \
       --json databaseId,displayTitle \
-      --jq ".[] | select(.displayTitle == \"Smoke-test OpenWritr $tag\") | .databaseId" |
-      while IFS= read -r candidate; do
-        if ! grep -Fxq "$candidate" <<< "$existing_runs"; then
-          printf '%s\n' "$candidate"
-          break
-        fi
-      done
+      --jq "[.[] | select(.displayTitle == \"$expected_smoke_title\")][0].databaseId // empty"
   )"
   [[ -n "$run_id" ]] && break
   sleep 2
 done
 if [[ -z "$run_id" ]]; then
-  echo "Could not correlate the smoke-test workflow run for $tag; the draft remains unpublished." >&2
+  echo "Could not correlate smoke request $smoke_nonce for $tag; the draft remains unpublished." >&2
+  exit 1
+fi
+read -r smoke_event smoke_branch smoke_actor_id smoke_repository_id smoke_title < <(
+  gh api "repos/$REPOSITORY/actions/runs/$run_id" \
+    --jq '[.event, .head_branch, .actor.id, .repository.id, .display_title] | @tsv'
+)
+if [[ "$smoke_event" != "workflow_dispatch" ||
+      "$smoke_branch" != "main" ||
+      "$smoke_actor_id" != "$AUTHORIZED_ACTOR_ID" ||
+      "$smoke_repository_id" != "1165782217" ||
+      "$smoke_title" != "$expected_smoke_title" ]]; then
+  echo "Correlated smoke run does not match the authorized nonce-bound dispatch." >&2
   exit 1
 fi
 gh run watch "$run_id" --repo "$REPOSITORY" --exit-status

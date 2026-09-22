@@ -131,6 +131,11 @@ swift test
 - Pin external actions and reusable workflows in hand-maintained workflows to
   full commit SHAs with readable version comments. Update generated agentic
   workflow locks only through `gh aw compile`.
+- The checkout-free release smoke job is the only release workflow with
+  `contents: write`, because GitHub requires push-level access to download
+  draft assets. It must run from trusted `main`, remain bound to the fixed
+  maintainer/repository IDs plus exact digests and a unique nonce, and must
+  never mutate a release.
 - Release identity comes from `Info.plist` (`CFBundleShortVersionString` and `CFBundleVersion`). Bump both in a `chore(release): bump version to X.Y.Z` change before tagging.
 - User-facing changes get an entry in `CHANGELOG.md` (`## [x.y.z] — date`). The secretless publication handoff publishes that section as the release notes and fails when it is missing or empty. The broker verifies the tagged bundle version.
 - Commit messages use Conventional Commits (`fix(settings): …`, `chore(release): …`).

@@ -38,5 +38,7 @@ jobs:
       - name: Validate release tooling
         run: |
           bash -n scripts/*.sh
-          PYTHONPATH=scripts python3 -m unittest scripts/test_verify_broker_artifacts.py
-          python3 -m py_compile scripts/verify_broker_artifacts.py
+          PYTHONPATH=scripts python3 -m unittest discover -s scripts -p 'test_*.py'
+          python3 -m py_compile \
+            scripts/extract_release_notes.py \
+            scripts/verify_broker_artifacts.py

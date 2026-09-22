@@ -102,8 +102,11 @@ This secretless handoff:
    clobbering;
 7. downloads all five draft assets again and requires byte equality with the
    authenticated broker artifact;
-8. dispatches the read-only `Release smoke test` workflow against that draft
-   and waits for it to pass;
+8. dispatches `Release smoke test` from trusted `main` with a unique nonce and
+   the authenticated DMG/checksum digests, correlates that exact run, and waits
+   for it to pass. The checkout-free smoke job has only `contents: write`
+   because GitHub requires push-level access to read draft release assets; it
+   never mutates the release;
 9. rechecks the tag and draft state and redownloads all five assets before
    publication; and
 10. publishes the draft, then redownloads all five public assets and requires
@@ -135,7 +138,7 @@ assets because OpenWritr's established release contract is exactly five files.
 - [ ] Confirm the correlated smoke-test run passed and its job summary records
       the installed version, Gatekeeper/notarization checks, and transcription.
 - [ ] Confirm the release is public and has exactly the five asset names above.
-- [ ] Confirm the primary public DMG digest matches the broker download.
+- [ ] Confirm all five public asset bytes match the broker download.
 
 Release notes come only from `CHANGELOG.md`. Never write replacement notes by
 hand, never upload locally built files, and never attest either OpenWritr DMG.

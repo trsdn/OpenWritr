@@ -19,14 +19,23 @@ artifact by immutable artifact ID, checks GitHub's artifact SHA-256, and then
 validates the source/profile/signing provenance and file digests. It refuses to
 run if any release or draft already exists for the tag, then creates a new
 single-use draft with the exact five public assets and dispatches
-[`smoke-test.yml`](../.github/workflows/smoke-test.yml). The workflow has only
-`contents: read`; it can download the authenticated draft but cannot edit or
-publish it.
+[`smoke-test.yml`](../.github/workflows/smoke-test.yml) explicitly from
+`main`, never from the release tag. The dispatch carries the immutable tag,
+exact DMG and checksum-file digests, and a unique nonce used in the workflow
+run name and run correlation.
+
+GitHub permits draft-release downloads only to tokens with push-level
+repository access. The workflow therefore grants `contents: write` to the
+single checkout-free smoke job and nowhere else. That job is fixed to the
+repository and maintainer numeric IDs and `refs/heads/main`; it does not check
+out or execute tagged source and never creates, edits, uploads, or publishes a
+release. The permission exists solely to read the maintainer-created draft.
 
 The workflow:
 
-1. downloads the versioned DMG and checksum from the draft release and verifies
-   the checksum;
+1. downloads the exact versioned DMG and checksum from the draft release,
+   requires both file digests to equal the authenticated dispatch inputs, and
+   verifies the checksum contents;
 2. installs the app to `/Applications`;
 3. checks the signature, Gatekeeper assessment, and notarization ticket; and
 4. synthesizes a spoken phrase, runs the installed app with `--self-test`, and
@@ -35,11 +44,12 @@ The workflow:
    recording, without a microphone (`Sources/OpenWritr/SelfTest.swift`).
 
 The maintainer-side handoff downloads and byte-compares all five draft assets
-before the smoke test, waits for the correlated workflow run, then re-resolves
-the immutable tag and redownloads all five assets before publication. After
-publishing, it checks the exact five-name contract and compares all five public
-assets again. A failure before publication leaves the single-use draft in
-place; the maintainer deletes that unpublished draft before a fresh retry.
+before the smoke test, waits for the exact nonce-bound workflow run, then
+re-resolves the immutable tag and redownloads all five assets before
+publication. After publishing, it checks the exact five-name contract and
+compares all five public assets again. A failure before publication leaves the
+single-use draft in place; the maintainer deletes that unpublished draft before
+a fresh retry.
 
 This preserves smoke-before-publication without giving OpenWritr a source-side
 token that can access broker secrets. Broker signing remains a separate,

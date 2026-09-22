@@ -109,7 +109,7 @@ scripts/request.sh openwritr vX.Y.Z /path/to/OpenWritr/.artifacts/broker-release
 ```
 
 Then OpenWritr's secretless publication handoff creates a draft, runs the
-read-only transcription smoke test against that draft, and publishes only
+checkout-free transcription smoke test against that draft, and publishes only
 after the tag, checksums, exact five-asset contract, and smoke result pass.
 See [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md) for the maintainer-only
 procedure and authorization boundary.
