@@ -57,13 +57,15 @@ The workflow performs these actions without maintainer intervention:
    and verify the app and disk image.
 3. Resolves the live remote tag again, requires it still points to the triggering
    commit, and passes the verified files to a separate job that creates or
-   updates a **draft** GitHub release.
+   updates a **draft** GitHub release. A new draft may be empty; a rerun may
+   contain only the five expected asset names. Any unexpected stale asset fails
+   the workflow instead of being published.
 4. Downloads the same immutable workflow artifact without release-write access,
    installs its DMG, verifies Gatekeeper and notarization, and runs the
    transcription smoke test.
 5. After the smoke test, resolves the live remote tag again and requires it
-   still points to the triggering commit before publishing the draft, then
-   verifies the public DMG is the tested file.
+   still points to the triggering commit and rechecks the exact five-asset set
+   before publishing the draft, then verifies the public DMG is the tested file.
 
 The release contains exactly these five public assets:
 

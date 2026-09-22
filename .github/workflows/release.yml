@@ -351,7 +351,9 @@ jobs:
         with:
           ref: ${{ needs.sign-and-notarize.outputs.triggering_sha }}
           persist-credentials: false
-          sparse-checkout: scripts/verify_remote_release_tag.sh
+          sparse-checkout: |
+            scripts/verify_release_asset_contract.sh
+            scripts/verify_remote_release_tag.sh
           sparse-checkout-cone-mode: false
 
       - name: Download verified release artifacts
@@ -376,6 +378,13 @@ jobs:
             "$asset_base.dmg"
             "$asset_base.dmg.sha256"
             "release-candidate/OpenWritr-${RELEASE_VERSION}.dmg"
+          )
+          asset_names=(
+            "OpenWritr-v${RELEASE_VERSION}-macOS-arm64.zip"
+            "OpenWritr-v${RELEASE_VERSION}-macOS-arm64.zip.sha256"
+            "OpenWritr-v${RELEASE_VERSION}-macOS-arm64.dmg"
+            "OpenWritr-v${RELEASE_VERSION}-macOS-arm64.dmg.sha256"
+            "OpenWritr-${RELEASE_VERSION}.dmg"
           )
           for asset in "${assets[@]}"; do
             if [[ ! -f "$asset" ]]; then
@@ -406,8 +415,12 @@ jobs:
             echo "Release $RELEASE_TAG is already public; refusing to replace its assets. Publish a new version instead." >&2
             exit 1
           fi
+          bash scripts/verify_release_asset_contract.sh \
+            subset "$RELEASE_TAG" "$GITHUB_REPOSITORY" "${asset_names[@]}"
           gh release upload "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
             "${assets[@]}" --clobber
+          bash scripts/verify_release_asset_contract.sh \
+            exact "$RELEASE_TAG" "$GITHUB_REPOSITORY" "${asset_names[@]}"
 
   # R05: install the verified workflow artifact attached to the draft and
   # exercise it, as a consumer would, BEFORE the release becomes public.
@@ -435,18 +448,30 @@ jobs:
         with:
           ref: ${{ needs.sign-and-notarize.outputs.triggering_sha }}
           persist-credentials: false
-          sparse-checkout: scripts/verify_remote_release_tag.sh
+          sparse-checkout: |
+            scripts/verify_release_asset_contract.sh
+            scripts/verify_remote_release_tag.sh
           sparse-checkout-cone-mode: false
 
       - name: Make the tested draft public
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ needs.sign-and-notarize.outputs.tag }}
+          RELEASE_VERSION: ${{ needs.sign-and-notarize.outputs.version }}
           TRIGGERING_SHA: ${{ needs.sign-and-notarize.outputs.triggering_sha }}
         run: |
           set -euo pipefail
           bash scripts/verify_remote_release_tag.sh \
             "$RELEASE_TAG" "$TRIGGERING_SHA" "$GITHUB_REPOSITORY"
+          asset_names=(
+            "OpenWritr-v${RELEASE_VERSION}-macOS-arm64.zip"
+            "OpenWritr-v${RELEASE_VERSION}-macOS-arm64.zip.sha256"
+            "OpenWritr-v${RELEASE_VERSION}-macOS-arm64.dmg"
+            "OpenWritr-v${RELEASE_VERSION}-macOS-arm64.dmg.sha256"
+            "OpenWritr-${RELEASE_VERSION}.dmg"
+          )
+          bash scripts/verify_release_asset_contract.sh \
+            exact "$RELEASE_TAG" "$GITHUB_REPOSITORY" "${asset_names[@]}"
           gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false
           if [[ "$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)" != "false" ]]; then
             echo "Release $RELEASE_TAG is still a draft." >&2
