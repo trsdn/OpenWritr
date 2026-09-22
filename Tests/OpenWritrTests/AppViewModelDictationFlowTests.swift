@@ -198,6 +198,7 @@ struct AppViewModelDictationFlowTests {
         #expect(isRuntimeError(viewModel.state, kind: .paste))
         #expect(dependencies.overlay.didShowError("Clipboard could not be preserved; paste cancelled"))
         #expect(viewModel.lastTranscription == "Synthetic preserved transcript.")
+        #expect(pasteErrorRecoverySuggestion(viewModel.state) == "Replace or clear the clipboard contents, then record again.")
 
         await waitUntil { viewModel.state.isReady }
         await recordAndStop(viewModel)
@@ -300,6 +301,13 @@ struct AppViewModelDictationFlowTests {
             return presentation.kind == kind
         }
         return false
+    }
+
+    private func pasteErrorRecoverySuggestion(_ state: AppState) -> String? {
+        guard case .runtimeError(let presentation) = state,
+              presentation.kind == .paste
+        else { return nil }
+        return presentation.recoverySuggestion
     }
 }
 

@@ -156,6 +156,33 @@ struct PasteManagerTests {
         #expect(pasteboard.clearCount == 1)
         #expect(poster.postCount == 1)
     }
+
+    @Test func delayedRestoreFailureCancelsNextPasteThenAllowsRecovery() {
+        let pasteboard = FakePasteboard(items: [.text("Original clipboard")])
+        let poster = FakePasteCommandPoster()
+        let scheduler = FakePasteRestoreScheduler()
+        let manager = PasteManager(
+            pasteboard: pasteboard,
+            commandPoster: poster,
+            restoreScheduler: scheduler
+        )
+
+        #expect(manager.pasteText("First synthetic transcript") == .pasted)
+        pasteboard.failNextPreparation = true
+        scheduler.runScheduledRestore()
+
+        #expect(manager.pasteText("Second synthetic transcript") == .cancelled)
+        #expect(pasteboard.text == "First synthetic transcript")
+        #expect(poster.postCount == 1)
+
+        pasteboard.replaceExternally(with: [.text("Replacement clipboard")])
+
+        #expect(manager.pasteText("Third synthetic transcript") == .pasted)
+        manager.flushPendingRestore()
+
+        #expect(pasteboard.text == "Replacement clipboard")
+        #expect(poster.postCount == 2)
+    }
 }
 
 @MainActor
@@ -164,6 +191,21 @@ private final class FakePasteCommandPoster: PasteCommandPosting {
 
     func postPasteCommand() {
         postCount += 1
+    }
+}
+
+@MainActor
+private final class FakePasteRestoreScheduler: PasteRestoreScheduling {
+    private var scheduledAction: (@MainActor () -> Void)?
+
+    func scheduleRestore(_ action: @escaping @MainActor () -> Void) {
+        scheduledAction = action
+    }
+
+    func runScheduledRestore() {
+        let action = scheduledAction
+        scheduledAction = nil
+        action?()
     }
 }
 

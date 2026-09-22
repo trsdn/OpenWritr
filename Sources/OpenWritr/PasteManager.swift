@@ -36,6 +36,11 @@ protocol PreparedPasteboardWrite {
 }
 
 @MainActor
+protocol PasteRestoreScheduling {
+    func scheduleRestore(_ action: @escaping @MainActor () -> Void)
+}
+
+@MainActor
 protocol PasteCommandPosting {
     func postPasteCommand()
 }
@@ -129,6 +134,14 @@ struct SystemPasteCommandPoster: PasteCommandPosting {
     }
 }
 
+struct SystemPasteRestoreScheduler: PasteRestoreScheduling {
+    func scheduleRestore(_ action: @escaping @MainActor () -> Void) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            action()
+        }
+    }
+}
+
 @MainActor
 final class PasteManager: TextPasting {
     private struct PasteboardSnapshot {
@@ -142,19 +155,28 @@ final class PasteManager: TextPasting {
     }
 
     private var pendingRestore: PendingRestore?
+    private var hasUnreportedRestoreFailure = false
     private let pasteboard: any PasteboardManaging
     private let commandPoster: any PasteCommandPosting
+    private let restoreScheduler: any PasteRestoreScheduling
 
     init(
         pasteboard: any PasteboardManaging = SystemPasteboard(),
-        commandPoster: any PasteCommandPosting = SystemPasteCommandPoster()
+        commandPoster: any PasteCommandPosting = SystemPasteCommandPoster(),
+        restoreScheduler: any PasteRestoreScheduling = SystemPasteRestoreScheduler()
     ) {
         self.pasteboard = pasteboard
         self.commandPoster = commandPoster
+        self.restoreScheduler = restoreScheduler
     }
 
     @discardableResult
     func pasteText(_ text: String) -> PasteOutcome {
+        if hasUnreportedRestoreFailure {
+            hasUnreportedRestoreFailure = false
+            return .cancelled
+        }
+
         guard flushPendingRestore(matching: nil) else {
             return .cancelled
         }
@@ -202,14 +224,18 @@ final class PasteManager: TextPasting {
         )
         commandPoster.postPasteCommand()
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            _ = self.flushPendingRestore(matching: transactionID)
+        restoreScheduler.scheduleRestore {
+            if !self.flushPendingRestore(matching: transactionID) {
+                self.hasUnreportedRestoreFailure = true
+            }
         }
         return .pasted
     }
 
     func flushPendingRestore() {
-        _ = flushPendingRestore(matching: nil)
+        if !flushPendingRestore(matching: nil) {
+            hasUnreportedRestoreFailure = true
+        }
     }
 
     private func flushPendingRestore(matching transactionID: UUID?) -> Bool {

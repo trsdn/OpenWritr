@@ -1560,7 +1560,7 @@ final class AppViewModel {
                 kind: .paste,
                 title: "Paste Cancelled",
                 message: "OpenWritr could not preserve the clipboard, so the transcript was not pasted.",
-                recoverySuggestion: "The transcript remains available in OpenWritr. Copy different clipboard content, then try again."
+                recoverySuggestion: "Replace or clear the clipboard contents, then record again."
             ),
             overlayMessage: "Clipboard could not be preserved; paste cancelled"
         )
