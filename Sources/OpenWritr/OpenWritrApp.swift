@@ -11,6 +11,7 @@ enum RuntimeErrorKind: Sendable, Equatable {
     case audio
     case transcription
     case enhancement
+    case paste
 }
 
 struct AppErrorPresentation: Sendable {
@@ -545,7 +546,7 @@ final class AppViewModel {
         self.recoverableRawTranscription = recoverableRawTranscription
         transitionToErrorState(.runtimeError(error))
         overlayPanel.show(state: .error(overlayMessage))
-        if error.kind == .transcription {
+        if error.kind == .transcription || error.kind == .paste {
             scheduleTransientErrorDismissal()
         }
     }
@@ -569,7 +570,8 @@ final class AppViewModel {
     }
 
     private var isTransientErrorState: Bool {
-        if case .runtimeError(let error) = state, error.kind == .transcription {
+        if case .runtimeError(let error) = state,
+           error.kind == .transcription || error.kind == .paste {
             return true
         }
         return false
@@ -618,8 +620,9 @@ final class AppViewModel {
         lastRawTranscription = ""
         lastWasEnhanced = false
         recoverableRawTranscription = nil
-        if autoPasteEnabled {
-            pasteManager.pasteText(rawText)
+        if autoPasteEnabled, pasteManager.pasteText(rawText) == .cancelled {
+            presentPasteCancelledError()
+            return
         }
         overlayPanel.dismiss()
         state = .ready
@@ -1514,8 +1517,12 @@ final class AppViewModel {
         lastRawTranscription = rawText ?? ""
         lastWasEnhanced = wasEnhanced
 
-        if autoPasteEnabled {
-            pasteManager.pasteText(text)
+        if autoPasteEnabled, pasteManager.pasteText(text) == .cancelled {
+            if let (operationID, _) = captureOperation {
+                clearCaptureOperation(ifCurrent: operationID)
+            }
+            presentPasteCancelledError()
+            return
         }
 
         overlayPanel.show(state: .done)
@@ -1545,6 +1552,18 @@ final class AppViewModel {
             clearCaptureOperation(ifCurrent: operationID)
         }
         state = .ready
+    }
+
+    private func presentPasteCancelledError() {
+        presentRuntimeError(
+            AppErrorPresentation(
+                kind: .paste,
+                title: "Paste Cancelled",
+                message: "OpenWritr could not preserve the clipboard, so the transcript was not pasted.",
+                recoverySuggestion: "The transcript remains available in OpenWritr. Copy different clipboard content, then try again."
+            ),
+            overlayMessage: "Clipboard could not be preserved; paste cancelled"
+        )
     }
 
     private func returnToReady(operationID: UUID? = nil) {

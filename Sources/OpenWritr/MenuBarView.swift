@@ -145,7 +145,7 @@ struct MenuBarView: View {
                     }
                 }
                 Button("Dismiss Error") { viewModel.dismissRuntimeError() }
-            case .transcription:
+            case .transcription, .paste:
                 Button("Dismiss Error") { viewModel.dismissRuntimeError() }
             }
         default:

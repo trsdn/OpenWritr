@@ -60,8 +60,9 @@ struct PasteManagerTests {
         let poster = FakePasteCommandPoster()
         let manager = PasteManager(pasteboard: pasteboard, commandPoster: poster)
 
-        manager.pasteText("Synthetic transcript")
+        let outcome = manager.pasteText("Synthetic transcript")
 
+        #expect(outcome == .cancelled)
         #expect(pasteboard.text == "Restorable clipboard")
         #expect(pasteboard.items.first?.pasteboardTypes == [.string, .fileURL])
         #expect(pasteboard.clearCount == 0)
@@ -136,6 +137,22 @@ struct PasteManagerTests {
         manager.flushPendingRestore()
 
         #expect(pasteboard.text == "Synthetic transcript")
+        #expect(pasteboard.clearCount == 1)
+        #expect(poster.postCount == 1)
+    }
+
+    @Test func priorRestoreFailureCancelsNextPasteWithoutClearing() {
+        let pasteboard = FakePasteboard(items: [.text("Original clipboard")])
+        let poster = FakePasteCommandPoster()
+        let manager = PasteManager(pasteboard: pasteboard, commandPoster: poster)
+
+        #expect(manager.pasteText("First synthetic transcript") == .pasted)
+        pasteboard.failNextPreparation = true
+
+        let outcome = manager.pasteText("Second synthetic transcript")
+
+        #expect(outcome == .cancelled)
+        #expect(pasteboard.text == "First synthetic transcript")
         #expect(pasteboard.clearCount == 1)
         #expect(poster.postCount == 1)
     }

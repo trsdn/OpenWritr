@@ -5,6 +5,11 @@ All notable changes to OpenWritr will be documented in this file.
 Each release's notes on GitHub are generated from its section here, and the
 release workflow fails when the section for a tag is missing or empty.
 
+## [1.6.6] — 2026-09-22
+
+### Fixed
+- Auto-paste cancellation now shows a recoverable error instead of success when OpenWritr cannot preserve the existing clipboard
+
 ## [1.6.5] — 2026-09-20
 
 ### Added

@@ -42,8 +42,14 @@ protocol PasteCommandPosting {
 
 @MainActor
 protocol TextPasting {
-    func pasteText(_ text: String)
+    @discardableResult
+    func pasteText(_ text: String) -> PasteOutcome
     func flushPendingRestore()
+}
+
+enum PasteOutcome: Sendable, Equatable {
+    case pasted
+    case cancelled
 }
 
 extension NSPasteboardItem: PasteboardItemReading {
@@ -147,15 +153,16 @@ final class PasteManager: TextPasting {
         self.commandPoster = commandPoster
     }
 
-    func pasteText(_ text: String) {
+    @discardableResult
+    func pasteText(_ text: String) -> PasteOutcome {
         guard flushPendingRestore(matching: nil) else {
-            return
+            return .cancelled
         }
 
         let originalChangeCount = pasteboard.changeCount
 
         guard let snapshot = snapshot(of: pasteboard) else {
-            return
+            return .cancelled
         }
 
         let transcriptItem = PasteboardItemContent(
@@ -166,24 +173,24 @@ final class PasteManager: TextPasting {
 
         guard pasteboard.changeCount == originalChangeCount else {
             pasteLog.notice("Clipboard changed while it was being saved; cancelling paste")
-            return
+            return .cancelled
         }
 
         guard let preparedTranscript = pasteboard.prepareWrite([transcriptItem]) else {
             pasteLog.error("Failed to prepare transcript for the pasteboard")
-            return
+            return .cancelled
         }
 
         guard pasteboard.changeCount == originalChangeCount else {
             pasteLog.notice("Clipboard changed while the transcript was being prepared; cancelling paste")
-            return
+            return .cancelled
         }
 
         let transcriptOwnershipChangeCount = pasteboard.clearContents()
         guard preparedTranscript.write() else {
             pasteLog.error("Failed to write transcript to the pasteboard")
             _ = restore(snapshot, to: pasteboard, ifUnchangedSince: transcriptOwnershipChangeCount)
-            return
+            return .cancelled
         }
 
         let transcriptChangeCount = pasteboard.changeCount
@@ -198,6 +205,7 @@ final class PasteManager: TextPasting {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
             _ = self.flushPendingRestore(matching: transactionID)
         }
+        return .pasted
     }
 
     func flushPendingRestore() {

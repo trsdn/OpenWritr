@@ -176,6 +176,64 @@ struct AppViewModelDictationFlowTests {
         #expect(dependencies.overlay.didShowDone)
     }
 
+    @Test func unreadableClipboardCancellationSurfacesTransientError() async {
+        let dependencies = makeDependencies(
+            samples: [
+                audibleSamples(count: 16_000),
+                audibleSamples(count: 16_000)
+            ],
+            transcriptions: [
+                .success("Synthetic preserved transcript."),
+                .success("Synthetic recovered transcript.")
+            ],
+            pasteOutcomes: [.cancelled, .pasted]
+        )
+        let viewModel = dependencies.makeViewModel()
+        defer { viewModel.shutdown() }
+
+        await recordAndStop(viewModel)
+
+        #expect(dependencies.paster.pastedTexts.isEmpty)
+        #expect(!dependencies.overlay.didShowDone)
+        #expect(isRuntimeError(viewModel.state, kind: .paste))
+        #expect(dependencies.overlay.didShowError("Clipboard could not be preserved; paste cancelled"))
+        #expect(viewModel.lastTranscription == "Synthetic preserved transcript.")
+
+        await waitUntil { viewModel.state.isReady }
+        await recordAndStop(viewModel)
+
+        #expect(dependencies.paster.pastedTexts == ["Synthetic recovered transcript."])
+        #expect(viewModel.state.isReady)
+    }
+
+    @Test func priorRestoreFailureDoesNotSilentlyShowDone() async {
+        let dependencies = makeDependencies(
+            samples: [
+                audibleSamples(count: 16_000),
+                audibleSamples(count: 16_000)
+            ],
+            transcriptions: [
+                .success("First synthetic transcript."),
+                .success("Second synthetic transcript.")
+            ],
+            pasteOutcomes: [.pasted, .cancelled]
+        )
+        let viewModel = dependencies.makeViewModel()
+        defer { viewModel.shutdown() }
+
+        await recordAndStop(viewModel)
+        let doneCountAfterFirstPaste = dependencies.overlay.doneCount
+
+        await recordAndStop(viewModel)
+
+        #expect(doneCountAfterFirstPaste == 1)
+        #expect(dependencies.overlay.doneCount == doneCountAfterFirstPaste)
+        #expect(isRuntimeError(viewModel.state, kind: .paste))
+        #expect(dependencies.paster.pastedTexts == ["First synthetic transcript."])
+
+        await waitUntil { viewModel.state.isReady }
+    }
+
     private func recordAndStop(
         _ viewModel: AppViewModel,
         mode: RecordingShortcutMode = .normal
@@ -192,13 +250,14 @@ struct AppViewModelDictationFlowTests {
     private func makeDependencies(
         samples: [[Float]],
         transcriptions: [FakeTranscriber.Behavior],
-        enhancements: [EnhancementResult] = []
+        enhancements: [EnhancementResult] = [],
+        pasteOutcomes: [PasteOutcome] = []
     ) -> DictationDependencies {
         DictationDependencies(
             audio: FakeAudioCapture(samples: samples),
             transcriber: FakeTranscriber(behaviors: transcriptions),
             enhancer: FakeEnhancer(results: enhancements),
-            paster: FakeTextPaster(),
+            paster: FakeTextPaster(outcomes: pasteOutcomes),
             overlay: FakeOverlayPresenter()
         )
     }
@@ -397,9 +456,18 @@ private final class FakeEnhancer: TranscriptEnhancing, @unchecked Sendable {
 @MainActor
 private final class FakeTextPaster: TextPasting {
     private(set) var pastedTexts: [String] = []
+    private var outcomes: [PasteOutcome]
 
-    func pasteText(_ text: String) {
-        pastedTexts.append(text)
+    init(outcomes: [PasteOutcome]) {
+        self.outcomes = outcomes
+    }
+
+    func pasteText(_ text: String) -> PasteOutcome {
+        let outcome = outcomes.isEmpty ? .pasted : outcomes.removeFirst()
+        if outcome == .pasted {
+            pastedTexts.append(text)
+        }
+        return outcome
     }
 
     func flushPendingRestore() {}
@@ -411,6 +479,15 @@ private final class FakeOverlayPresenter: OverlayPresenting {
 
     var didShowDone: Bool {
         shownStates.contains {
+            if case .done = $0 {
+                return true
+            }
+            return false
+        }
+    }
+
+    var doneCount: Int {
+        shownStates.count {
             if case .done = $0 {
                 return true
             }
