@@ -1,0 +1,21 @@
+name: Dependency review
+
+on:
+  pull_request:
+    paths:
+      - Package.swift
+      - Package.resolved
+      - .github/workflows/**
+
+permissions:
+  contents: read
+
+jobs:
+  dependency-review:
+    name: Review dependency changes
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check for newly introduced vulnerabilities
+        uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4.9.0
+        with:
+          fail-on-severity: high
