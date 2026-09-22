@@ -1,9 +1,9 @@
 # Assessment of trsdn/OpenWritr against the Repository Quality Standard 1.16.0
 
-- Assessed on: 2026-09-20, by an AI agent; no maintainer was asked anything.
-- Repository read: `main` at `34fdc90` (exported without git metadata), plus the GitHub API through `gh` (read-only) and the latest release, `v1.6.4`, downloaded and inspected.
-- State: **Healthy**. Updated 2026-09-20 after `v1.6.5` and the follow-up that closed `B13`, `P08`, `W03`, `W08`, and `X03`. Open: `S02` (Partial). Reassessed on 2026-09-21 against 1.16.0, which adds `P12` and `P13`.
-- Result counts: 84 pass, 1 partial, 0 fail, 21 na (106 criteria).
+- Assessed on: 2026-09-22, by an AI agent; no maintainer was asked anything.
+- Repository read: `main` at `b23cd8f`, plus the changes on `test/dictation-flow`, the GitHub API through `gh` (read-only), and the previously inspected release evidence recorded below.
+- State: **Healthy**. Updated 2026-09-22 after adding hardware-free coverage for the main dictation and clipboard flow, closing the remaining partial criterion (`S02`). Reassessed on 2026-09-21 against 1.16.0, which adds `P12` and `P13`.
+- Result counts: 85 pass, 0 partial, 0 fail, 21 na (106 criteria).
 
 ## What the assessor did and did not read
 
@@ -88,7 +88,7 @@ Automation Availability does not apply: hosted runners are available and used.
 | ID | Result | Evidence |
 |---|---|---|
 | S01 | pass | `Package.resolved` pins every dependency; setup and build commands are in README and `AGENTS.md`. |
-| S02 | partial | `Tests/OpenWritrTests` has 10 Swift Testing tests, run in CI and by the assessor; several assert failure paths (`changedNumberIsAnError`, `droppedNegationIsAnError`, `languageDriftIsAnError`). They cover only the cleanup integrity validator and policy. Nothing exercises the dictation flow (audio, hotkey, paste, overlay, update), which `AGENTS.md` itself states. Under the stated reading of "main entry point", that is a material part missing. |
+| S02 | pass | `swift test` runs 38 Swift Testing tests, including hardware-free fakes for the main capture, transcription, enhancement, overlay, and paste orchestration. The suite covers normal and enhanced success, enhancement failure/raw recovery, accepted empty enhancement, short-input padding, transcription error recovery, stale-generation isolation, disabled auto-paste, visible recovery from cancelled auto-paste, empty and populated clipboard save/replace/restore, non-destructive restore preparation failure, delayed restore failure propagation and recovery, concurrent clipboard mutation, fail-closed handling when any declared clipboard representation cannot be preserved, overlapping pastes, and external changes before restore. Each new invariant was mutation-checked by deliberately breaking its production branch and observing the named test fail before restoring the implementation. |
 | S03 | pass | Two kinds of static check run in CI and are the documented commands: the compiler under Swift 6 strict concurrency with warnings as errors, and `swiftlint lint --strict` with the rule set in `.swiftlint.yml` (force casts and tries, unused bindings, empty checks, duplicate imports, and similar). Reading of "where supported": Swift has formatters, but a formatter would rewrite most of the codebase (`swift format lint` reports the whole file set), so the linter covers the checks that can be enforced without that. |
 | S04 | pass | README and `Package.swift` claim macOS 14+ on Apple Silicon, a range. CI has one job on `macos-latest`, the newest version available to the runner, which covers a range claim under 1.15.0. A job on macOS 14 would be welcome and is not required. |
 | S05 | pass | `security_and_analysis.secret_scanning` is enabled with push protection; `secret-scan.yml` also runs on pushes and pull requests. |
