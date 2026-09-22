@@ -128,6 +128,9 @@ swift test
 - Keep blocking work (subprocesses, network) off the main actor; follow the `Task.detached` pattern in `GrammarEnhancer`.
 - Log with `os.Logger` (subsystem `com.openwritr.app`, one category per type). Never log transcript text, audio, prompts, API keys, or tokens.
 - User-facing strings are English.
+- Pin external actions and reusable workflows in hand-maintained workflows to
+  full commit SHAs with readable version comments. Update generated agentic
+  workflow locks only through `gh aw compile`.
 - Release identity comes from `Info.plist` (`CFBundleShortVersionString` and `CFBundleVersion`). Bump both in a `chore(release): bump version to X.Y.Z` change before tagging.
 - User-facing changes get an entry in `CHANGELOG.md` (`## [x.y.z] — date`). The release workflow publishes that section as the release notes and fails when it is missing or empty, or when Info.plist disagrees with the tag.
 - Commit messages use Conventional Commits (`fix(settings): …`, `chore(release): …`).
