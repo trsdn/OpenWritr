@@ -187,7 +187,7 @@ bash "$SCRIPT_DIR/verify_release_asset_contract.sh" \
   exact "$tag" "$REPOSITORY" "${asset_names[@]}"
 verify_release_bytes "draft-before-smoke"
 
-smoke_nonce="$(python3 -c 'import uuid; print(\"smoke-\" + uuid.uuid4().hex)')"
+smoke_nonce="$(python3 -c 'import uuid; print("smoke-" + uuid.uuid4().hex)')"
 expected_dmg_sha256="$(shasum -a 256 "$artifact_dir/$asset_base.dmg" | cut -d' ' -f1)"
 expected_checksum_sha256="$(
   shasum -a 256 "$artifact_dir/$asset_base.dmg.sha256" | cut -d' ' -f1
