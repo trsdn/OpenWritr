@@ -8,7 +8,7 @@ struct PasteManagerTests {
     @Test func emptyClipboardPastesAndRestoresEmpty() {
         let pasteboard = FakePasteboard(items: [], returnsNilItemsWhenEmpty: true)
         let poster = FakePasteCommandPoster()
-        let manager = PasteManager(pasteboard: pasteboard, commandPoster: poster)
+        let manager = makeManager(pasteboard: pasteboard, commandPoster: poster)
 
         manager.pasteText("Synthetic transcript")
 
@@ -24,7 +24,7 @@ struct PasteManagerTests {
     @Test func savesReplacesPastesAndRestoresClipboard() {
         let pasteboard = FakePasteboard(items: [.text("Original clipboard")])
         let poster = FakePasteCommandPoster()
-        let manager = PasteManager(pasteboard: pasteboard, commandPoster: poster)
+        let manager = makeManager(pasteboard: pasteboard, commandPoster: poster)
 
         manager.pasteText("Synthetic transcript")
 
@@ -40,7 +40,7 @@ struct PasteManagerTests {
         let pasteboard = FakePasteboard(items: [.text("Original clipboard")])
         pasteboard.mutateWhenReading = [.text("External clipboard")]
         let poster = FakePasteCommandPoster()
-        let manager = PasteManager(pasteboard: pasteboard, commandPoster: poster)
+        let manager = makeManager(pasteboard: pasteboard, commandPoster: poster)
 
         manager.pasteText("Synthetic transcript")
 
@@ -58,7 +58,7 @@ struct PasteManagerTests {
             ]
         )
         let poster = FakePasteCommandPoster()
-        let manager = PasteManager(pasteboard: pasteboard, commandPoster: poster)
+        let manager = makeManager(pasteboard: pasteboard, commandPoster: poster)
 
         let outcome = manager.pasteText("Synthetic transcript")
 
@@ -72,7 +72,7 @@ struct PasteManagerTests {
     @Test func unreadableOnlyClipboardCancelsPasteWithoutClearing() {
         let pasteboard = FakePasteboard(items: [.unreadable(type: .fileURL)])
         let poster = FakePasteCommandPoster()
-        let manager = PasteManager(pasteboard: pasteboard, commandPoster: poster)
+        let manager = makeManager(pasteboard: pasteboard, commandPoster: poster)
 
         manager.pasteText("Synthetic transcript")
 
@@ -89,7 +89,7 @@ struct PasteManagerTests {
             ]
         )
         let poster = FakePasteCommandPoster()
-        let manager = PasteManager(pasteboard: pasteboard, commandPoster: poster)
+        let manager = makeManager(pasteboard: pasteboard, commandPoster: poster)
 
         manager.pasteText("Synthetic transcript")
 
@@ -101,7 +101,7 @@ struct PasteManagerTests {
     @Test func secondPasteRestoresOriginalClipboardAfterPendingRestore() {
         let pasteboard = FakePasteboard(items: [.text("Original clipboard")])
         let poster = FakePasteCommandPoster()
-        let manager = PasteManager(pasteboard: pasteboard, commandPoster: poster)
+        let manager = makeManager(pasteboard: pasteboard, commandPoster: poster)
 
         manager.pasteText("First synthetic transcript")
         manager.pasteText("Second synthetic transcript")
@@ -117,7 +117,7 @@ struct PasteManagerTests {
     @Test func externalClipboardChangePreventsRestoreOverwrite() {
         let pasteboard = FakePasteboard(items: [.text("Original clipboard")])
         let poster = FakePasteCommandPoster()
-        let manager = PasteManager(pasteboard: pasteboard, commandPoster: poster)
+        let manager = makeManager(pasteboard: pasteboard, commandPoster: poster)
 
         manager.pasteText("Synthetic transcript")
         pasteboard.replaceExternally(with: [.text("External clipboard")])
@@ -130,7 +130,12 @@ struct PasteManagerTests {
     @Test func restorePreparationFailureLeavesCurrentClipboardUntouched() {
         let pasteboard = FakePasteboard(items: [.text("Original clipboard")])
         let poster = FakePasteCommandPoster()
-        let manager = PasteManager(pasteboard: pasteboard, commandPoster: poster)
+        let errorLogger = RecordingPasteErrorLogger()
+        let manager = PasteManager(
+            pasteboard: pasteboard,
+            commandPoster: poster,
+            errorLogger: errorLogger
+        )
 
         manager.pasteText("Synthetic transcript")
         pasteboard.failNextPreparation = true
@@ -139,12 +144,13 @@ struct PasteManagerTests {
         #expect(pasteboard.text == "Synthetic transcript")
         #expect(pasteboard.clearCount == 1)
         #expect(poster.postCount == 1)
+        #expect(errorLogger.messages == ["Failed to prepare clipboard contents for restoration"])
     }
 
     @Test func priorRestoreFailureCancelsNextPasteWithoutClearing() {
         let pasteboard = FakePasteboard(items: [.text("Original clipboard")])
         let poster = FakePasteCommandPoster()
-        let manager = PasteManager(pasteboard: pasteboard, commandPoster: poster)
+        let manager = makeManager(pasteboard: pasteboard, commandPoster: poster)
 
         #expect(manager.pasteText("First synthetic transcript") == .pasted)
         pasteboard.failNextPreparation = true
@@ -161,7 +167,7 @@ struct PasteManagerTests {
         let pasteboard = FakePasteboard(items: [.text("Original clipboard")])
         let poster = FakePasteCommandPoster()
         let scheduler = FakePasteRestoreScheduler()
-        let manager = PasteManager(
+        let manager = makeManager(
             pasteboard: pasteboard,
             commandPoster: poster,
             restoreScheduler: scheduler
@@ -182,6 +188,33 @@ struct PasteManagerTests {
 
         #expect(pasteboard.text == "Replacement clipboard")
         #expect(poster.postCount == 2)
+    }
+
+    private func makeManager(
+        pasteboard: any PasteboardManaging,
+        commandPoster: any PasteCommandPosting,
+        restoreScheduler: any PasteRestoreScheduling = SystemPasteRestoreScheduler()
+    ) -> PasteManager {
+        PasteManager(
+            pasteboard: pasteboard,
+            commandPoster: commandPoster,
+            restoreScheduler: restoreScheduler,
+            errorLogger: NoOpPasteErrorLogger()
+        )
+    }
+}
+
+@MainActor
+private struct NoOpPasteErrorLogger: ErrorLogging {
+    func logError(_ message: String) {}
+}
+
+@MainActor
+private final class RecordingPasteErrorLogger: ErrorLogging {
+    private(set) var messages: [String] = []
+
+    func logError(_ message: String) {
+        messages.append(message)
     }
 }
 

@@ -159,15 +159,18 @@ final class PasteManager: TextPasting {
     private let pasteboard: any PasteboardManaging
     private let commandPoster: any PasteCommandPosting
     private let restoreScheduler: any PasteRestoreScheduling
+    private let errorLogger: any ErrorLogging
 
     init(
         pasteboard: any PasteboardManaging = SystemPasteboard(),
         commandPoster: any PasteCommandPosting = SystemPasteCommandPoster(),
-        restoreScheduler: any PasteRestoreScheduling = SystemPasteRestoreScheduler()
+        restoreScheduler: any PasteRestoreScheduling = SystemPasteRestoreScheduler(),
+        errorLogger: any ErrorLogging = UnifiedErrorLogger(category: "PasteManager")
     ) {
         self.pasteboard = pasteboard
         self.commandPoster = commandPoster
         self.restoreScheduler = restoreScheduler
+        self.errorLogger = errorLogger
     }
 
     @discardableResult
@@ -199,7 +202,7 @@ final class PasteManager: TextPasting {
         }
 
         guard let preparedTranscript = pasteboard.prepareWrite([transcriptItem]) else {
-            pasteLog.error("Failed to prepare transcript for the pasteboard")
+            errorLogger.logError("Failed to prepare transcript for the pasteboard")
             return .cancelled
         }
 
@@ -210,7 +213,7 @@ final class PasteManager: TextPasting {
 
         let transcriptOwnershipChangeCount = pasteboard.clearContents()
         guard preparedTranscript.write() else {
-            pasteLog.error("Failed to write transcript to the pasteboard")
+            errorLogger.logError("Failed to write transcript to the pasteboard")
             _ = restore(snapshot, to: pasteboard, ifUnchangedSince: transcriptOwnershipChangeCount)
             return .cancelled
         }
@@ -292,7 +295,7 @@ final class PasteManager: TextPasting {
         ifUnchangedSince expectedChangeCount: Int
     ) -> Bool {
         guard let preparedRestore = pasteboard.prepareWrite(snapshot.items) else {
-            pasteLog.error("Failed to prepare clipboard contents for restoration")
+            errorLogger.logError("Failed to prepare clipboard contents for restoration")
             return false
         }
 
@@ -303,7 +306,7 @@ final class PasteManager: TextPasting {
         pasteboard.clearContents()
 
         guard preparedRestore.write() else {
-            pasteLog.error("Failed to restore clipboard contents")
+            errorLogger.logError("Failed to restore clipboard contents")
             return false
         }
 
