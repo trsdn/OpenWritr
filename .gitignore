@@ -2,7 +2,6 @@
 .artifacts/
 .swiftpm/
 DerivedData/
-.release.env
 dist/
 *.dmg
 *.dmg.sha256

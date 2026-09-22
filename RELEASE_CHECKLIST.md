@@ -1,34 +1,28 @@
 # OpenWritr Release Checklist
 
-The tag-triggered GitHub Actions workflow is the canonical release path. The
-maintainer prepares and tags the release; the workflow builds, signs, notarizes,
-creates the draft, smoke-tests the verified workflow artifact attached to it,
-and publishes it.
+Distributable builds are produced by the public
+[`trsdn/macos-notarization-broker`](https://github.com/trsdn/macos-notarization-broker)
+profile `openwritr`. OpenWritr has no Apple certificate or notarization secret,
+and no OpenWritr workflow builds, signs, or notarizes a release.
 
-## One-time repository setup
+Only the maintainer `@trsdn` (GitHub numeric actor ID `24534196`) may create a
+release tag, dispatch the broker, or run the publication handoff. Agents and
+contributors prepare pull requests only.
 
-The maintainer must create a GitHub environment named `release`, restrict its
-deployment branches and tags to selected tags matching `v*`, and configure these
-environment secrets:
+This architecture depends on
+[`trsdn/macos-notarization-broker#69`](https://github.com/trsdn/macos-notarization-broker/pull/69),
+which aligns profile `openwritr`, creates the AppUpdater alias, and excludes
+both OpenWritr DMG digests from attestation. Merge that broker pull request
+before merging or using this release path.
 
-- `MACOS_CERTIFICATE`
-- `MACOS_CERTIFICATE_PWD`
-- `APPLE_ID`
-- `APPLE_TEAM_ID`
-- `APPLE_APP_PASSWORD`
-
-These values must not remain repository-level Actions secrets after the
-environment migration is verified. The environment and secret migration are
-repository settings; the workflow cannot create or migrate them.
-
-## 1. Maintainer: prepare the release
+## 1. Prepare and merge the release
 
 - [ ] Work on a pull-request branch; do not release unreviewed local changes.
-- [ ] Set both `CFBundleShortVersionString` and `CFBundleVersion` in `Info.plist`
-      to `x.y.z`.
+- [ ] Set both `CFBundleShortVersionString` and `CFBundleVersion` in
+      `Info.plist` to `x.y.z`.
 - [ ] Add a non-empty `## [x.y.z] — YYYY-MM-DD` section to `CHANGELOG.md`.
 - [ ] Leave no release entries under an `Unreleased` heading.
-- [ ] Run the required validation:
+- [ ] Run:
 
   ```sh
   swift build -c release -Xswiftc -warnings-as-errors
@@ -36,107 +30,125 @@ repository settings; the workflow cannot create or migrate them.
   swift test
   ```
 
-- [ ] Merge the release-preparation pull request and confirm the intended commit
-      is on `main`.
+- [ ] Merge the release-preparation pull request and confirm the intended
+      commit is on `main`.
 
-## 2. Maintainer: create the release tag
+## 2. Create the immutable tag
 
-- [ ] Create and push `vx.y.z` at the prepared `main` commit. This explicit tag
-      push is the release trigger.
-- [ ] Confirm the **Release macOS** workflow started for that tag.
+- [ ] Create and push `vx.y.z` at the prepared `main` commit.
+- [ ] Do not move or reuse a release tag. The broker and publication handoff
+      both resolve annotated or lightweight tags to the immutable commit and
+      fail if the tag moves.
 
-Do not build or upload release assets manually during the normal path. Do not
-dispatch the workflow for a new release instead of pushing its tag.
+Pushing the tag does not run a release workflow in OpenWritr. This is
+intentional: source-repository automation has no signing secret and no token
+that can access broker secrets.
 
-## 3. Workflow: build and publish
+## 3. Request the broker build
 
-The workflow performs these actions without maintainer intervention:
+Use a clean checkout of `trsdn/macos-notarization-broker` at its current
+`origin/main`. The canonical request is:
 
-1. Validates the triggering tag and commit, `Info.plist`, and changelog entry.
-2. Uses the `release` environment to build, Developer ID-sign, notarize, staple,
-   and verify the app and disk image.
-3. Resolves the live remote tag again, requires it still points to the triggering
-   commit, and passes the verified files to a separate job that creates or
-   updates a **draft** GitHub release. A new draft may be empty; a rerun may
-   contain only the five expected asset names. Any unexpected stale asset fails
-   the workflow instead of being published.
-4. Downloads the same immutable workflow artifact without release-write access,
-   installs its DMG, verifies Gatekeeper and notarization, and runs the
-   transcription smoke test.
-5. After the smoke test, resolves the live remote tag again and requires it
-   still points to the triggering commit and rechecks the exact five-asset set
-   before publishing the draft, then verifies the public DMG is the tested file.
+```sh
+cd /path/to/macos-notarization-broker
+scripts/request.sh openwritr vx.y.z /path/to/OpenWritr/.artifacts/broker-release
+```
 
-The release contains exactly these five public assets:
+Do **not** add `--publish`. The broker command authorizes the fixed maintainer,
+resolves the tag to a full commit, builds without secrets, validates on a fresh
+runner, signs and notarizes with broker-owned code, downloads only the
+correlated workflow artifact, and verifies `provenance.json` plus every digest.
+
+The broker profile must produce:
 
 - `OpenWritr-vx.y.z-macOS-arm64.zip`
 - `OpenWritr-vx.y.z-macOS-arm64.zip.sha256`
 - `OpenWritr-vx.y.z-macOS-arm64.dmg`
 - `OpenWritr-vx.y.z-macOS-arm64.dmg.sha256`
-- `OpenWritr-x.y.z.dmg` — the same notarized DMG bytes under the exact name
-  required by AppUpdater
+- `OpenWritr-x.y.z.dmg` and its broker checksum
+- `provenance.json` and `preflight-manifest.json`
 
-Release notes come from the matching `CHANGELOG.md` section. Do not write or
-replace them manually.
+The updater alias is a byte-identical broker `copy_of` of the versioned DMG.
+The broker may attest the ZIP, but it must not attest either OpenWritr DMG:
+both DMG names have the same digest, and any attestation for that digest can
+crash the updater path in OpenWritr 1.6.0 (see #31).
 
-**Never attest `OpenWritr-x.y.z.dmg`.** OpenWritr intentionally has no updater
-attestation policy; restoring one or attesting the update DMG can strand or crash
-installed clients (see #31).
+## 4. Create the draft, smoke-test, and publish
 
-## 4. Maintainer: monitor and recover
-
-- [ ] Confirm **Build signed and notarized macOS artifacts** passed.
-- [ ] Confirm **Create or update the draft release** passed.
-- [ ] Confirm **Smoke-test the release before publishing** passed.
-- [ ] Confirm **Publish the release** passed. Its smoke-test job summary is the
-      `R05` record described in
-      [docs/release-smoke-tests.md](docs/release-smoke-tests.md).
-- [ ] Confirm the release page is public and lists all five exact asset names.
-
-If signing, notarization, networking, or a runner fails transiently, rerun the
-existing tag with `workflow_dispatch`, selecting that `vx.y.z` tag as the
-workflow ref. For example:
+The broker prints the verified artifact directory. From a clean OpenWritr
+checkout at the release tag or current `main`, run:
 
 ```sh
-gh workflow run release.yml --ref vx.y.z
+scripts/publish_broker_release.sh \
+  vx.y.z \
+  .artifacts/broker-release/openwritr-x.y.z-req-REQUEST_ID
 ```
 
-Using the tag as the workflow ref is required by the `release` environment's
-`v*` deployment restriction. There is no independent version input: the workflow
-derives the release identity from the triggering tag, checks out its fully
-qualified `refs/tags/vx.y.z` ref, and verifies that `HEAD` is that tag's commit.
-The rerun rebuilds the immutable tagged commit and may replace assets only while
-the release remains a draft.
+This secretless handoff:
 
-The workflow refuses to overwrite an already-public release. If code, scripts,
-metadata, release notes, or assets need a fix, prepare and tag a **new version**.
-Never move or reuse the published tag. A failed draft may be deleted by the
-maintainer before creating that new version.
+1. requires the authorized maintainer's numeric GitHub identity;
+2. resolves the broker run and artifact recorded in the supplied provenance,
+   requires the fixed broker repository/workflow/actor, successful `main` run,
+   commit and attempt, then redownloads that artifact by immutable artifact ID
+   and verifies GitHub's SHA-256 for the artifact archive;
+3. validates broker provenance, source repository ID, tag, full commit SHA,
+   profile digest, signed bundle/team identity, artifact names, checksums,
+   preflight identity, the byte-identical AppUpdater alias, and a broker
+   attestation manifest containing the ZIP only and neither DMG;
+4. resolves the live remote tag and requires the same commit;
+5. extracts release notes from the tagged `CHANGELOG.md` section;
+6. requires that no release or draft already exists, atomically creates a new
+   **draft** release, and uploads exactly the five public assets without
+   clobbering;
+7. downloads all five draft assets again and requires byte equality with the
+   authenticated broker artifact;
+8. dispatches the read-only `Release smoke test` workflow against that draft
+   and waits for it to pass;
+9. rechecks the tag and draft state and redownloads all five assets before
+   publication; and
+10. publishes the draft, then redownloads all five public assets and requires
+    byte equality with the authenticated broker artifact.
 
-## 5. Optional local rehearsal or recovery
+Any failure before publication leaves a draft. To retry the same immutable tag,
+the maintainer must first delete that unpublished draft, then start a new
+handoff; the script never resumes, updates, or clobbers an existing release.
+This is the per-tag serialization boundary. If the final post-publication
+verification reports an error, the release is already public and must be
+treated as a release incident; do not replace its assets. Corrections require a
+new version and tag.
 
-Local release commands are optional diagnostics, not the canonical release
-procedure and not a substitute for the tag-triggered workflow. They do not
-create or publish a GitHub release.
+The public release contains exactly:
 
-With a local Developer ID identity and notary profile configured:
+- `OpenWritr-vx.y.z-macOS-arm64.zip`
+- `OpenWritr-vx.y.z-macOS-arm64.zip.sha256`
+- `OpenWritr-vx.y.z-macOS-arm64.dmg`
+- `OpenWritr-vx.y.z-macOS-arm64.dmg.sha256`
+- `OpenWritr-x.y.z.dmg`
+
+`provenance.json`, `preflight-manifest.json`, and the updater alias's redundant
+checksum remain in the verified broker download; they are not public release
+assets because OpenWritr's established release contract is exactly five files.
+
+## 5. Verify the public release
+
+- [ ] Confirm the broker run passed, including its protected sign job.
+- [ ] Confirm the correlated smoke-test run passed and its job summary records
+      the installed version, Gatekeeper/notarization checks, and transcription.
+- [ ] Confirm the release is public and has exactly the five asset names above.
+- [ ] Confirm the primary public DMG digest matches the broker download.
+
+Release notes come only from `CHANGELOG.md`. Never write replacement notes by
+hand, never upload locally built files, and never attest either OpenWritr DMG.
+
+## Local diagnostic build
+
+Local tools are for development checks only:
 
 ```sh
-cp .release.env.example .release.env
-version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Info.plist)"
-scripts/release_macos.sh "$version"
+scripts/build-app.sh
+scripts/make_dmg.sh
 ```
 
-The local script uses the versioned asset base
-`dist/OpenWritr-v${version}-macOS-arm64`. Verify those local outputs directly:
-
-```sh
-xcrun stapler validate .build/release/OpenWritr.app
-spctl --assess --type execute --verbose=2 .build/release/OpenWritr.app
-xcrun stapler validate "dist/OpenWritr-v${version}-macOS-arm64.dmg"
-spctl --assess --type open --context context:primary-signature \
-  --verbose=2 "dist/OpenWritr-v${version}-macOS-arm64.dmg"
-```
-
-Do not upload locally produced files over a public release. Any recovered
-release still goes through a new version and the canonical workflow.
+They use a signing identity already present in the local keychain and never
+configure, export, upload, or notarize with Apple credentials. Their output is
+not a release candidate and must not be uploaded to GitHub Releases.

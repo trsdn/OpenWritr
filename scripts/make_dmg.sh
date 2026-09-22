@@ -3,13 +3,6 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-ENV_FILE="${RELEASE_ENV_FILE:-$PROJECT_DIR/.release.env}"
-
-if [[ -f "$ENV_FILE" ]]; then
-  set -a
-  . "$ENV_FILE"
-  set +a
-fi
 
 APP_NAME="OpenWritr"
 APP_PATH="${APP_PATH:-$PROJECT_DIR/.build/release/$APP_NAME.app}"

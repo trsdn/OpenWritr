@@ -34,3 +34,9 @@ jobs:
 
       - name: Test
         run: swift test
+
+      - name: Validate release tooling
+        run: |
+          bash -n scripts/*.sh
+          PYTHONPATH=scripts python3 -m unittest scripts/test_verify_broker_artifacts.py
+          python3 -m py_compile scripts/verify_broker_artifacts.py

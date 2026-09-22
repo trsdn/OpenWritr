@@ -86,8 +86,14 @@ The default comparison covers Apple Intelligence, Luna, Gemini Flash, MAI Flash,
 
 ### Signed DMG release
 
-The release flow builds a Developer ID signed app, notarizes and staples the app bundle, packages a
-ZIP from that notarized app, then creates and notarizes a DMG. GitHub Releases for `v*` tags receive:
+Distributable builds come from the public
+[`trsdn/macos-notarization-broker`](https://github.com/trsdn/macos-notarization-broker)
+profile `openwritr`. The broker resolves an immutable tag, builds without
+secrets, validates on a fresh runner, then signs, notarizes, staples, and
+packages with broker-owned code and credentials. OpenWritr has no Apple
+certificate or notary secret, and its workflows never sign or notarize.
+
+GitHub Releases receive exactly:
 
 - `OpenWritr-v{version}-macOS-arm64.zip`
 - `OpenWritr-v{version}-macOS-arm64.zip.sha256`
@@ -96,24 +102,22 @@ ZIP from that notarized app, then creates and notarizes a DMG. GitHub Releases f
 - `OpenWritr-{version}.dmg` (the same signed/notarized DMG bytes under the exact
   name required by [AppUpdater](#in-app-updates))
 
-The signing and notarization job reads its five credentials only from the
-GitHub `release` environment. The required secret names and revocation steps are
-listed in [AGENTS.md](AGENTS.md#credentials-and-revocation).
-
-For local releases, copy the example environment and store a notary profile once:
+The maintainer requests the broker build from the broker checkout:
 
 ```sh
-cp .release.env.example .release.env
-xcrun notarytool store-credentials OpenWritr \
-  --apple-id "your@email.com" \
-  --team-id "G69Z5BNY97" \
-  --password "app-specific-password"
-
-scripts/release_macos.sh
+scripts/request.sh openwritr vX.Y.Z /path/to/OpenWritr/.artifacts/broker-release
 ```
 
-Important: if you distribute a ZIP, notarize and staple the `.app` before creating the archive. A
-stapled DMG ticket alone does not protect ZIP distribution.
+Then OpenWritr's secretless publication handoff creates a draft, runs the
+read-only transcription smoke test against that draft, and publishes only
+after the tag, checksums, exact five-asset contract, and smoke result pass.
+See [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md) for the maintainer-only
+procedure and authorization boundary.
+
+The broker attests the OpenWritr ZIP only. It deliberately does **not** attest
+either DMG, because the AppUpdater alias and versioned DMG have the same digest
+and an attestation for that digest can crash OpenWritr 1.6.0's updater path
+(see [#31](https://github.com/trsdn/OpenWritr/issues/31)).
 
 ### In-app updates
 
@@ -122,7 +126,7 @@ OpenWritr checks `trsdn/OpenWritr` GitHub Releases for newer, Developer ID-signe
 - Automatic checks run roughly every 24 hours (toggle: **Settings → Updates**); a manual check is also available from the menu bar.
 - Before installing, AppUpdater checks that the downloaded app has the same Developer ID Team ID, signing identifier and bundle identifier as the installed app. Nothing is installed from an unsigned or mismatched build.
 - **OpenWritr 1.6.0 cannot update itself.** It was built to require GitHub Artifact Attestation, which does not work with the current release pipeline (see [#31](https://github.com/trsdn/OpenWritr/issues/31)). It reports the update check as failed. Install the next release manually from the Releases page; later versions update themselves.
-- The release workflow publishes an extra `OpenWritr-{version}.dmg` asset specifically for this update check, alongside the existing versioned ZIP/DMG downloads above.
+- The broker publication handoff publishes an extra `OpenWritr-{version}.dmg` asset specifically for this update check, alongside the existing versioned ZIP/DMG downloads above.
 
 ## Privacy
 
@@ -174,7 +178,10 @@ Releases follow [Semantic Versioning](https://semver.org): patch releases fix bu
 
 ## Verifying a download
 
-Releases are built by the [release workflow](.github/workflows/release.yml), signed with a Developer ID certificate (Team ID `G69Z5BNY97`), and notarized by Apple. You can check that yourself:
+Releases are built by the
+[notarization broker](https://github.com/trsdn/macos-notarization-broker),
+signed with a Developer ID certificate (Team ID `G69Z5BNY97`), and notarized
+by Apple. You can check that yourself:
 
 ```sh
 shasum -a 256 -c OpenWritr-vX.Y.Z-macOS-arm64.zip.sha256
@@ -183,7 +190,13 @@ spctl --assess --type execute --verbose /Applications/OpenWritr.app   # expect: 
 xcrun stapler validate /Applications/OpenWritr.app
 ```
 
-This proves the app was signed by that Team ID and not altered afterwards. It does not prove which source commit it was built from: OpenWritr deliberately publishes no GitHub build attestation (see [#31](https://github.com/trsdn/OpenWritr/issues/31)). Third-party licences are bundled in `OpenWritr.app/Contents/Resources/Licenses/` and listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+This proves the app was signed by that Team ID and not altered afterwards.
+The broker download also carries provenance naming the immutable OpenWritr
+source commit. The ZIP may have GitHub build provenance from the broker, but
+the DMGs deliberately do not (see [#31](https://github.com/trsdn/OpenWritr/issues/31)).
+Third-party licences are bundled in
+`OpenWritr.app/Contents/Resources/Licenses/` and listed in
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ## Support and security
 

@@ -9,9 +9,11 @@ instructions: |
 
   The rules that are most often broken:
 
-  1. Never add a build-attestation policy to UpdateManager and never attest the
-     update DMG. It crashes shipped apps (see #31).
-  2. Never publish a release, create or move tags, or change repository settings.
+  1. Never add a build-attestation policy to UpdateManager and never attest
+     either OpenWritr DMG. They share one digest and can crash shipped apps
+     (see #31).
+  2. Never publish a release, create or move tags, dispatch the notarization
+     broker, run the publication handoff, or change repository settings.
   3. Never log transcript text, audio, prompts, or API keys.
 
   Validate with `swift build -c release -Xswiftc -warnings-as-errors`, `swiftlint lint --strict`, and `swift test` before proposing any change.

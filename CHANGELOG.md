@@ -3,7 +3,7 @@
 All notable changes to OpenWritr will be documented in this file.
 
 Each release's notes on GitHub are generated from its section here, and the
-release workflow fails when the section for a tag is missing or empty.
+broker publication handoff fails when the section for a tag is missing or empty.
 
 ## [1.6.6] — 2026-09-22
 
