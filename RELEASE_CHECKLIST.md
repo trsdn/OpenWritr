@@ -1,80 +1,142 @@
 # OpenWritr Release Checklist
 
-Use this checklist for every tagged macOS release.
+The tag-triggered GitHub Actions workflow is the canonical release path. The
+maintainer prepares and tags the release; the workflow builds, signs, notarizes,
+creates the draft, smoke-tests the verified workflow artifact attached to it,
+and publishes it.
 
-## 1. Preflight
+## One-time repository setup
 
-- [ ] Working tree clean (`git status --short`)
-- [ ] `CHANGELOG.md` has a section `## [x.y.z] — date` for this version and nothing left under Unreleased (the release workflow fails otherwise)
-- [ ] `Info.plist` `CFBundleShortVersionString` and `CFBundleVersion` equal `x.y.z` (the release workflow fails otherwise)
-- [ ] Developer ID identity available in keychain
-- [ ] Notary profile available (`NOTARY_PROFILE=OpenWritr`) or Apple credentials set
+The maintainer must create a GitHub environment named `release`, restrict its
+deployment branches and tags to selected tags matching `v*`, and configure these
+environment secrets:
 
-## 2. Build + Sign + Notarize
+- `MACOS_CERTIFICATE`
+- `MACOS_CERTIFICATE_PWD`
+- `APPLE_ID`
+- `APPLE_TEAM_ID`
+- `APPLE_APP_PASSWORD`
+
+These values must not remain repository-level Actions secrets after the
+environment migration is verified. The environment and secret migration are
+repository settings; the workflow cannot create or migrate them.
+
+## 1. Maintainer: prepare the release
+
+- [ ] Work on a pull-request branch; do not release unreviewed local changes.
+- [ ] Set both `CFBundleShortVersionString` and `CFBundleVersion` in `Info.plist`
+      to `x.y.z`.
+- [ ] Add a non-empty `## [x.y.z] — YYYY-MM-DD` section to `CHANGELOG.md`.
+- [ ] Leave no release entries under an `Unreleased` heading.
+- [ ] Run the required validation:
+
+  ```sh
+  swift build -c release -Xswiftc -warnings-as-errors
+  swiftlint lint --strict
+  swift test
+  ```
+
+- [ ] Merge the release-preparation pull request and confirm the intended commit
+      is on `main`.
+
+## 2. Maintainer: create the release tag
+
+- [ ] Create and push `vx.y.z` at the prepared `main` commit. This explicit tag
+      push is the release trigger.
+- [ ] Confirm the **Release macOS** workflow started for that tag.
+
+Do not build or upload release assets manually during the normal path. Do not
+dispatch the workflow for a new release instead of pushing its tag.
+
+## 3. Workflow: build and publish
+
+The workflow performs these actions without maintainer intervention:
+
+1. Validates the triggering tag and commit, `Info.plist`, and changelog entry.
+2. Uses the `release` environment to build, Developer ID-sign, notarize, staple,
+   and verify the app and disk image.
+3. Resolves the live remote tag again, requires it still points to the triggering
+   commit, and passes the verified files to a separate job that creates or
+   updates a **draft** GitHub release. A new draft may be empty; a rerun may
+   contain only the five expected asset names. Any unexpected stale asset fails
+   the workflow instead of being published.
+4. Downloads the same immutable workflow artifact without release-write access,
+   installs its DMG, verifies Gatekeeper and notarization, and runs the
+   transcription smoke test.
+5. After the smoke test, resolves the live remote tag again and requires it
+   still points to the triggering commit and rechecks the exact five-asset set
+   before publishing the draft, then verifies the public DMG is the tested file.
+
+The release contains exactly these five public assets:
+
+- `OpenWritr-vx.y.z-macOS-arm64.zip`
+- `OpenWritr-vx.y.z-macOS-arm64.zip.sha256`
+- `OpenWritr-vx.y.z-macOS-arm64.dmg`
+- `OpenWritr-vx.y.z-macOS-arm64.dmg.sha256`
+- `OpenWritr-x.y.z.dmg` — the same notarized DMG bytes under the exact name
+  required by AppUpdater
+
+Release notes come from the matching `CHANGELOG.md` section. Do not write or
+replace them manually.
+
+**Never attest `OpenWritr-x.y.z.dmg`.** OpenWritr intentionally has no updater
+attestation policy; restoring one or attesting the update DMG can strand or crash
+installed clients (see #31).
+
+## 4. Maintainer: monitor and recover
+
+- [ ] Confirm **Build signed and notarized macOS artifacts** passed.
+- [ ] Confirm **Create or update the draft release** passed.
+- [ ] Confirm **Smoke-test the release before publishing** passed.
+- [ ] Confirm **Publish the release** passed. Its smoke-test job summary is the
+      `R05` record described in
+      [docs/release-smoke-tests.md](docs/release-smoke-tests.md).
+- [ ] Confirm the release page is public and lists all five exact asset names.
+
+If signing, notarization, networking, or a runner fails transiently, rerun the
+existing tag with `workflow_dispatch`, selecting that `vx.y.z` tag as the
+workflow ref. For example:
 
 ```sh
-scripts/release_macos.sh
+gh workflow run release.yml --ref vx.y.z
 ```
 
-Expected outcome:
+Using the tag as the workflow ref is required by the `release` environment's
+`v*` deployment restriction. There is no independent version input: the workflow
+derives the release identity from the triggering tag, checks out its fully
+qualified `refs/tags/vx.y.z` ref, and verifies that `HEAD` is that tag's commit.
+The rerun rebuilds the immutable tagged commit and may replace assets only while
+the release remains a draft.
 
-- Signed app bundle created
-- App notarized and stapled
-- Signed ZIP created at `dist/OpenWritr-macos.zip`
-- `dist/OpenWritr-macos.zip.sha256` generated
-- Signed DMG created at `dist/OpenWritr-macos.dmg`
-- Notarization executed (not skipped)
-- `dist/OpenWritr-macos.dmg.sha256` generated
+The workflow refuses to overwrite an already-public release. If code, scripts,
+metadata, release notes, or assets need a fix, prepare and tag a **new version**.
+Never move or reuse the published tag. A failed draft may be deleted by the
+maintainer before creating that new version.
 
-## 3. Versioned Artifact Names
+## 5. Optional local rehearsal or recovery
 
-Replace `x.y.z` with release version.
+Local release commands are optional diagnostics, not the canonical release
+procedure and not a substitute for the tag-triggered workflow. They do not
+create or publish a GitHub release.
+
+With a local Developer ID identity and notary profile configured:
 
 ```sh
-cp dist/OpenWritr-macos.zip dist/OpenWritr-vx.y.z-macOS-arm64.zip
-cp dist/OpenWritr-macos.zip.sha256 dist/OpenWritr-vx.y.z-macOS-arm64.zip.sha256
-cp dist/OpenWritr-macos.dmg dist/OpenWritr-vx.y.z-macOS-arm64.dmg
-cp dist/OpenWritr-macos.dmg.sha256 dist/OpenWritr-vx.y.z-macOS-arm64.dmg.sha256
+cp .release.env.example .release.env
+version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Info.plist)"
+scripts/release_macos.sh "$version"
 ```
 
-## 4. Verification (must pass)
+The local script uses the versioned asset base
+`dist/OpenWritr-v${version}-macOS-arm64`. Verify those local outputs directly:
 
 ```sh
-unzip -q dist/OpenWritr-vx.y.z-macOS-arm64.zip -d /tmp/openwritr-verify
-xcrun stapler validate /tmp/openwritr-verify/OpenWritr.app
-spctl --assess --type execute --verbose /tmp/openwritr-verify/OpenWritr.app
-xcrun stapler validate dist/OpenWritr-vx.y.z-macOS-arm64.dmg
-spctl --assess --type open --context context:primary-signature --verbose dist/OpenWritr-vx.y.z-macOS-arm64.dmg
+xcrun stapler validate .build/release/OpenWritr.app
+spctl --assess --type execute --verbose=2 .build/release/OpenWritr.app
+xcrun stapler validate "dist/OpenWritr-v${version}-macOS-arm64.dmg"
+spctl --assess --type open --context context:primary-signature \
+  --verbose=2 "dist/OpenWritr-v${version}-macOS-arm64.dmg"
 ```
 
-Expected lines:
-
-- `The validate action worked!`
-- `accepted`
-- `source=Notarized Developer ID`
-
-Optional deep check:
-
-```sh
-hdiutil attach -readonly -nobrowse dist/OpenWritr-vx.y.z-macOS-arm64.dmg
-codesign -dv --verbose=4 /Volumes/OpenWritr/OpenWritr.app
-hdiutil detach /Volumes/OpenWritr
-```
-
-## 5. GitHub Release
-
-- [ ] Push tag `vx.y.z`. The release workflow builds, signs, and notarizes, creates the GitHub release as a **draft**, smoke-tests the draft, and only then publishes it. If the smoke test fails the release stays a draft and nothing is public. Re-running the workflow for the same tag (`workflow_dispatch`) rebuilds the same commit, so it only recovers from a transient failure (runner, network, notarization service). A fix to code, scripts, or the changelog needs a **new version**: delete the draft, bump `Info.plist`, add a changelog entry, and tag again. A tag that already has a public release is refused
-- [ ] Upload artifacts:
-  - `OpenWritr-vx.y.z-macOS-arm64.zip`
-  - `OpenWritr-vx.y.z-macOS-arm64.zip.sha256`
-  - `OpenWritr-vx.y.z-macOS-arm64.dmg`
-  - `OpenWritr-vx.y.z-macOS-arm64.dmg.sha256`
-- [ ] Release notes are the changelog section for the version; the release workflow publishes them, so do not write them by hand
-
-## 6. Post-Release Sanity
-
-- [ ] Download DMG from release page
-- [ ] Verify checksum
-- [ ] Install and launch on a clean user profile or second machine
-- [ ] Confirm app starts and prompts for permissions as expected
-- [ ] The `Smoke-test the release before publishing` and `Publish the release` jobs of the release run passed; its job summary is the `R05` record ([docs/release-smoke-tests.md](docs/release-smoke-tests.md))
+Do not upload locally produced files over a public release. Any recovered
+release still goes through a new version and the canonical workflow.

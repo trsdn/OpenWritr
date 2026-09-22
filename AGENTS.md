@@ -148,14 +148,15 @@ swift test
 
 ## Credentials and revocation
 
-Repository and release credentials are held as GitHub Actions secrets and are
-never in the tree. If one is exposed, revoke it at its source first, then update
-the secret.
+Release credentials are held as secrets in the GitHub `release` environment and
+are never in the tree. Only the signing/notarization job uses that environment.
+If one is exposed, revoke it at its source first, then update the environment
+secret.
 
 | Credential | Where it lives | If exposed |
 |---|---|---|
-| `MACOS_CERTIFICATE`, `MACOS_CERTIFICATE_PWD` (Developer ID Application `.p12`) | Actions secrets | Revoke the certificate in the Apple Developer portal, issue a new one, re-export the `.p12`, update both secrets. Maintainer only. |
-| `APPLE_ID`, `APPLE_TEAM_ID`, `APPLE_APP_PASSWORD` | Actions secrets | Revoke the app-specific password at appleid.apple.com, create a new one, update `APPLE_APP_PASSWORD`. Maintainer only. |
+| `MACOS_CERTIFICATE`, `MACOS_CERTIFICATE_PWD` (Developer ID Application `.p12`) | GitHub `release` environment secrets | Revoke the certificate in the Apple Developer portal, issue a new one, re-export the `.p12`, update both secrets. Maintainer only. |
+| `APPLE_ID`, `APPLE_TEAM_ID`, `APPLE_APP_PASSWORD` | GitHub `release` environment secrets | Revoke the app-specific password at appleid.apple.com, create a new one, update `APPLE_APP_PASSWORD`. Maintainer only. |
 | Local notary profile (`xcrun notarytool store-credentials`) | The maintainer's login keychain | Revoke the app-specific password as above and store the profile again. |
 | User-entered provider API keys | The user's macOS Keychain (`KeychainStore`) | The user revokes the key with the provider and enters a new one in Settings. The repository holds none. |
 

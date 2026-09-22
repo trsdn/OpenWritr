@@ -89,11 +89,16 @@ The default comparison covers Apple Intelligence, Luna, Gemini Flash, MAI Flash,
 The release flow builds a Developer ID signed app, notarizes and staples the app bundle, packages a
 ZIP from that notarized app, then creates and notarizes a DMG. GitHub Releases for `v*` tags receive:
 
-- notarized ZIP + SHA-256 checksum
-- notarized DMG + SHA-256 checksum
-- an additional `OpenWritr-{version}.dmg` (same signed/notarized bytes, renamed for [AppUpdater](#in-app-updates))
+- `OpenWritr-v{version}-macOS-arm64.zip`
+- `OpenWritr-v{version}-macOS-arm64.zip.sha256`
+- `OpenWritr-v{version}-macOS-arm64.dmg`
+- `OpenWritr-v{version}-macOS-arm64.dmg.sha256`
+- `OpenWritr-{version}.dmg` (the same signed/notarized DMG bytes under the exact
+  name required by [AppUpdater](#in-app-updates))
 
-The required GitHub Actions secrets and what to do if one is exposed are listed in [AGENTS.md](AGENTS.md#credentials-and-revocation).
+The signing and notarization job reads its five credentials only from the
+GitHub `release` environment. The required secret names and revocation steps are
+listed in [AGENTS.md](AGENTS.md#credentials-and-revocation).
 
 For local releases, copy the example environment and store a notary profile once:
 
