@@ -2,7 +2,8 @@
 
 The tag-triggered GitHub Actions workflow is the canonical release path. The
 maintainer prepares and tags the release; the workflow builds, signs, notarizes,
-creates the draft, smoke-tests it, and publishes it.
+creates the draft, smoke-tests the verified workflow artifact attached to it,
+and publishes it.
 
 ## One-time repository setup
 
@@ -51,12 +52,14 @@ dispatch the workflow for a new release instead of pushing its tag.
 
 The workflow performs these actions without maintainer intervention:
 
-1. Validates the tag, `Info.plist`, and changelog entry.
+1. Validates the triggering tag and commit, `Info.plist`, and changelog entry.
 2. Uses the `release` environment to build, Developer ID-sign, notarize, staple,
    and verify the app and disk image.
-3. Passes the verified files to a separate job that creates or updates a
-   **draft** GitHub release.
-4. Installs the draft DMG, verifies Gatekeeper and notarization, and runs the
+3. Resolves the live remote tag again, requires it still points to the triggering
+   commit, and passes the verified files to a separate job that creates or
+   updates a **draft** GitHub release.
+4. Downloads the same immutable workflow artifact without release-write access,
+   installs its DMG, verifies Gatekeeper and notarization, and runs the
    transcription smoke test.
 5. Publishes the draft only after the smoke test passes, then verifies the
    public DMG is the tested file.
