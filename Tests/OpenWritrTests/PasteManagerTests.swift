@@ -33,7 +33,14 @@ struct PasteManagerTests {
     }
 
     @Test func unreadableClipboardDataStillAllowsPaste() {
-        let pasteboard = FakePasteboard(items: [.unreadable(type: .fileURL)])
+        let pasteboard = FakePasteboard(
+            items: [
+                .mixed(
+                    readableText: "Restorable clipboard",
+                    unreadableType: .fileURL
+                )
+            ]
+        )
         let poster = FakePasteCommandPoster()
         let manager = PasteManager(pasteboard: pasteboard, commandPoster: poster)
 
@@ -44,7 +51,20 @@ struct PasteManagerTests {
 
         manager.flushPendingRestore()
 
-        #expect(pasteboard.items.isEmpty)
+        #expect(pasteboard.text == "Restorable clipboard")
+        #expect(pasteboard.items.first?.pasteboardTypes == [.string])
+    }
+
+    @Test func unreadableOnlyClipboardCancelsPasteWithoutClearing() {
+        let pasteboard = FakePasteboard(items: [.unreadable(type: .fileURL)])
+        let poster = FakePasteCommandPoster()
+        let manager = PasteManager(pasteboard: pasteboard, commandPoster: poster)
+
+        manager.pasteText("Synthetic transcript")
+
+        #expect(pasteboard.items.first?.pasteboardTypes == [.fileURL])
+        #expect(pasteboard.clearCount == 0)
+        #expect(poster.postCount == 0)
     }
 
     @Test func secondPasteRestoresOriginalClipboardAfterPendingRestore() {
@@ -89,6 +109,7 @@ private final class FakePasteCommandPoster: PasteCommandPosting {
 @MainActor
 private final class FakePasteboard: PasteboardManaging {
     private(set) var changeCount = 0
+    private(set) var clearCount = 0
     private(set) var items: [FakePasteboardItem]
     var mutateWhenReading: [FakePasteboardItem]?
 
@@ -113,6 +134,7 @@ private final class FakePasteboard: PasteboardManaging {
     @discardableResult
     func clearContents() -> Int {
         items = []
+        clearCount += 1
         changeCount += 1
         return changeCount
     }
@@ -162,6 +184,16 @@ private struct FakePasteboardItem: PasteboardItemReading {
 
     static func unreadable(type: NSPasteboard.PasteboardType) -> FakePasteboardItem {
         FakePasteboardItem(declaredTypes: [type], data: [:])
+    }
+
+    static func mixed(
+        readableText: String,
+        unreadableType: NSPasteboard.PasteboardType
+    ) -> FakePasteboardItem {
+        FakePasteboardItem(
+            declaredTypes: [.string, unreadableType],
+            data: [.string: Data(readableText.utf8)]
+        )
     }
 
     func pasteboardData(forType type: NSPasteboard.PasteboardType) -> Data? {

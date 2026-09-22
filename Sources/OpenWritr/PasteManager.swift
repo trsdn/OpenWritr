@@ -192,15 +192,19 @@ final class PasteManager: TextPasting {
     }
 
     private func snapshot(of pasteboard: any PasteboardManaging) -> PasteboardSnapshot? {
+        guard let pasteboardItems = pasteboard.pasteboardItems else {
+            pasteLog.notice("Clipboard items could not be read; cancelling paste")
+            return nil
+        }
         var snapshotItems: [PasteboardItemContent] = []
 
-        for item in pasteboard.pasteboardItems ?? [] {
+        for item in pasteboardItems {
             var representations: [PasteboardItemContent.Representation] = []
 
             for type in item.pasteboardTypes {
                 // Some representations cannot be read: protected content (e.g. from
-                // managed apps), promised data that never materialises, or an empty
-                // clipboard. Skip them rather than dropping the paste altogether.
+                // managed apps) or promised data that never materialises. Skip them
+                // rather than dropping an otherwise restorable pasteboard item.
                 guard let data = item.pasteboardData(forType: type) else {
                     pasteLog.notice("Skipping unreadable clipboard representation \(type.rawValue, privacy: .public)")
                     continue
@@ -212,6 +216,11 @@ final class PasteManager: TextPasting {
             if !representations.isEmpty {
                 snapshotItems.append(PasteboardItemContent(representations: representations))
             }
+        }
+
+        guard pasteboardItems.isEmpty || !snapshotItems.isEmpty else {
+            pasteLog.notice("Clipboard contains data but no restorable representations; cancelling paste")
+            return nil
         }
 
         return PasteboardSnapshot(items: snapshotItems)
