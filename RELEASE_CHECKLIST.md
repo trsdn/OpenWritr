@@ -121,18 +121,19 @@ With a local Developer ID identity and notary profile configured:
 
 ```sh
 cp .release.env.example .release.env
-scripts/release_macos.sh
+version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Info.plist)"
+scripts/release_macos.sh "$version"
 ```
 
-The local script uses generic `dist/OpenWritr-macos.*` names. Verify those local
-outputs directly:
+The local script uses the versioned asset base
+`dist/OpenWritr-v${version}-macOS-arm64`. Verify those local outputs directly:
 
 ```sh
 xcrun stapler validate .build/release/OpenWritr.app
 spctl --assess --type execute --verbose=2 .build/release/OpenWritr.app
-xcrun stapler validate dist/OpenWritr-macos.dmg
+xcrun stapler validate "dist/OpenWritr-v${version}-macOS-arm64.dmg"
 spctl --assess --type open --context context:primary-signature \
-  --verbose=2 dist/OpenWritr-macos.dmg
+  --verbose=2 "dist/OpenWritr-v${version}-macOS-arm64.dmg"
 ```
 
 Do not upload locally produced files over a public release. Any recovered
