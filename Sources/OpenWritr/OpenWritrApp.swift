@@ -81,7 +81,7 @@ final class AppViewModel {
 
     let transcriptionManager = TranscriptionManager()
     let grammarEnhancer: GrammarEnhancer = .init()
-    let audioEngine = AudioEngine()
+    @ObservationIgnored lazy var audioEngine = AudioEngine()
     let hotkeyManager = HotkeyManager()
     let pasteManager = PasteManager()
     let overlayPanel = OverlayPanel()
@@ -1724,15 +1724,17 @@ struct OpenWritrApp: App {
     }
 }
 
-/// Process entry point. `--self-test` runs the transcription pipeline on an
-/// audio file and exits without starting the menu bar app, so a release smoke
-/// test can exercise the published binary on a machine with no microphone.
+/// Process entry point. Internal command-line modes exercise production code
+/// without starting the menu bar app or requesting interactive permissions.
 @main
 enum OpenWritrEntry {
+    @MainActor
     static func main() {
         let arguments = CommandLine.arguments
         if arguments.contains("--self-test") {
             SelfTest.run(arguments: arguments)
+        } else if arguments.contains("--render-ui-snapshots") {
+            UISnapshotRenderer.run(arguments: arguments)
         } else {
             OpenWritrApp.main()
         }

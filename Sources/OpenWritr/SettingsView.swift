@@ -9,6 +9,11 @@ private enum PromptTargetChange {
     case openAIModel(String)
 }
 
+struct SettingsSnapshotConfiguration {
+    let automaticUpdatesEnabled: Bool
+    let inputDevicePickerEnabled: Bool
+}
+
 /// Keeps the hosting window above other windows, including the floating
 /// recording overlay, and brings it to the front whenever it is shown.
 /// An `LSUIElement` app is never active on its own, so it also activates the app
@@ -31,6 +36,7 @@ private struct KeepWindowOnTop: NSViewRepresentable {
 
 struct SettingsView: View {
     @Bindable var viewModel: AppViewModel
+    var snapshotConfiguration: SettingsSnapshotConfiguration?
     @State private var isEditingPrompt = false
     @State private var promptDraft = ""
     @State private var pendingPromptTargetChange: PromptTargetChange?
@@ -47,7 +53,7 @@ struct SettingsView: View {
                         Text(device.name).tag(device.id)
                     }
                 }
-                .disabled(!viewModel.canChangeInputDevice)
+                .disabled(!(snapshotConfiguration?.inputDevicePickerEnabled ?? viewModel.canChangeInputDevice))
 
                 Text(inputDeviceStatusMessage)
                     .font(.caption)
@@ -298,8 +304,14 @@ struct SettingsView: View {
 
             Section("Updates") {
                 Toggle("Automatically Check for Updates", isOn: Binding(
-                    get: { viewModel.updateManager.automaticCheckEnabled },
-                    set: { viewModel.updateManager.automaticCheckEnabled = $0 }
+                    get: {
+                        snapshotConfiguration?.automaticUpdatesEnabled
+                            ?? viewModel.updateManager.automaticCheckEnabled
+                    },
+                    set: {
+                        guard snapshotConfiguration == nil else { return }
+                        viewModel.updateManager.automaticCheckEnabled = $0
+                    }
                 ))
 
                 Button("Check for Updates Now…") {
@@ -315,8 +327,13 @@ struct SettingsView: View {
         .formStyle(.grouped)
         .padding(20)
         .frame(width: 520)
-        .background(KeepWindowOnTop())
+        .background {
+            if snapshotConfiguration == nil {
+                KeepWindowOnTop()
+            }
+        }
         .onAppear {
+            guard snapshotConfiguration == nil else { return }
             viewModel.refreshInputDevices()
             viewModel.refreshAppleIntelligenceAvailability()
         }
