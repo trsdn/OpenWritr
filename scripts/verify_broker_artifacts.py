@@ -113,6 +113,12 @@ def verify_artifacts(root: pathlib.Path, tag: str) -> str:
             or pathlib.PurePath(checksum_name).name != checksum_name
         ):
             raise ValueError(f"Broker checksum name is unsafe: {checksum_name}")
+        expected_checksum_name = f"{name}.sha256"
+        if checksum_name != expected_checksum_name:
+            raise ValueError(
+                f"Broker checksum name is not canonical for {name}: "
+                f"expected {expected_checksum_name}, got {checksum_name}"
+            )
         checksum_path = root / str(checksum_name)
         if (
             not path.is_file()

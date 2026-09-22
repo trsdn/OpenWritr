@@ -109,6 +109,23 @@ class VerifyBrokerArtifactsTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "Developer ID team"):
                 verify_broker_artifacts.verify_artifacts(root, "v1.2.3")
 
+    def test_rejects_noncanonical_checksum_name(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            self.create_fixture(root)
+            provenance_path = root / "provenance.json"
+            provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
+            artifact = provenance["artifacts"][0]
+            alternate_checksum = "alternate-safe-name.sha256"
+            (root / alternate_checksum).write_text(
+                f"{artifact['sha256']}  {artifact['name']}\n",
+                encoding="utf-8",
+            )
+            artifact["checksum"] = alternate_checksum
+            provenance_path.write_text(json.dumps(provenance), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "checksum name is not canonical"):
+                verify_broker_artifacts.verify_artifacts(root, "v1.2.3")
+
     def test_rejects_dmg_attestation(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = pathlib.Path(temporary)
