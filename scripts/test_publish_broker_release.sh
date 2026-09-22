@@ -12,8 +12,13 @@ if [[ "$assignment_count" -ne 1 ]]; then
 fi
 
 assignment_line="$(grep '^smoke_nonce=' "$publication_script")"
-eval "$assignment_line"
+expected_assignment='smoke_nonce="$(python3 -c '\''import uuid; print("smoke-" + uuid.uuid4().hex)'\'')"'
+if [[ "$assignment_line" != "$expected_assignment" ]]; then
+  echo "Unexpected smoke_nonce assignment: $assignment_line" >&2
+  exit 1
+fi
 
+smoke_nonce="$(python3 -c 'import uuid; print("smoke-" + uuid.uuid4().hex)')"
 if [[ ! "$smoke_nonce" =~ ^smoke-[0-9a-f]{32}$ ]]; then
   echo "Invalid smoke nonce: $smoke_nonce" >&2
   exit 1
