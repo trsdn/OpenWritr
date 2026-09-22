@@ -12,7 +12,7 @@ on:
         type: string
 
 permissions:
-  contents: write
+  contents: read
 
 # One release run per tag at a time: two overlapping runs could test one set of
 # assets while the other replaces them before the publish job runs.
@@ -21,11 +21,17 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  macos-release:
+  sign-and-notarize:
     name: Build signed and notarized macOS artifacts
-    runs-on: macos-latest
+    runs-on: macos-15
+    timeout-minutes: 90
+    environment: release
+    permissions:
+      contents: read
     outputs:
       tag: ${{ steps.release.outputs.tag }}
+      version: ${{ steps.release.outputs.version }}
+      artifact_name: ${{ steps.release.outputs.artifact_name }}
     steps:
       - name: Resolve release metadata
         id: release
@@ -42,13 +48,16 @@ jobs:
             exit 1
           fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
-          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+          version="${tag#v}"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "artifact_name=OpenWritr-v${version}-macOS-arm64" >> "$GITHUB_OUTPUT"
 
       - name: Checkout
         uses: actions/checkout@v7
         with:
           ref: ${{ steps.release.outputs.tag }}
           fetch-depth: 0
+          persist-credentials: false
 
       # Gate: nothing is built, signed, or published for a tag that cannot
       # describe itself. Fails before the signing certificate is imported.
@@ -89,7 +98,8 @@ jobs:
             echo "CHANGELOG.md has no entry for $RELEASE_VERSION." >&2
             exit 1
           fi
-          echo "RELEASE_NOTES_FILE=$RUNNER_TEMP/release-notes.md" >> "$GITHUB_ENV"
+          mkdir -p dist
+          cp "$RUNNER_TEMP/release-notes.md" dist/release-notes.md
 
       - name: Import Developer ID certificate
         shell: bash
@@ -136,7 +146,14 @@ jobs:
           security import "$ca_file" -k "$keychain_file" -T /usr/bin/codesign
           security import "$cert_file" -P "$MACOS_CERTIFICATE_PWD" -A -t cert -f pkcs12 -k "$keychain_file"
           security set-key-partition-list -S apple-tool:,apple: -k "$keychain_password" "$keychain_file"
-          security list-keychains -d user -s "$keychain_file" $(security list-keychains -d user | tr -d '"')
+          existing_keychains=()
+          while IFS= read -r existing_keychain; do
+            [[ -n "$existing_keychain" ]] && existing_keychains+=("$existing_keychain")
+          done < <(
+            security list-keychains -d user |
+              sed -E 's/^[[:space:]]*"//; s/"[[:space:]]*$//'
+          )
+          security list-keychains -d user -s "$keychain_file" "${existing_keychains[@]}"
 
           identity="$(
             security find-identity -v -p codesigning "$keychain_file" |
@@ -147,10 +164,12 @@ jobs:
             exit 1
           fi
 
-          echo "CODE_SIGN_IDENTITY=$identity" >> "$GITHUB_ENV"
-          echo "OPENWRITR_SIGNING_IDENTITY=$identity" >> "$GITHUB_ENV"
-          echo "KEYCHAIN_FILE=$keychain_file" >> "$GITHUB_ENV"
-          echo "SIGNING_DIR=$signing_dir" >> "$GITHUB_ENV"
+          {
+            echo "CODE_SIGN_IDENTITY=$identity"
+            echo "OPENWRITR_SIGNING_IDENTITY=$identity"
+            echo "KEYCHAIN_FILE=$keychain_file"
+            echo "SIGNING_DIR=$signing_dir"
+          } >> "$GITHUB_ENV"
           import_succeeded=true
 
       - name: Build Developer ID signed app
@@ -264,7 +283,7 @@ jobs:
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v7
         with:
-          name: OpenWritr-v${{ steps.release.outputs.version }}-macOS-arm64
+          name: ${{ steps.release.outputs.artifact_name }}
           if-no-files-found: error
           path: |
             dist/OpenWritr-v${{ steps.release.outputs.version }}-macOS-arm64.zip
@@ -272,22 +291,37 @@ jobs:
             dist/OpenWritr-v${{ steps.release.outputs.version }}-macOS-arm64.dmg
             dist/OpenWritr-v${{ steps.release.outputs.version }}-macOS-arm64.dmg.sha256
             dist/OpenWritr-${{ steps.release.outputs.version }}.dmg
+            dist/release-notes.md
 
-      - name: Attach assets to GitHub Release
+  create-draft:
+    name: Create or update the draft release
+    needs: sign-and-notarize
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Download verified release artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ needs.sign-and-notarize.outputs.artifact_name }}
+          path: release-candidate
+
+      - name: Attach verified assets to the draft release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ steps.release.outputs.tag }}
-          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+          RELEASE_TAG: ${{ needs.sign-and-notarize.outputs.tag }}
+          RELEASE_VERSION: ${{ needs.sign-and-notarize.outputs.version }}
         run: |
           set -euo pipefail
-          asset_base="dist/OpenWritr-v${RELEASE_VERSION}-macOS-arm64"
+          asset_base="release-candidate/OpenWritr-v${RELEASE_VERSION}-macOS-arm64"
           assets=(
             "$asset_base.zip"
             "$asset_base.zip.sha256"
             "$asset_base.dmg"
             "$asset_base.dmg.sha256"
-            "dist/OpenWritr-${RELEASE_VERSION}.dmg"
+            "release-candidate/OpenWritr-${RELEASE_VERSION}.dmg"
           )
           for asset in "${assets[@]}"; do
             if [[ ! -f "$asset" ]]; then
@@ -300,42 +334,49 @@ jobs:
           # release is created as a DRAFT: nobody, including the in-app updater,
           # can receive it until the smoke test has passed and the publish job
           # below makes it public. An existing release keeps its state.
-          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release create "$RELEASE_TAG" --draft --title "OpenWritr ${RELEASE_VERSION}" --notes-file "$RELEASE_NOTES_FILE"
-          elif [[ "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" == "true" ]]; then
-            gh release edit "$RELEASE_TAG" --title "OpenWritr ${RELEASE_VERSION}" --notes-file "$RELEASE_NOTES_FILE"
+          if ! gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+              --draft --title "OpenWritr ${RELEASE_VERSION}" \
+              --notes-file release-candidate/release-notes.md
+          elif [[ "$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --json isDraft --jq .isDraft)" == "true" ]]; then
+            gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+              --title "OpenWritr ${RELEASE_VERSION}" \
+              --notes-file release-candidate/release-notes.md
           else
             # Replacing the assets of a public release would expose untested
             # files, and a failing smoke test could not take them back.
             echo "Release $RELEASE_TAG is already public; refusing to replace its assets. Publish a new version instead." >&2
             exit 1
           fi
-          gh release upload "$RELEASE_TAG" "${assets[@]}" --clobber
+          gh release upload "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            "${assets[@]}" --clobber
 
   # R05: install the uploaded DMG and exercise it, as a consumer would, BEFORE
   # the release becomes public. A failure leaves the draft unpublished.
   smoke-test:
     name: Smoke-test the release before publishing
-    needs: macos-release
+    needs: [sign-and-notarize, create-draft]
     permissions:
       # Draft releases are only visible to a token with write access. The
       # called job downloads and runs the assets; it changes nothing.
       contents: write
     uses: ./.github/workflows/smoke-test.yml
     with:
-      tag: ${{ needs.macos-release.outputs.tag }}
+      tag: ${{ needs.sign-and-notarize.outputs.tag }}
 
   publish:
     name: Publish the release
-    needs: [macos-release, smoke-test]
-    runs-on: ubuntu-latest
+    needs: [sign-and-notarize, create-draft, smoke-test]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     permissions:
       contents: write
     steps:
       - name: Make the tested draft public
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ needs.macos-release.outputs.tag }}
+          RELEASE_TAG: ${{ needs.sign-and-notarize.outputs.tag }}
         run: |
           set -euo pipefail
           gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false
@@ -346,7 +387,7 @@ jobs:
 
       - name: Verify the public download is the file that was tested
         env:
-          RELEASE_TAG: ${{ needs.macos-release.outputs.tag }}
+          RELEASE_TAG: ${{ needs.sign-and-notarize.outputs.tag }}
           TESTED_SHA256: ${{ needs.smoke-test.outputs.dmg_sha256 }}
         run: |
           set -euo pipefail

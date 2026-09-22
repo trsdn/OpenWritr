@@ -7,6 +7,7 @@ PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 RELEASE_ENV_FILE="$PROJECT_DIR/.release.env"
 
 repository="${OPENWRITR_REPOSITORY:-trsdn/OpenWritr}"
+release_environment="${OPENWRITR_RELEASE_ENVIRONMENT:-release}"
 team_id="${APPLE_TEAM_ID:-G69Z5BNY97}"
 profile="${NOTARY_PROFILE:-OpenWritr}"
 
@@ -45,17 +46,19 @@ usage() {
   cat <<'EOF'
 Usage: scripts/setup_notarization.sh [options]
 
-Configure GitHub Actions notarization secrets and a local notarytool profile.
+Configure release-environment notarization secrets and a local notarytool profile.
 
 Options:
-  --repo OWNER/REPO   GitHub repository (default: trsdn/OpenWritr)
-  --team-id ID        Apple Developer team ID (default: G69Z5BNY97)
-  --profile NAME      Local notarytool profile (default: OpenWritr)
-  --gui               Read credentials from secure macOS dialogs (no TTY needed)
-  -h, --help          Show this help
+  --repo OWNER/REPO     GitHub repository (default: trsdn/OpenWritr)
+  --environment NAME    GitHub environment (default: release)
+  --team-id ID          Apple Developer team ID (default: G69Z5BNY97)
+  --profile NAME        Local notarytool profile (default: OpenWritr)
+  --gui                 Read credentials from secure macOS dialogs (no TTY needed)
+  -h, --help            Show this help
 
 Environment overrides:
-  OPENWRITR_REPOSITORY, APPLE_TEAM_ID, NOTARY_PROFILE
+  OPENWRITR_REPOSITORY, OPENWRITR_RELEASE_ENVIRONMENT, APPLE_TEAM_ID,
+  NOTARY_PROFILE
 
 By default, credentials are read from an interactive terminal. With --gui,
 the Apple ID and hidden app-specific password are read from macOS dialogs.
@@ -76,6 +79,15 @@ while [[ "$#" -gt 0 ]]; do
       ;;
     --repo=*)
       repository="${1#*=}"
+      shift
+      ;;
+    --environment)
+      [[ "$#" -ge 2 && -n "$2" ]] || die "--environment requires a name."
+      release_environment="$2"
+      shift 2
+      ;;
+    --environment=*)
+      release_environment="${1#*=}"
       shift
       ;;
     --team-id)
@@ -112,6 +124,8 @@ done
 
 [[ "$repository" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] \
   || die "Repository must use the OWNER/REPO format."
+[[ "$release_environment" =~ ^[A-Za-z0-9._-]+$ ]] \
+  || die "Environment may contain only letters, digits, dots, underscores, and hyphens."
 [[ "$team_id" =~ ^[A-Z0-9]{10}$ ]] \
   || die "Apple Developer team ID must be 10 uppercase letters or digits."
 [[ "$profile" =~ ^[A-Za-z0-9._-]+$ ]] \
@@ -160,6 +174,8 @@ fi
 
 xcrun --find notarytool >/dev/null 2>&1 || die "notarytool is not available through xcrun."
 gh auth status >/dev/null 2>&1 || die "GitHub CLI authentication is required; run 'gh auth login'."
+gh api "repos/$repository/environments/$release_environment" >/dev/null 2>&1 \
+  || die "GitHub environment '$release_environment' does not exist in $repository."
 
 if [[ -L "$RELEASE_ENV_FILE" ]]; then
   die ".release.env must not be a symbolic link."
@@ -171,11 +187,11 @@ load_secret_names() {
   if ! secret_names="$(
     gh secret list \
       --repo "$repository" \
-      --app actions \
+      --env "$release_environment" \
       --json name \
       --jq '.[].name'
   )"; then
-    die "Unable to list GitHub Actions secrets for $repository."
+    die "Unable to list secrets for environment '$release_environment' in $repository."
   fi
 }
 
@@ -198,8 +214,8 @@ for secret_name in MACOS_CERTIFICATE MACOS_CERTIFICATE_PWD; do
 done
 
 if [[ "${#missing_certificate_secrets[@]}" -gt 0 ]]; then
-  printf 'Error: Required certificate secret(s) missing in %s: %s\n' \
-    "$repository" "${missing_certificate_secrets[*]}" >&2
+  printf 'Error: Required certificate secret(s) missing in %s environment %s: %s\n' \
+    "$repository" "$release_environment" "${missing_certificate_secrets[*]}" >&2
   printf 'Configure the existing Developer ID certificate separately; this script never exports private keys.\n' >&2
   exit 1
 fi
@@ -319,18 +335,18 @@ apple_app_password_confirmation=""
 unset apple_app_password_confirmation
 
 if ! printf '%s' "$apple_id" \
-  | gh secret set APPLE_ID --repo "$repository" --app actions >/dev/null; then
-  die "Failed to set the APPLE_ID GitHub Actions secret."
+  | gh secret set APPLE_ID --repo "$repository" --env "$release_environment" >/dev/null; then
+  die "Failed to set APPLE_ID in environment '$release_environment'."
 fi
 if ! printf '%s' "$team_id" \
-  | gh secret set APPLE_TEAM_ID --repo "$repository" --app actions >/dev/null; then
-  die "Failed to set the APPLE_TEAM_ID GitHub Actions secret."
+  | gh secret set APPLE_TEAM_ID --repo "$repository" --env "$release_environment" >/dev/null; then
+  die "Failed to set APPLE_TEAM_ID in environment '$release_environment'."
 fi
 if ! printf '%s' "$apple_app_password" \
-  | gh secret set APPLE_APP_PASSWORD --repo "$repository" --app actions >/dev/null; then
+  | gh secret set APPLE_APP_PASSWORD --repo "$repository" --env "$release_environment" >/dev/null; then
   apple_app_password=""
   unset apple_app_password
-  die "Failed to set the APPLE_APP_PASSWORD GitHub Actions secret."
+  die "Failed to set APPLE_APP_PASSWORD in environment '$release_environment'."
 fi
 
 run_notarytool_gui() {
@@ -595,8 +611,8 @@ for secret_name in \
 done
 
 if [[ "${#missing_required_secrets[@]}" -gt 0 ]]; then
-  printf 'Error: Required GitHub Actions secret name(s) not found: %s\n' \
-    "${missing_required_secrets[*]}" >&2
+  printf 'Error: Required secret name(s) not found in environment %s: %s\n' \
+    "$release_environment" "${missing_required_secrets[*]}" >&2
   exit 1
 fi
 
@@ -639,5 +655,6 @@ if [[ -z "$signing_identity" ]]; then
   printf '.release.env contains only the validated notary profile.\n' >&2
 fi
 
-printf 'Notarization credentials configured successfully for %s.\n' "$repository"
+printf 'Notarization credentials configured successfully for %s environment %s.\n' \
+  "$repository" "$release_environment"
 printf 'Local configuration written to %s with mode 600.\n' "$RELEASE_ENV_FILE"

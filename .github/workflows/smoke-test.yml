@@ -35,7 +35,7 @@ permissions:
 jobs:
   smoke:
     name: Install and transcribe
-    runs-on: macos-latest
+    runs-on: macos-15
     timeout-minutes: 30
     outputs:
       dmg_sha256: ${{ steps.download.outputs.dmg_sha256 }}
