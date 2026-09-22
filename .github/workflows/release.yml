@@ -74,7 +74,7 @@ jobs:
       triggering_sha: ${{ needs.validate-release-ref.outputs.triggering_sha }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: refs/tags/${{ needs.validate-release-ref.outputs.tag }}
           fetch-depth: 0
@@ -326,7 +326,7 @@ jobs:
           )
 
       - name: Upload workflow artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ needs.validate-release-ref.outputs.artifact_name }}
           if-no-files-found: error
@@ -347,7 +347,7 @@ jobs:
       contents: write
     steps:
       - name: Checkout tag verification helper
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.sign-and-notarize.outputs.triggering_sha }}
           persist-credentials: false
@@ -355,7 +355,7 @@ jobs:
           sparse-checkout-cone-mode: false
 
       - name: Download verified release artifacts
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: ${{ needs.sign-and-notarize.outputs.artifact_name }}
           path: release-candidate
@@ -431,7 +431,7 @@ jobs:
       contents: write
     steps:
       - name: Checkout tag verification helper
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.sign-and-notarize.outputs.triggering_sha }}
           persist-credentials: false
