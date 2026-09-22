@@ -133,7 +133,7 @@ def verify_artifacts(root: pathlib.Path, tag: str) -> str:
         checksum_fields = checksum_path.read_text(encoding="utf-8").strip().split()
         if len(checksum_fields) != 2 or checksum_fields[0] != digest:
             raise ValueError(f"Broker checksum content mismatch: {checksum_path.name}")
-        if checksum_fields[1].lstrip("*") != name:
+        if checksum_fields[1] not in {name, f"*{name}"}:
             raise ValueError(f"Broker checksum names the wrong file: {checksum_path.name}")
 
     primary = root / f"OpenWritr-v{version}-macOS-arm64.dmg"

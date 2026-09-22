@@ -126,6 +126,22 @@ class VerifyBrokerArtifactsTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "checksum name is not canonical"):
                 verify_broker_artifacts.verify_artifacts(root, "v1.2.3")
 
+    def test_rejects_multiple_checksum_filename_markers(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            self.create_fixture(root)
+            provenance = json.loads(
+                (root / "provenance.json").read_text(encoding="utf-8")
+            )
+            artifact = provenance["artifacts"][0]
+            checksum_path = root / artifact["checksum"]
+            checksum_path.write_text(
+                f"{artifact['sha256']}  **{artifact['name']}\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "checksum names the wrong file"):
+                verify_broker_artifacts.verify_artifacts(root, "v1.2.3")
+
     def test_rejects_dmg_attestation(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = pathlib.Path(temporary)
