@@ -50,6 +50,8 @@ final class AppViewModel {
     private static let enhancementAPIKeyAccount = "enhancedOpenAIAPIKey"
     private static let customPromptsPreferenceKey = "enhancementCustomPromptsV1"
     private static let customPromptsStoreVersion = 1
+    static let defaultDoneDisplayDuration: Duration = .milliseconds(600)
+    static let defaultTransientErrorDisplayDuration: Duration = .seconds(2.5)
     var state: AppState = .idle
     var lastTranscription: String = ""
     var lastRawTranscription: String = ""
@@ -79,18 +81,21 @@ final class AppViewModel {
     private(set) var customEnhancementPrompts: [String: String] = [:]
     var appleIntelligenceAvailability = AppleIntelligenceEnhancer.currentAvailability()
 
-    let transcriptionManager = TranscriptionManager()
-    let grammarEnhancer: GrammarEnhancer = .init()
-    @ObservationIgnored lazy var audioEngine = AudioEngine()
+    let transcriptionManager: any Transcribing
+    let grammarEnhancer: any TranscriptEnhancing
+    @ObservationIgnored private let injectedAudioEngine: (any AudioCapturing)?
+    @ObservationIgnored lazy var audioEngine: any AudioCapturing = injectedAudioEngine ?? AudioEngine()
     let hotkeyManager = HotkeyManager()
-    let pasteManager = PasteManager()
-    let overlayPanel = OverlayPanel()
+    let pasteManager: any TextPasting
+    let overlayPanel: any OverlayPresenting
     let soundManager = SoundManager()
     let permissionsManager = PermissionsManager()
     let updateManager = UpdateManager()
 
     private let captureDrainIdleDuration: Duration = .milliseconds(70)
     private let captureDrainTimeout: Duration = .milliseconds(350)
+    private let doneDisplayDuration: Duration
+    private let transientErrorDisplayDuration: Duration
     private var didConfigure = false
     private var didAttemptInitialSetup = false
     private var isInitializing = false
@@ -103,7 +108,6 @@ final class AppViewModel {
     @ObservationIgnored private var releaseRequested = false
     @ObservationIgnored private var pendingStartTask: Task<Void, Never>?
     @ObservationIgnored private var transientErrorDismissTask: Task<Void, Never>?
-    private static let transientErrorDisplayDuration: Duration = .seconds(2.5)
     @ObservationIgnored private var stoppedCaptureGenerations: Set<UInt64> = []
     @ObservationIgnored private var activeProcessingTask: Task<Void, Never>?
     @ObservationIgnored private var activeProcessingOperationID: UUID?
@@ -113,6 +117,30 @@ final class AppViewModel {
     @ObservationIgnored private var terminationObserver: NSObjectProtocol?
     @ObservationIgnored private var microphoneRecoveryTask: Task<Void, Never>?
     @ObservationIgnored private var microphoneRecoveryID: UUID?
+
+    init(
+        audioEngine: (any AudioCapturing)? = nil,
+        transcriptionManager: any Transcribing = TranscriptionManager(),
+        grammarEnhancer: any TranscriptEnhancing = GrammarEnhancer(),
+        pasteManager: any TextPasting = PasteManager(),
+        overlayPanel: any OverlayPresenting = OverlayPanel(),
+        startsOperational: Bool = false,
+        doneDisplayDuration: Duration = AppViewModel.defaultDoneDisplayDuration,
+        transientErrorDisplayDuration: Duration = AppViewModel.defaultTransientErrorDisplayDuration
+    ) {
+        injectedAudioEngine = audioEngine
+        self.transcriptionManager = transcriptionManager
+        self.grammarEnhancer = grammarEnhancer
+        self.pasteManager = pasteManager
+        self.overlayPanel = overlayPanel
+        self.doneDisplayDuration = doneDisplayDuration
+        self.transientErrorDisplayDuration = transientErrorDisplayDuration
+        if startsOperational {
+            configureAudioCallbacks()
+            isOperational = true
+            state = .ready
+        }
+    }
 
     var displayedOpenAIModels: [String] {
         var models = availableOpenAIModels
@@ -306,25 +334,8 @@ final class AppViewModel {
             self?.quiesceForUpdateInstall()
         }
 
-        audioEngine.onDevicesChanged = { [weak self] in
-            Task { @MainActor [weak self] in
-                self?.handleInputDevicesChanged()
-            }
-        }
-        audioEngine.onFailure = { [weak self] error in
-            Task { @MainActor [weak self] in
-                self?.handleAudioFailure(error)
-            }
-        }
-        audioEngine.onAudioLevel = { [weak self] level, generation in
-            Task { @MainActor [weak self] in
-                guard let self,
-                      case .listening = self.state,
-                      self.captureHandle?.generation == generation
-                else { return }
-                self.overlayPanel.updateAudioLevel(level)
-            }
-        }
+        configureAudioCallbacks()
+
         hotkeyManager.onRecordingStarted = { [weak self] mode in
             Task { @MainActor [weak self] in
                 self?.startListening(triggerMode: mode)
@@ -348,6 +359,28 @@ final class AppViewModel {
         ) { [weak self] _ in
             MainActor.assumeIsolated {
                 self?.shutdown()
+            }
+        }
+    }
+
+    private func configureAudioCallbacks() {
+        audioEngine.onDevicesChanged = { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.handleInputDevicesChanged()
+            }
+        }
+        audioEngine.onFailure = { [weak self] error in
+            Task { @MainActor [weak self] in
+                self?.handleAudioFailure(error)
+            }
+        }
+        audioEngine.onAudioLevel = { [weak self] level, generation in
+            Task { @MainActor [weak self] in
+                guard let self,
+                      case .listening = self.state,
+                      self.captureHandle?.generation == generation
+                else { return }
+                self.overlayPanel.updateAudioLevel(level)
             }
         }
     }
@@ -521,9 +554,10 @@ final class AppViewModel {
     /// flash the overlay, then return to `.ready` without requiring a menu action.
     private func scheduleTransientErrorDismissal() {
         transientErrorDismissTask?.cancel()
+        let displayDuration = transientErrorDisplayDuration
         transientErrorDismissTask = Task { @MainActor [weak self] in
             do {
-                try await Task.sleep(for: Self.transientErrorDisplayDuration)
+                try await Task.sleep(for: displayDuration)
             } catch {
                 return
             }
@@ -656,7 +690,7 @@ final class AppViewModel {
     }
 
     func refreshInputDevices() {
-        availableInputDevices = AudioEngine.availableInputDevices()
+        availableInputDevices = audioEngine.availableInputDevices()
     }
 
     func setInputDevice(_ device: AudioInputDevice?) {
@@ -1359,7 +1393,8 @@ final class AppViewModel {
         }
 
         do {
-            let text = try await transcriptionManager.transcribe(samples: samples)
+            let transcriptionSamples = TranscriptionInput.paddedIfNeeded(samples)
+            let text = try await transcriptionManager.transcribe(samples: transcriptionSamples)
             guard captureOperationIsCurrent(
                 operationID: operationID,
                 handle: handle,
@@ -1485,7 +1520,7 @@ final class AppViewModel {
 
         overlayPanel.show(state: .done)
         do {
-            try await Task.sleep(for: .milliseconds(600))
+            try await Task.sleep(for: doneDisplayDuration)
         } catch is CancellationError {
             return
         } catch {

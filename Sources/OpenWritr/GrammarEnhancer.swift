@@ -12,6 +12,18 @@ struct EnhancementResult: Sendable {
     let warning: String?
 }
 
+protocol TranscriptEnhancing: Sendable {
+    func enhance(
+        text: String,
+        model: EnhancedModel,
+        provider: EnhancedProvider,
+        openAIConfiguration: GrammarEnhancer.OpenAIConfiguration,
+        prompt: String
+    ) async -> EnhancementResult
+
+    func cancelActiveEnhancement()
+}
+
 enum EnhancedProvider: String, CaseIterable, Identifiable {
     case copilot = "copilot"
     case openAICompatible = "openai-compatible"
@@ -166,7 +178,7 @@ enum GrammarEnhancementError: Error, LocalizedError, Sendable, Equatable {
     }
 }
 
-struct GrammarEnhancer: Sendable {
+struct GrammarEnhancer: TranscriptEnhancing, Sendable {
     static let defaultCleanupPrompt = "Clean up this speech transcript: fix grammar, spelling, and punctuation. Remove fillers, hesitations, and stuttering. Every sentence must end with proper punctuation. Preserve meaning, tone, and language. If the input mixes German and English, keep the original language of each word or phrase and do not translate technical terms, product names, commands, or domain-specific wording. If the input contains only filler words or hesitations with no meaningful content, return an empty string. Return only the corrected text."
 
     struct OpenAIConfiguration: Sendable {

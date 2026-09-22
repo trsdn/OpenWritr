@@ -11,7 +11,14 @@ enum OverlayState: Sendable {
 }
 
 @MainActor
-final class OverlayPanel {
+protocol OverlayPresenting: AnyObject {
+    func show(state: OverlayState)
+    func updateAudioLevel(_ level: Float)
+    func dismiss()
+}
+
+@MainActor
+final class OverlayPanel: OverlayPresenting {
     private static let panelSize = NSSize(width: 248, height: 66)
 
     private var panel: NSPanel?

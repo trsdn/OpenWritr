@@ -221,7 +221,26 @@ struct AudioEngineDebugFaults: Sendable {
 }
 #endif
 
-final class AudioEngine: @unchecked Sendable {
+protocol AudioCapturing: AnyObject, Sendable {
+    var onDevicesChanged: (@Sendable () -> Void)? { get set }
+    var onFailure: (@Sendable (AudioEngineError) -> Void)? { get set }
+    var onAudioLevel: (@Sendable (Float, UInt64) -> Void)? { get set }
+
+    func availableInputDevices() -> [AudioInputDevice]
+    func setInputDevice(_ deviceID: AudioDeviceID?) -> Result<Void, AudioEngineError>
+    func prepare() -> Result<Void, AudioEngineError>
+    func startCapture() async -> Result<CaptureHandle, AudioEngineError>
+    func waitForCaptureToSettle(
+        handle: CaptureHandle,
+        idleWindow: Duration,
+        maxWait: Duration,
+        pollInterval: Duration
+    ) async
+    func stopCapture(handle: CaptureHandle) async -> [Float]?
+    func shutdown() -> Result<Void, AudioEngineError>
+}
+
+final class AudioEngine: AudioCapturing, @unchecked Sendable {
     private static let maximumRecoveryAttempts = 3
     private let targetSampleRate: Double = 16_000
     private let captureClock = ContinuousClock()
@@ -1033,6 +1052,10 @@ final class AudioEngine: @unchecked Sendable {
 
             return AudioInputDevice(id: deviceID, name: name as String, uid: uid as String)
         }
+    }
+
+    func availableInputDevices() -> [AudioInputDevice] {
+        Self.availableInputDevices()
     }
 
     func setInputDevice(_ deviceID: AudioDeviceID?) -> Result<Void, AudioEngineError> {

@@ -1,7 +1,22 @@
 import Foundation
 import FluidAudio
 
-final class TranscriptionManager: @unchecked Sendable {
+protocol Transcribing: Sendable {
+    func loadModels(progressHandler: @escaping @Sendable (Double) -> Void) async throws
+    func transcribe(samples: [Float]) async throws -> String
+}
+
+enum TranscriptionInput {
+    /// The ASR model rejects input shorter than one second of 16 kHz audio.
+    static let minimumSampleCount = 16_000
+
+    static func paddedIfNeeded(_ samples: [Float]) -> [Float] {
+        guard samples.count < minimumSampleCount else { return samples }
+        return samples + repeatElement(0, count: minimumSampleCount - samples.count)
+    }
+}
+
+final class TranscriptionManager: Transcribing, @unchecked Sendable {
     private var asrManager: AsrManager?
 
     func loadModels(progressHandler: @escaping @Sendable (Double) -> Void) async throws {
@@ -13,17 +28,11 @@ final class TranscriptionManager: @unchecked Sendable {
         progressHandler(1.0)
     }
 
-    /// The ASR model rejects input shorter than one second of 16 kHz audio.
-    private static let minimumSampleCount = 16_000
-
     func transcribe(samples: [Float]) async throws -> String {
         guard let manager = asrManager else {
             throw TranscriptionError.notReady
         }
-        var input = samples
-        if input.count < Self.minimumSampleCount {
-            input.append(contentsOf: repeatElement(0, count: Self.minimumSampleCount - input.count))
-        }
+        let input = TranscriptionInput.paddedIfNeeded(samples)
         // Every recording is an independent utterance, so decode from a fresh state.
         var decoderState = TdtDecoderState.make(decoderLayers: 2)
         let result = try await manager.transcribe(input, decoderState: &decoderState)

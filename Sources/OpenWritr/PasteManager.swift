@@ -35,6 +35,12 @@ protocol PasteCommandPosting {
     func postPasteCommand()
 }
 
+@MainActor
+protocol TextPasting {
+    func pasteText(_ text: String)
+    func flushPendingRestore()
+}
+
 extension NSPasteboardItem: PasteboardItemReading {
     var pasteboardTypes: [NSPasteboard.PasteboardType] {
         types
@@ -99,7 +105,7 @@ struct SystemPasteCommandPoster: PasteCommandPosting {
 }
 
 @MainActor
-final class PasteManager {
+final class PasteManager: TextPasting {
     private struct PasteboardSnapshot {
         let items: [PasteboardItemContent]
     }
