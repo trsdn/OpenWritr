@@ -6,12 +6,13 @@ here instead of restating it.
 
 ## What this repository is
 
-OpenWritr is a macOS menu bar app (`LSUIElement`) for push-to-talk voice-to-text,
-built with Swift Package Manager for macOS 14+ on Apple Silicon. End users install
-the signed, notarized DMG/ZIP from GitHub Releases and receive updates in place
-through the app itself, so a bad release reaches every installed copy within about
-a day. Changes to `UpdateManager`, the broker profile/publication handoff, or signing can strand
-users on an old version.
+OpenWritr is a macOS push-to-talk voice-to-text app, built with Swift Package
+Manager for macOS 14+ on Apple Silicon. It launches as an `LSUIElement` menu bar
+utility, and a persisted Presence setting can switch it at runtime to Dock only
+or Dock plus menu bar. End users install the signed, notarized DMG/ZIP from GitHub
+Releases and receive updates in place through the app itself, so a bad release
+reaches every installed copy within about a day. Changes to `UpdateManager`, the
+broker profile/publication handoff, or signing can strand users on an old version.
 
 ## What this repository is not
 
@@ -58,6 +59,10 @@ Key files:
 Concurrency model: `AppViewModel` is `@MainActor`. `AudioEngine` is `@unchecked Sendable` with `os_unfair_lock` guarding the sample buffer. `GrammarEnhancer` uses `Task.detached` to run the blocking subprocess off the main thread. `UpdateManager` is `@MainActor`.
 
 Preferences live in `UserDefaults` (no separate plist). Custom cleanup prompts use a versioned per-provider/model store so bundled tuned defaults can change without overwriting user text.
+
+`AppPresence` is owned by `AppViewModel`. `SystemApplicationPresenceController`
+is the only type that changes `NSApplication.ActivationPolicy`; failed changes
+leave the previous reachable mode active.
 
 `scripts/build-app.sh` is a local diagnostic build. It signs with a Developer ID Application or Apple Development certificate found in the local keychain (or named in `OPENWRITR_SIGNING_IDENTITY`) and exits with an error if there is none; it creates no certificate. Ad-hoc signatures are refused, because macOS would reset the app's permissions. Distributable builds do not use this script or any OpenWritr workflow: they are assembled, signed, notarized, and packaged by `trsdn/macos-notarization-broker` profile `openwritr`.
 

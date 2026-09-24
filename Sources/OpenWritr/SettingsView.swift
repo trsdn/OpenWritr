@@ -16,8 +16,9 @@ struct SettingsSnapshotConfiguration {
 
 /// Keeps the hosting window above other windows, including the floating
 /// recording overlay, and brings it to the front whenever it is shown.
-/// An `LSUIElement` app is never active on its own, so it also activates the app
-/// here rather than in a tap gesture, which keyboard activation would skip.
+/// In menu-bar-only mode the app is not active on its own, so this also
+/// activates it here rather than in a tap gesture, which keyboard activation
+/// would skip.
 private struct KeepWindowOnTop: NSViewRepresentable {
     func makeNSView(context: Context) -> NSView {
         let view = NSView()
@@ -288,6 +289,24 @@ struct SettingsView: View {
             }
 
             Section("App") {
+                Picker("Show OpenWritr In", selection: Binding(
+                    get: { viewModel.appPresence },
+                    set: { viewModel.setAppPresence($0) }
+                )) {
+                    ForEach(AppPresence.allCases) { presence in
+                        Text(presence.label).tag(presence)
+                    }
+                }
+
+                Text(
+                    viewModel.appPresence.showsDock
+                        ? "Dock modes also show OpenWritr in Command-Tab. Use the OpenWritr app menu or Command-Comma to reopen Settings."
+                        : "OpenWritr stays in the menu bar without appearing in the Dock or Command-Tab."
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
                 Toggle("Launch at Login", isOn: Binding(
                     get: { viewModel.launchAtLogin },
                     set: { _ in viewModel.toggleLaunchAtLogin() }

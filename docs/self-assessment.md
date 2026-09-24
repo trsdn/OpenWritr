@@ -48,7 +48,7 @@ Automation Availability does not apply: hosted runners are available and used.
 
 | ID | Result | Evidence |
 |---|---|---|
-| B01 | pass | Description says what it is: native macOS menu bar app for push-to-talk voice-to-text, local Parakeet transcription, optional cleanup. |
+| B01 | pass | Description says what it is: native macOS push-to-talk voice-to-text app with configurable menu bar and Dock presence, local Parakeet transcription, optional cleanup. |
 | B02 | pass | README states purpose, status ("actively maintained"), install and usage, and links (site, download, changelog, licence). Audience is stated through purpose and the Requirements section (macOS 14+, Apple Silicon). |
 | B03 | pass | `LICENSE` is MIT, detected by GitHub. |
 | B04 | pass | `.gitignore` covers `.build/`, `.swiftpm/`, `DerivedData/`, `dist/`, `.artifacts/`, disk images, and Xcode output. OpenWritr contains no Apple credential setup script, release environment, certificate import, or notarization secret surface; those exist only in the public broker. The committed badge SVG is generated output the record documents. |
