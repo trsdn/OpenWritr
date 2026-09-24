@@ -69,15 +69,15 @@ enum AppPresence: String, CaseIterable, Identifiable, Sendable {
 
 @MainActor
 protocol ApplicationPresenceControlling {
-    func apply(_ presence: AppPresence) -> Bool
+    func apply(_ presence: AppPresence, activate: Bool) -> Bool
 }
 
 @MainActor
 final class SystemApplicationPresenceController: ApplicationPresenceControlling {
-    func apply(_ presence: AppPresence) -> Bool {
+    func apply(_ presence: AppPresence, activate: Bool) -> Bool {
         let policy: NSApplication.ActivationPolicy = presence.showsDock ? .regular : .accessory
         guard NSApplication.shared.setActivationPolicy(policy) else { return false }
-        if presence.showsDock {
+        if activate, presence.showsDock {
             NSApplication.shared.activate(ignoringOtherApps: true)
         }
         return true
@@ -727,7 +727,7 @@ final class AppViewModel {
 
     func setAppPresence(_ presence: AppPresence) {
         guard presence != appPresence else { return }
-        guard applicationPresenceController.apply(presence) else {
+        guard applicationPresenceController.apply(presence, activate: true) else {
             errorLogger.logError("Failed to apply app presence mode \(presence.rawValue)")
             return
         }
@@ -735,12 +735,12 @@ final class AppViewModel {
         appPresenceDefaults.set(presence.rawValue, forKey: "appPresence")
     }
 
-    private func applyRestoredAppPresence() {
-        guard applicationPresenceController.apply(appPresence) else {
+    func applyRestoredAppPresence() {
+        guard applicationPresenceController.apply(appPresence, activate: false) else {
             errorLogger.logError("Failed to restore app presence mode \(appPresence.rawValue)")
             appPresence = .menuBarOnly
             appPresenceDefaults.set(AppPresence.menuBarOnly.rawValue, forKey: "appPresence")
-            _ = applicationPresenceController.apply(.menuBarOnly)
+            _ = applicationPresenceController.apply(.menuBarOnly, activate: false)
             return
         }
     }

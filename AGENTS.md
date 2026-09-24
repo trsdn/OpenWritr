@@ -60,9 +60,11 @@ Concurrency model: `AppViewModel` is `@MainActor`. `AudioEngine` is `@unchecked 
 
 Preferences live in `UserDefaults` (no separate plist). Custom cleanup prompts use a versioned per-provider/model store so bundled tuned defaults can change without overwriting user text.
 
-`AppPresence` is owned by `AppViewModel`. `SystemApplicationPresenceController`
-is the only type that changes `NSApplication.ActivationPolicy`; failed changes
-leave the previous reachable mode active.
+`AppPresence` is owned by `AppViewModel`. In the running app,
+`SystemApplicationPresenceController` is the only type that changes
+`NSApplication.ActivationPolicy`; failed changes leave the previous reachable
+mode active. `UISnapshotRenderer` separately uses `.prohibited` for its
+headless command-line rendering mode.
 
 `scripts/build-app.sh` is a local diagnostic build. It signs with a Developer ID Application or Apple Development certificate found in the local keychain (or named in `OPENWRITR_SIGNING_IDENTITY`) and exits with an error if there is none; it creates no certificate. Ad-hoc signatures are refused, because macOS would reset the app's permissions. Distributable builds do not use this script or any OpenWritr workflow: they are assembled, signed, notarized, and packaged by `trsdn/macos-notarization-broker` profile `openwritr`.
 

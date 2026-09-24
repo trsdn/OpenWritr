@@ -33,7 +33,21 @@ struct AppPresenceTests {
 
         #expect(viewModel.appPresence == .dockAndMenuBar)
         #expect(dependencies.controller.appliedModes == [.dockAndMenuBar])
+        #expect(dependencies.controller.activationRequests == [true])
         #expect(dependencies.defaults.string(forKey: "appPresence") == "dockAndMenuBar")
+    }
+
+    @Test func restoringDockModeDoesNotActivateApp() {
+        let dependencies = makeDependencies()
+        defer { dependencies.defaults.removePersistentDomain(forName: dependencies.suiteName) }
+        dependencies.defaults.set("dockOnly", forKey: "appPresence")
+        let viewModel = dependencies.makeViewModel()
+
+        viewModel.applyRestoredAppPresence()
+
+        #expect(viewModel.appPresence == .dockOnly)
+        #expect(dependencies.controller.appliedModes == [.dockOnly])
+        #expect(dependencies.controller.activationRequests == [false])
     }
 
     @Test func failedPresenceChangeKeepsReachableMode() {
@@ -84,9 +98,11 @@ private struct PresenceDependencies {
 private final class RecordingPresenceController: ApplicationPresenceControlling {
     var shouldSucceed = true
     private(set) var appliedModes: [AppPresence] = []
+    private(set) var activationRequests: [Bool] = []
 
-    func apply(_ presence: AppPresence) -> Bool {
+    func apply(_ presence: AppPresence, activate: Bool) -> Bool {
         appliedModes.append(presence)
+        activationRequests.append(activate)
         return shouldSucceed
     }
 }
