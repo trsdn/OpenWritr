@@ -13,7 +13,7 @@
     <key>NSHumanReadableCopyright</key>
     <string>Copyright © 2026 Torsten Mahr. Released under the MIT License.</string>
     <key>OpenWritrDescription</key>
-    <string>Native macOS menu bar app for push-to-talk voice-to-text. Transcription runs locally on the Apple Neural Engine; optional cleanup via Apple Intelligence, GitHub Copilot, or an OpenAI-compatible API.</string>
+    <string>Native macOS push-to-talk voice-to-text app with configurable menu bar and Dock presence. Transcription runs locally on the Apple Neural Engine; optional cleanup via Apple Intelligence, GitHub Copilot, or an OpenAI-compatible API.</string>
     <key>OpenWritrLicense</key>
     <string>MIT</string>
     <key>OpenWritrRepositoryURL</key>
