@@ -10,9 +10,12 @@ session or an audit.
 The Settings window's tree was read with System Events. Every toggle
 (`Auto-Paste`, `Sound Effects`, `Enhanced Mode`, `Always Enhance Recordings`,
 `Launch at Login`, `Debug Mode`, `Automatically Check for Updates`) is exposed as a
-switch with a name, and both pop-up buttons (`Input Device`, `Push-to-Talk Key`,
-`Provider`) are exposed as pop-up buttons with a name. The menu bar menu is a
-standard `NSMenu`; every item has a title and is enabled or disabled correctly.
+switch with a name, and the pop-up buttons (`Input Device`, `Push-to-Talk Key`,
+`Provider`) are exposed with names. The later `Show OpenWritr In` control is also
+a labelled standard SwiftUI `Picker` and is covered by deterministic Settings
+snapshots, but it has not received a separate running accessibility-tree read.
+The menu bar menu is a standard `NSMenu` when that presence mode is enabled;
+every item has a title and is enabled or disabled correctly.
 
 The model picker for OpenAI-compatible providers had an empty label with the visible label hidden, so it had no name; it now carries the accessibility label `OpenAI-compatible model`. Two push buttons (`Edit` and `Check for Updates Now…`) had no title through
 System Events, although the source gives each a text title

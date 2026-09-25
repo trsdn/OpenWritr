@@ -7,6 +7,9 @@ broker publication handoff fails when the section for a tag is missing or empty.
 
 ## [1.6.6] — 2026-09-22
 
+### Added
+- A Presence setting for choosing menu bar only, Dock only, or both, with changes applied immediately and restored at launch
+
 ### Fixed
 - Auto-paste cancellation now shows a recoverable error instead of success when OpenWritr cannot preserve the existing clipboard
 

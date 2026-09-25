@@ -39,6 +39,51 @@ enum AppState: Sendable {
     }
 }
 
+enum AppPresence: String, CaseIterable, Identifiable, Sendable {
+    case menuBarOnly
+    case dockOnly
+    case dockAndMenuBar
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .menuBarOnly: return "Menu Bar Only"
+        case .dockOnly: return "Dock Only"
+        case .dockAndMenuBar: return "Dock and Menu Bar"
+        }
+    }
+
+    var showsMenuBar: Bool {
+        self != .dockOnly
+    }
+
+    var showsDock: Bool {
+        self != .menuBarOnly
+    }
+
+    static func restored(from rawValue: String?) -> AppPresence {
+        rawValue.flatMap(AppPresence.init(rawValue:)) ?? .menuBarOnly
+    }
+}
+
+@MainActor
+protocol ApplicationPresenceControlling {
+    func apply(_ presence: AppPresence, activate: Bool) -> Bool
+}
+
+@MainActor
+final class SystemApplicationPresenceController: ApplicationPresenceControlling {
+    func apply(_ presence: AppPresence, activate: Bool) -> Bool {
+        let policy: NSApplication.ActivationPolicy = presence.showsDock ? .regular : .accessory
+        guard NSApplication.shared.setActivationPolicy(policy) else { return false }
+        if activate, presence.showsDock {
+            NSApplication.shared.activate(ignoringOtherApps: true)
+        }
+        return true
+    }
+}
+
 @MainActor
 @Observable
 final class AppViewModel {
@@ -66,6 +111,7 @@ final class AppViewModel {
     var soundEnabled: Bool = true
     var autoPasteEnabled: Bool = true
     var launchAtLogin: Bool = false
+    var appPresence: AppPresence
     var hotkeyChoice: HotkeyChoice = .fn
     var availableInputDevices: [AudioInputDevice] = []
     var selectedInputDeviceID: AudioDeviceID?
@@ -98,6 +144,8 @@ final class AppViewModel {
     private let doneDisplayDuration: Duration
     private let transientErrorDisplayDuration: Duration
     private let errorLogger: any ErrorLogging
+    private let applicationPresenceController: any ApplicationPresenceControlling
+    private let appPresenceDefaults: UserDefaults
     private var didConfigure = false
     private var didAttemptInitialSetup = false
     private var isInitializing = false
@@ -129,8 +177,14 @@ final class AppViewModel {
         errorLogger: any ErrorLogging = UnifiedErrorLogger(category: "AppViewModel"),
         startsOperational: Bool = false,
         doneDisplayDuration: Duration = AppViewModel.defaultDoneDisplayDuration,
-        transientErrorDisplayDuration: Duration = AppViewModel.defaultTransientErrorDisplayDuration
+        transientErrorDisplayDuration: Duration = AppViewModel.defaultTransientErrorDisplayDuration,
+        applicationPresenceController: any ApplicationPresenceControlling =
+            SystemApplicationPresenceController(),
+        appPresenceDefaults: UserDefaults = .standard
     ) {
+        appPresence = AppPresence.restored(
+            from: appPresenceDefaults.string(forKey: "appPresence")
+        )
         injectedAudioEngine = audioEngine
         self.transcriptionManager = transcriptionManager
         self.grammarEnhancer = grammarEnhancer
@@ -139,6 +193,8 @@ final class AppViewModel {
         self.errorLogger = errorLogger
         self.doneDisplayDuration = doneDisplayDuration
         self.transientErrorDisplayDuration = transientErrorDisplayDuration
+        self.applicationPresenceController = applicationPresenceController
+        self.appPresenceDefaults = appPresenceDefaults
         if startsOperational {
             configureAudioCallbacks()
             isOperational = true
@@ -332,6 +388,7 @@ final class AppViewModel {
         didConfigure = true
 
         restorePreferences()
+        applyRestoredAppPresence()
         refreshAppleIntelligenceAvailability()
 
         updateManager.onWillInstall = { [weak self] in
@@ -391,6 +448,9 @@ final class AppViewModel {
 
     private func restorePreferences() {
         let defaults = UserDefaults.standard
+        appPresence = AppPresence.restored(
+            from: appPresenceDefaults.string(forKey: "appPresence")
+        )
         if defaults.object(forKey: "soundEnabled") != nil {
             soundEnabled = defaults.bool(forKey: "soundEnabled")
         }
@@ -663,6 +723,26 @@ final class AppViewModel {
 
     func savePreference(_ key: String, value: Any) {
         UserDefaults.standard.set(value, forKey: key)
+    }
+
+    func setAppPresence(_ presence: AppPresence) {
+        guard presence != appPresence else { return }
+        guard applicationPresenceController.apply(presence, activate: true) else {
+            errorLogger.logError("Failed to apply app presence mode \(presence.rawValue)")
+            return
+        }
+        appPresence = presence
+        appPresenceDefaults.set(presence.rawValue, forKey: "appPresence")
+    }
+
+    func applyRestoredAppPresence() {
+        guard applicationPresenceController.apply(appPresence, activate: false) else {
+            errorLogger.logError("Failed to restore app presence mode \(appPresence.rawValue)")
+            appPresence = .menuBarOnly
+            appPresenceDefaults.set(AppPresence.menuBarOnly.rawValue, forKey: "appPresence")
+            _ = applicationPresenceController.apply(.menuBarOnly, activate: false)
+            return
+        }
     }
 
     func setEnhancedProvider(_ provider: EnhancedProvider) {
@@ -1735,14 +1815,21 @@ final class AppViewModel {
 }
 
 struct OpenWritrApp: App {
-    @State private var viewModel = AppViewModel()
+    @State private var viewModel: AppViewModel
+
+    init() {
+        let viewModel = AppViewModel()
+        _viewModel = State(initialValue: viewModel)
+        Task { @MainActor in
+            await viewModel.setup()
+        }
+    }
 
     var body: some Scene {
-        MenuBarExtra {
+        MenuBarExtra(isInserted: menuBarInsertion) {
             MenuBarView(viewModel: viewModel)
         } label: {
             menuBarIcon
-                .task { await viewModel.setup() }
         }
 
         Settings {
@@ -1753,6 +1840,22 @@ struct OpenWritrApp: App {
             AboutView()
         }
         .windowResizability(.contentSize)
+    }
+
+    private var menuBarInsertion: Binding<Bool> {
+        Binding(
+            get: { viewModel.appPresence.showsMenuBar },
+            set: { isInserted in
+                guard isInserted != viewModel.appPresence.showsMenuBar else { return }
+                if isInserted {
+                    viewModel.setAppPresence(
+                        viewModel.appPresence.showsDock ? .dockAndMenuBar : .menuBarOnly
+                    )
+                } else if viewModel.appPresence.showsDock {
+                    viewModel.setAppPresence(.dockOnly)
+                }
+            }
+        )
     }
 
     private var menuBarIcon: some View {
