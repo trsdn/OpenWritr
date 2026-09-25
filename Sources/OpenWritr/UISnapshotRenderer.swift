@@ -155,6 +155,7 @@ enum UISnapshotRenderer {
         viewModel.enhancedModel = .luna
         viewModel.appleIntelligenceAvailability = .available
         viewModel.launchAtLogin = false
+        viewModel.appPresence = .menuBarOnly
         viewModel.debugModeEnabled = false
         return viewModel
     }
