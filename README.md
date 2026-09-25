@@ -6,7 +6,7 @@
 [![Release](https://img.shields.io/github/v/release/trsdn/OpenWritr)](https://github.com/trsdn/OpenWritr/releases/latest)
 [![Conformance](.github/badges/conformance.svg)](.github/conformance.yml)
 
-**Status: actively maintained.** Native macOS menu bar app for push-to-talk voice-to-text. Core transcription runs locally on the Apple Neural Engine; optional enhancement can use Apple Intelligence, GitHub Copilot, or any OpenAI-compatible API.
+**Status: actively maintained.** Native macOS push-to-talk voice-to-text app. Core transcription runs locally on the Apple Neural Engine; optional enhancement can use Apple Intelligence, GitHub Copilot, or any OpenAI-compatible API.
 
 **[Website](https://trsdn.github.io/OpenWritr/)** · **[Download](https://github.com/trsdn/OpenWritr/releases/latest)** · **[Changelog](CHANGELOG.md)**
 
@@ -21,6 +21,8 @@
 3. **Text appears** — the result is pasted into the focused app, with optional cleanup via Apple Intelligence, Copilot, or an OpenAI-compatible API
 
 The bottom-center recording indicator uses a live, voice-reactive waveform. Listening, transcription, enhancement, completion, and error states share the same compact borderless design.
+
+OpenWritr starts as a menu bar utility. In **Settings → App → Show OpenWritr In**, you can instead show it only in the Dock or in both the Dock and menu bar. Dock modes also make OpenWritr available in Command-Tab; use the OpenWritr app menu or `Command-,` to reopen Settings.
 
 ## Performance
 
@@ -147,7 +149,7 @@ OpenWritr checks `trsdn/OpenWritr` GitHub Releases for newer, Developer ID-signe
 
 ## Accessibility
 
-OpenWritr is a menu bar utility driven by a held hotkey (Fn/Globe or Right Shift). Settings and the menu use standard SwiftUI controls, which expose names and roles to VoiceOver; the recording overlay carries an accessibility label describing its state. Text uses system fonts and colours.
+OpenWritr is driven by a held hotkey (Fn/Globe or Right Shift) and can appear in the menu bar, Dock, or both. Settings and the menu use standard SwiftUI controls, which expose names and roles to VoiceOver; the recording overlay carries an accessibility label describing its state. Text uses system fonts and colours.
 
 Known limitations, stated rather than left to be discovered:
 
@@ -217,7 +219,7 @@ Generated daily by [`stats.yml`](.github/workflows/stats.yml) and committed to t
 
 ```
 Sources/OpenWritr/
-├── OpenWritrApp.swift          # App entry, MenuBarExtra, state machine
+├── OpenWritrApp.swift          # App entry, presence modes, state machine
 ├── MenuBarView.swift           # Menu bar dropdown UI
 ├── SettingsView.swift          # Dedicated settings window
 ├── AudioEngine.swift           # AVAudioEngine, 16kHz capture, realtime-safe
