@@ -160,6 +160,31 @@ struct PasteManagerTests {
         #expect(error == .restoreFailed)
     }
 
+    @Test(arguments: [false, true])
+    func reportedRestoreFailureDoesNotCancelNextOutput(delayed: Bool) {
+        let pasteboard = FakePasteboard(items: [.text("Original")])
+        let scheduler = FakePasteRestoreScheduler()
+        let manager = makeManager(
+            pasteboard: pasteboard,
+            commandPoster: FakePasteCommandPoster(),
+            restoreScheduler: scheduler
+        )
+        var error: PasteManagerError?
+        manager.onRestoreFailed = { error = $0 }
+        #expect(manager.pasteText("First transcript") == .pasted)
+        pasteboard.failNextPreparation = true
+
+        if delayed {
+            scheduler.runScheduledRestore()
+        } else {
+            manager.flushPendingRestore()
+        }
+
+        #expect(error == .restoreFailed)
+        #expect(manager.copyText("Next transcript") == .copied)
+        #expect(pasteboard.text == "Next transcript")
+    }
+
     @Test func savesReplacesPastesAndRestoresClipboard() {
         let pasteboard = FakePasteboard(items: [.text("Original clipboard")])
         let poster = FakePasteCommandPoster()

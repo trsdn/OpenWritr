@@ -299,8 +299,7 @@ final class PasteManager: TextPasting {
         restoreScheduler.scheduleRestore { [weak self] in
             guard let self else { return }
             if !self.flushPendingRestore(matching: transactionID) {
-                self.hasUnreportedRestoreFailure = true
-                self.onRestoreFailed?(self.lastError ?? .restoreFailed)
+                self.reportRestoreFailure()
             }
         }
         return .pasted
@@ -308,8 +307,7 @@ final class PasteManager: TextPasting {
 
     func flushPendingRestore() {
         if !flushPendingRestore(matching: nil) {
-            hasUnreportedRestoreFailure = true
-            onRestoreFailed?(lastError ?? .restoreFailed)
+            reportRestoreFailure()
         }
     }
 
@@ -409,5 +407,13 @@ final class PasteManager: TextPasting {
     private func recordError(_ error: PasteManagerError, message: String) {
         lastError = error
         errorLogger.logError(message)
+    }
+
+    private func reportRestoreFailure() {
+        if let onRestoreFailed {
+            onRestoreFailed(.restoreFailed)
+        } else {
+            hasUnreportedRestoreFailure = true
+        }
     }
 }

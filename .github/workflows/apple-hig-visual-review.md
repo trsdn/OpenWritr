@@ -72,8 +72,8 @@ jobs:
           .build/release/OpenWritr --render-ui-snapshots "$snapshots"
 
           count="$(find "$snapshots" -type f -name '*.png' | wc -l | tr -d ' ')"
-          if [ "$count" -ne 16 ]; then
-            echo "::error::Expected 16 UI snapshots, found $count."
+          if [ "$count" -ne 22 ]; then
+            echo "::error::Expected 22 UI snapshots, found $count."
             exit 1
           fi
           while IFS= read -r snapshot; do
@@ -139,8 +139,8 @@ steps:
       snapshots="$evidence/ui-snapshots"
 
       count="$(find "$snapshots" -type f -name '*.png' | wc -l | tr -d ' ')"
-      if [ "$count" -ne 16 ]; then
-        echo "::error::Expected 16 UI snapshots, found $count."
+      if [ "$count" -ne 22 ]; then
+        echo "::error::Expected 22 UI snapshots, found $count."
         exit 1
       fi
       while IFS= read -r snapshot; do
