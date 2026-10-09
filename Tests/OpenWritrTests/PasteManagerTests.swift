@@ -21,18 +21,25 @@ struct PasteManagerTests {
         #expect(pasteboard.clearCount == 2)
     }
 
-    @Test func declaredButUnwrittenTextIsAnEmptyClipboard() {
+    @Test(arguments: [RecordingOutputDestination.standard, .clipboard])
+    func unreadableStringIsNotAssumedEmpty(destination: RecordingOutputDestination) {
         let pasteboard = FakePasteboard(items: [.unreadable(type: .string)])
         let poster = FakePasteCommandPoster()
         let manager = makeManager(pasteboard: pasteboard, commandPoster: poster)
 
-        #expect(manager.pasteText("Synthetic transcript") == .pasted)
-        #expect(poster.postCount == 1)
+        #expect(manager.outputText(
+            "Synthetic transcript",
+            destination: destination,
+            autoPasteEnabled: true
+        ) == .cancelled)
+        #expect(manager.lastError == .unreadableRepresentation(NSPasteboard.PasteboardType.string.rawValue))
+        #expect(poster.postCount == 0)
         manager.flushPendingRestore()
-        #expect(pasteboard.items.isEmpty)
+        #expect(pasteboard.items.count == 1)
+        #expect(pasteboard.clearCount == 0)
     }
 
-    @Test func actualAppKitEmptyTextPlaceholderPastesAndRestores() {
+    @Test func actualAppKitUnwrittenTextIsPreservedWithoutPasting() {
         let pasteboard = NSPasteboard.withUniqueName()
         defer { pasteboard.releaseGlobally() }
         pasteboard.declareTypes([.string], owner: nil)
@@ -41,10 +48,27 @@ struct PasteManagerTests {
         let poster = FakePasteCommandPoster()
         let manager = makeManager(pasteboard: SystemPasteboard(pasteboard), commandPoster: poster)
 
+        let originalChangeCount = pasteboard.changeCount
+        #expect(manager.pasteText("Synthetic transcript") == .cancelled)
+        #expect(manager.lastError == .unreadableRepresentation(NSPasteboard.PasteboardType.string.rawValue))
+        manager.flushPendingRestore()
+        #expect(poster.postCount == 0)
+        #expect(pasteboard.changeCount == originalChangeCount)
+        #expect(pasteboard.pasteboardItems?.count == 1)
+        #expect(pasteboard.data(forType: .string) == nil)
+    }
+
+    @Test func actualAppKitEmptyClipboardPastesAndRestores() {
+        let pasteboard = NSPasteboard.withUniqueName()
+        defer { pasteboard.releaseGlobally() }
+        pasteboard.clearContents()
+        let poster = FakePasteCommandPoster()
+        let manager = makeManager(pasteboard: SystemPasteboard(pasteboard), commandPoster: poster)
+
         #expect(manager.pasteText("Synthetic transcript") == .pasted)
         manager.flushPendingRestore()
         #expect(poster.postCount == 1)
-        #expect(pasteboard.pasteboardItems?.isEmpty == true)
+        #expect((pasteboard.pasteboardItems ?? []).isEmpty)
     }
 
     @Test func emptyStringIsPreservedAsText() {

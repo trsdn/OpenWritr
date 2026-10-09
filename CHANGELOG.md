@@ -13,10 +13,9 @@ broker publication handoff fails when the section for a tag is missing or empty.
 - A Presence setting for choosing menu bar only, Dock only, or both, with changes applied immediately and restored at launch
 
 ### Fixed
-- Plain-text clipboard placeholders with no data no longer cancel automatic paste; empty clipboard contents are restored correctly
 - Clipboard-only output retains its destination through enhancement retry and raw-transcript recovery, and cannot be overwritten by an older delayed clipboard restore
 - Delayed clipboard restoration failures are shown as a dismissible warning without interrupting a newer recording
-- Auto-paste cancellation now shows a recoverable error instead of success when OpenWritr cannot preserve the existing clipboard
+- Auto-paste cancellation now shows a recoverable error instead of success when OpenWritr cannot preserve the existing clipboard, including unreadable plain text
 
 ## [1.6.5] — 2026-09-20
 

@@ -346,11 +346,6 @@ final class PasteManager: TextPasting {
                         pasteLog.notice("Clipboard changed while reading a representation; cancelling output")
                         return nil
                     }
-                    // An unwritten plain-text declaration contains no content to preserve.
-                    if types == [.string] {
-                        pasteLog.notice("Preserving an empty plain-text clipboard placeholder as empty")
-                        continue
-                    }
                     lastError = .unreadableRepresentation(type.rawValue)
                     pasteLog.notice(
                         "Clipboard representation \(type.rawValue, privacy: .public) could not be preserved; cancelling paste"
@@ -362,9 +357,6 @@ final class PasteManager: TextPasting {
             }
 
             guard !representations.isEmpty else {
-                if types == [.string] {
-                    continue
-                }
                 lastError = .preparationFailed
                 pasteLog.notice("Clipboard item has no restorable representations; cancelling paste")
                 return nil
