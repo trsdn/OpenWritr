@@ -70,9 +70,9 @@ headless command-line rendering mode.
 
 ## Enhanced Mode
 
-`GrammarEnhancer` calls `copilot -p … -s --model … --no-custom-instructions` as a subprocess. It needs a GitHub Copilot subscription; `copilot login` authenticates once.
+`GrammarEnhancer` calls `copilot -p … -s --model … --no-custom-instructions --disable-builtin-mcps --available-tools ""` as a subprocess. Copilot cleanup receives a JSON-encoded untrusted transcript value and has no tools available. It needs a GitHub Copilot subscription; `copilot login` authenticates once.
 
-Supported models: GPT-5.6 Luna (default), Gemini 3.7 Flash, MAI Code 1.1 Flash, GPT-5 Mini, and Claude Haiku 4.5.
+Supported models: GPT-6 Luna (default), Gemini 3.8 Flash, MAI Code 1.1 Flash, GPT-5.4 Mini, and Claude Haiku 5.5. Copilot Luna cleanup explicitly uses low reasoning effort with a bounded 90-second CLI timeout. Predecessor Copilot selections and custom prompts migrate without overwriting existing successor customizations.
 
 Enhanced activation has two modes: on demand (`Shift + hotkey`) and always-enhanced (`hotkey`, with Shift as a one-recording normal-transcription bypass). The listening overlay reflects the resolved mode immediately.
 

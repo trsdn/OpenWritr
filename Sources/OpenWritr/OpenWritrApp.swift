@@ -500,8 +500,11 @@ final class AppViewModel {
             defaults.removeObject(forKey: "enhancedOpenAIModelOverride")
         }
         if let raw = defaults.string(forKey: "enhancedModel"),
-           let model = EnhancedModel(rawValue: raw) {
+           let model = EnhancedModel.restored(from: raw) {
             enhancedModel = model
+            if raw != model.rawValue {
+                defaults.set(model.rawValue, forKey: "enhancedModel")
+            }
         }
         restoreCustomEnhancementPrompts(defaults: defaults)
         if defaults.object(forKey: "debugModeEnabled") != nil {
@@ -1187,6 +1190,12 @@ final class AppViewModel {
             }
         }
 
+        let migratedPrompts = EnhancedModel.migratingCopilotPrompts(customEnhancementPrompts)
+        if migratedPrompts != customEnhancementPrompts {
+            customEnhancementPrompts = migratedPrompts
+            persistCustomEnhancementPrompts()
+        }
+
         guard let legacyPrompt = defaults.string(forKey: "enhancementPrompt") else { return }
         let trimmed = legacyPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
         let migratedPrompt = GrammarEnhancer.migrateLegacyCleanupPrompt(
@@ -1868,7 +1877,14 @@ final class AppViewModel {
     }
 }
 
+final class OpenWritrApplicationDelegate: NSObject, NSApplicationDelegate {
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        false
+    }
+}
+
 struct OpenWritrApp: App {
+    @NSApplicationDelegateAdaptor(OpenWritrApplicationDelegate.self) private var applicationDelegate
     @State private var viewModel: AppViewModel
 
     init() {
@@ -1888,6 +1904,11 @@ struct OpenWritrApp: App {
 
         Settings {
             SettingsView(viewModel: viewModel)
+        }
+        .commands {
+            CommandGroup(replacing: .appSettings) {
+                OpenSettingsButton()
+            }
         }
 
         Window("About OpenWritr", id: "about") {

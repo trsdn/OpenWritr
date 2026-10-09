@@ -11,9 +11,7 @@ struct MenuBarView: View {
             quickControlsSection
             Divider()
             updateSection
-            SettingsLink {
-                Label("Settings…", systemImage: "gearshape")
-            }
+            OpenSettingsButton()
             Button {
                 openWindow(id: "about")
             } label: {

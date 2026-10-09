@@ -54,6 +54,22 @@ Each cleanup model has a visible bundled default tuned for that provider and mod
 
 Enhanced Mode can run on demand with **Shift + hotkey**, or **Always Enhance Recordings** can clean up every recording. In always-enhanced mode, holding Shift temporarily bypasses cleanup. The listening overlay immediately shows whether the current recording will be enhanced.
 
+Copilot cleanup explicitly uses **low reasoning effort for GPT-6 Luna**, independently of the CLI's saved reasoning preference. Other models keep their existing CLI defaults. Copilot requests have a bounded **90-second timeout** to accommodate CLI startup and slow provider responses; this does not guarantee that every request will finish. If cleanup fails or times out, OpenWritr retains the raw transcript for retry or raw-output recovery rather than silently claiming success.
+
+The Copilot picker uses GPT-6 Luna (default), Gemini 3.8 Flash, MAI Code 1.1 Flash, GPT-5.4 Mini, and Claude Haiku 5.5. Saved predecessor selections migrate within their model family. Custom Copilot prompts are copied to successor targets only when no successor customization exists; original prompts and OpenAI-compatible endpoint targets remain untouched. Availability depends on your account and Copilot CLI.
+
+Standard-context GitHub rates in USD per million tokens, checked on 2026-10-09:
+
+| Model | Input | Cached input | Cache write | Output |
+|---|---:|---:|---:|---:|
+| GPT-6 Luna | $0.10 | $0.01 | $0.125 | $0.50 |
+| Gemini 3.8 Flash | $0.75 | $0.075 | N/A | $3.75 |
+| MAI Code 1.1 Flash | $0.20 | $0.02 | N/A | $1.20 |
+| GPT-5.4 Mini | $0.75 | $0.075 | N/A | $4.50 |
+| Claude Haiku 5.5 | $0.10 | $0.01 | $0.125 | $0.50 |
+
+These are reference rates, not a per-recording quote; context tiers and actual usage affect cost. Check [GitHub's current pricing](https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing) for changes.
+
 ### Clipboard-only recordings
 
 Hold **Option + Fn** or **Option + Right Command** to copy the final transcript without inserting it into the focused application. When **Right Option** is the configured push-to-talk key, use **Left Option + Right Option** instead; Right Option alone keeps its normal behavior.
@@ -80,21 +96,75 @@ Each report also embeds GitHub's current input, cached-input, cache-write, and o
 ```sh
 # Fast smoke comparison
 python3 scripts/evaluate-cleanup-models.py \
-  --models apple-intelligence gpt-5.6-luna \
+  --models apple-intelligence gpt-6-luna \
   --case-limit 2
 
 # Full repeated comparison, including a blind quality judge
 python3 scripts/evaluate-cleanup-models.py \
   --runs 3 \
   --workers 3 \
-  --judge-model gpt-5.6-sol
+  --judge-model gpt-6.1-sol
 
 # Evaluate a candidate with model-specific prompt suffixes
 python3 scripts/evaluate-cleanup-models.py \
   --prompt-config Sources/OpenWritr/Resources/cleanup-prompt-profiles.json
 ```
 
-The default comparison covers Apple Intelligence, Luna, Gemini Flash, MAI Flash, GPT-5 Mini, and Claude Haiku. Reports are written to `.artifacts/cleanup-eval/` and are not committed. Add only synthetic or explicitly approved transcripts to `eval/cleanup-cases.json`; never add private dictation.
+The default comparison covers Apple Intelligence, GPT-6 Luna, Gemini 3.8 Flash, MAI Code 1.1 Flash, GPT-5.4 Mini, and Claude Haiku 5.5. Reports are written to `.artifacts/cleanup-eval/` and are not committed. Add only synthetic or explicitly approved transcripts to `eval/cleanup-cases.json`; never add private dictation.
+
+The dataset includes eight adversarial dictated-text cases: instruction overrides, fake message roles, translation requests, prompt disclosure, tool requests, fake transcript delimiters, misuse of the empty-output sentinel, and questions that try to elicit answers. Expected behavior is to edit and preserve the dictated text, not obey or refuse it. These cases require the reference word sequence (allowing casing/punctuation changes); any omission or addition sets the rule score to zero. Reports include per-case `preservation_passed` and per-model `adversarial_preservation` counts, with errors counted as non-passes. This is deliberately strict regression coverage, not proof of universal prompt-injection resistance.
+
+Copilot cleanup runs with an empty available-tool list. Both production and benchmark requests identify a JSON-encoded transcript value as untrusted data, keeping embedded quotes, newlines, and fake delimiters inside that value. Bundled cleanup instructions require minimal corrections, preserve facts, negation, and literal tags/tokens, exclude runtime reminders from output, and consistently use `[[EMPTY]]` for filler-only input. Saved custom prompts are not overwritten; select **Reset** for the model's bundled prompt to adopt updated cleanup instructions.
+
+#### Waza grading and regression comparisons
+
+[Microsoft Waza](https://microsoft.github.io/waza/) is an optional local evaluation
+tool (integration verified with version 0.38.7). Model requests still run through
+the production-aligned runner above, not Waza's Copilot SDK executor. Waza grades
+captured outputs offline, so regrading/comparing does not send another model
+request or require an LLM judge.
+
+```sh
+# Grade an existing captured report; no model requests are made
+python3 scripts/waza-cleanup.py grade .artifacts/cleanup-eval/latest.json \
+  --output-dir .artifacts/waza/candidate
+
+# Grade a saved baseline using the same dataset and thresholds
+python3 scripts/waza-cleanup.py grade /path/to/baseline.json \
+  --output-dir .artifacts/waza/baseline
+
+waza --no-update-check compare \
+  .artifacts/waza/baseline/graded.json .artifacts/waza/candidate/graded.json
+
+# Fail on any pass-rate regression, missing/new tasks, or failed injection case
+waza --no-update-check gate \
+  --baseline .artifacts/waza/baseline/graded.json \
+  --current .artifacts/waza/candidate/graded.json \
+  --on-new-tasks fail --on-removed-tasks fail
+```
+
+The adapter generates Waza specs, case snapshots, captured outcomes, and graded
+results under the chosen output directory. **Do not execute these specs with
+`waza run`**: they are for grading captured transcripts, not SDK agent execution.
+Reports retain source prompt configuration, real outputs, repetitions, errors,
+and latency; they do not invent tool traces or token usage. Historical reports
+without a recorded timeout retain an unknown timeout (`0`).
+
+The program grader reuses the existing deterministic cleanup scorer. Ordinary
+cases pass at a score of at least **0.90** (`--minimum-score` changes this explicit
+threshold); adversarial cases additionally require strict text preservation and
+are marked **golden/must-pass** for `waza gate`. Errors always remain nonpasses.
+Waza's program-grader score is binary pass/fail, **not** the original continuous
+cleanup score; use the source report for detailed quality/latency analysis.
+Successful grading exits zero even when cases fail; use `waza gate` to enforce
+the results. Each model/case is one task; every captured repetition must pass for
+that task to pass. Use the same threshold and case set on both sides of a comparison.
+
+Use `--category prompt-injection` to compare just the adversarial cases.
+Incomplete reports, duplicate runs, and input/reference/category mismatches
+against the dataset are rejected rather than silently skipped. If cases changed,
+supply their original dataset with `--dataset`. These commands are opt-in; CI
+does not automatically run billed model evaluations.
 
 ### Signed DMG release
 
