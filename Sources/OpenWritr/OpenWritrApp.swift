@@ -107,6 +107,8 @@ final class AppViewModel {
     var lastEnhancementWarning: String?
     var inputDeviceStatusMessage: String = "OpenWritr follows the current macOS system input device."
     var recoverableRawTranscription: String?
+    private(set) var recoverableOutputDestination: RecordingOutputDestination = .standard
+    private(set) var clipboardWarning: String?
     var debugModeEnabled: Bool = false
     var soundEnabled: Bool = true
     var autoPasteEnabled: Bool = true
@@ -155,6 +157,7 @@ final class AppViewModel {
     @ObservationIgnored private var captureOperationID: UUID?
     @ObservationIgnored private var captureHandle: CaptureHandle?
     @ObservationIgnored private var captureTriggerMode: RecordingShortcutMode?
+    @ObservationIgnored private var captureOutputDestination: RecordingOutputDestination = .standard
     @ObservationIgnored private var releaseRequested = false
     @ObservationIgnored private var pendingStartTask: Task<Void, Never>?
     @ObservationIgnored private var transientErrorDismissTask: Task<Void, Never>?
@@ -195,6 +198,9 @@ final class AppViewModel {
         self.transientErrorDisplayDuration = transientErrorDisplayDuration
         self.applicationPresenceController = applicationPresenceController
         self.appPresenceDefaults = appPresenceDefaults
+        self.pasteManager.onRestoreFailed = { [weak self] error in
+            self?.handleClipboardRestoreFailure(error)
+        }
         if startsOperational {
             configureAudioCallbacks()
             isOperational = true
@@ -397,19 +403,19 @@ final class AppViewModel {
 
         configureAudioCallbacks()
 
-        hotkeyManager.onRecordingStarted = { [weak self] mode in
+        hotkeyManager.onRecordingStarted = { [weak self] shortcut in
             Task { @MainActor [weak self] in
-                self?.startListening(triggerMode: mode)
+                self?.startListening(triggerMode: shortcut.mode, outputDestination: shortcut.destination)
             }
         }
-        hotkeyManager.onRecordingModeChanged = { [weak self] mode in
+        hotkeyManager.onRecordingModeChanged = { [weak self] shortcut in
             Task { @MainActor [weak self] in
-                self?.updateRecordingMode(shortcutMode: mode)
+                self?.updateRecordingMode(shortcut: shortcut)
             }
         }
-        hotkeyManager.onRecordingStopped = { [weak self] mode in
+        hotkeyManager.onRecordingStopped = { [weak self] shortcut in
             Task { @MainActor [weak self] in
-                self?.startProcessingStoppedRecording(triggerMode: mode)
+                self?.startProcessingStoppedRecording(shortcut: shortcut)
             }
         }
 
@@ -600,13 +606,15 @@ final class AppViewModel {
     private func presentRuntimeError(
         _ error: AppErrorPresentation,
         overlayMessage: String,
-        recoverableRawTranscription: String? = nil
+        recoverableRawTranscription: String? = nil,
+        outputDestination: RecordingOutputDestination = .standard
     ) {
         guard isOperational else {
             presentInitializationError(error)
             return
         }
         self.recoverableRawTranscription = recoverableRawTranscription
+        recoverableOutputDestination = recoverableRawTranscription == nil ? .standard : outputDestination
         transitionToErrorState(.runtimeError(error))
         overlayPanel.show(state: .error(overlayMessage))
         if error.kind == .transcription || error.kind == .paste {
@@ -656,6 +664,8 @@ final class AppViewModel {
             retryMicrophone()
             return
         }
+        recoverableRawTranscription = nil
+        recoverableOutputDestination = .standard
         overlayPanel.dismiss()
         state = .ready
     }
@@ -669,26 +679,33 @@ final class AppViewModel {
 
         state = .enhancing
         overlayPanel.show(state: .enhancing)
-        await enhanceAndComplete(rawText: rawText)
+        await enhanceAndComplete(rawText: rawText, outputDestination: recoverableOutputDestination)
     }
 
-    func useRawTranscription() {
+    func useRawTranscription() async {
         guard case .runtimeError(let error) = state,
               error.kind == .enhancement,
               isOperational,
               let rawText = recoverableRawTranscription
         else { return }
 
-        lastTranscription = rawText
-        lastRawTranscription = ""
-        lastWasEnhanced = false
-        recoverableRawTranscription = nil
-        if autoPasteEnabled, pasteManager.pasteText(rawText) == .cancelled {
-            presentPasteCancelledError()
-            return
-        }
-        overlayPanel.dismiss()
-        state = .ready
+        let destination = recoverableOutputDestination
+        state = .transcribing
+        await finishSuccessfulOutput(
+            rawText,
+            rawText: nil,
+            wasEnhanced: false,
+            outputDestination: destination
+        )
+    }
+
+    func dismissClipboardWarning() {
+        clipboardWarning = nil
+    }
+
+    private func handleClipboardRestoreFailure(_ error: PasteManagerError) {
+        guard isOperational, !didShutdown else { return }
+        clipboardWarning = error.localizedDescription
     }
 
     // MARK: - Updates
@@ -1230,13 +1247,14 @@ final class AppViewModel {
         }
     }
 
-    private func startProcessingStoppedRecording(triggerMode: RecordingShortcutMode) {
+    private func startProcessingStoppedRecording(shortcut: RecordingShortcut) {
         guard isOperational,
               !didShutdown,
               let operationID = captureOperationID
         else { return }
 
-        captureTriggerMode = resolvedRecordingMode(for: triggerMode)
+        captureTriggerMode = resolvedRecordingMode(for: shortcut.mode)
+        captureOutputDestination = shortcut.destination
         if case .preparingMicrophone = state {
             releaseRequested = true
             appLog.debug("Retained release for pending microphone operation")
@@ -1258,7 +1276,7 @@ final class AppViewModel {
             await self.stopListeningAndTranscribe(
                 operationID: operationID,
                 handle: handle,
-                triggerMode: self.captureTriggerMode ?? triggerMode,
+                triggerMode: self.captureTriggerMode ?? shortcut.mode,
                 expectedState: .listening
             )
         }
@@ -1273,23 +1291,26 @@ final class AppViewModel {
     private func resolvedRecordingMode(
         for shortcutMode: RecordingShortcutMode
     ) -> RecordingShortcutMode {
-        guard enhancedModeEnabled else { return .normal }
-        if alwaysEnhancedEnabled {
-            return shortcutMode == .enhanced ? .normal : .enhanced
-        }
-        return shortcutMode
+        shortcutMode.resolved(
+            enhancementEnabled: enhancedModeEnabled,
+            alwaysEnhanced: alwaysEnhancedEnabled
+        )
     }
 
-    private func updateRecordingMode(shortcutMode: RecordingShortcutMode) {
+    private func updateRecordingMode(shortcut: RecordingShortcut) {
         guard captureOperationID != nil else { return }
-        let mode = resolvedRecordingMode(for: shortcutMode)
+        let mode = resolvedRecordingMode(for: shortcut.mode)
         captureTriggerMode = mode
+        captureOutputDestination = shortcut.destination
         if case .listening = state {
-            overlayPanel.show(state: .listening(enhanced: mode == .enhanced))
+            overlayPanel.show(state: .listening(enhanced: mode == .enhanced, destination: shortcut.destination))
         }
     }
 
-    func startListening(triggerMode: RecordingShortcutMode = .normal) {
+    func startListening(
+        triggerMode: RecordingShortcutMode = .normal,
+        outputDestination: RecordingOutputDestination = .standard
+    ) {
         guard state.isReady || isTransientErrorState,
               isOperational,
               !didShutdown,
@@ -1301,10 +1322,12 @@ final class AppViewModel {
         cancelTransientErrorDismissal()
         cancelMicrophoneRecovery()
         recoverableRawTranscription = nil
+        recoverableOutputDestination = .standard
         let operationID = UUID()
         captureOperationID = operationID
         captureHandle = nil
         captureTriggerMode = resolvedRecordingMode(for: triggerMode)
+        captureOutputDestination = outputDestination
         releaseRequested = false
         state = .preparingMicrophone
         appLog.debug("Starting asynchronous microphone preparation")
@@ -1406,7 +1429,8 @@ final class AppViewModel {
             state = .listening
             overlayPanel.show(
                 state: .listening(
-                    enhanced: captureTriggerMode == .enhanced
+                    enhanced: captureTriggerMode == .enhanced,
+                    destination: captureOutputDestination
                 )
             )
             if soundEnabled {
@@ -1498,6 +1522,7 @@ final class AppViewModel {
                 overlayPanel.show(state: .enhancing)
                 await enhanceAndComplete(
                     rawText: trimmed,
+                    outputDestination: captureOutputDestination,
                     captureOperation: (operationID, handle)
                 )
             } else {
@@ -1505,6 +1530,7 @@ final class AppViewModel {
                     trimmed,
                     rawText: nil,
                     wasEnhanced: false,
+                    outputDestination: captureOutputDestination,
                     captureOperation: (operationID, handle)
                 )
             }
@@ -1532,6 +1558,7 @@ final class AppViewModel {
 
     private func enhanceAndComplete(
         rawText: String,
+        outputDestination: RecordingOutputDestination = .standard,
         captureOperation: (UUID, CaptureHandle)? = nil
     ) async {
         let result = await grammarEnhancer.enhance(
@@ -1566,7 +1593,8 @@ final class AppViewModel {
                     recoverySuggestion: "Retry enhancement or use the raw transcript."
                 ),
                 overlayMessage: "Enhancement failed",
-                recoverableRawTranscription: rawText
+                recoverableRawTranscription: rawText,
+                outputDestination: outputDestination
             )
             return
         }
@@ -1574,6 +1602,7 @@ final class AppViewModel {
         let output = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !output.isEmpty else {
             recoverableRawTranscription = nil
+            recoverableOutputDestination = .standard
             if let (operationID, _) = captureOperation {
                 returnToReady(operationID: operationID)
             } else {
@@ -1585,6 +1614,7 @@ final class AppViewModel {
             output,
             rawText: rawText,
             wasEnhanced: true,
+            outputDestination: outputDestination,
             captureOperation: captureOperation
         )
     }
@@ -1593,22 +1623,28 @@ final class AppViewModel {
         _ text: String,
         rawText: String?,
         wasEnhanced: Bool,
+        outputDestination: RecordingOutputDestination = .standard,
         captureOperation: (UUID, CaptureHandle)? = nil
     ) async {
         recoverableRawTranscription = nil
+        recoverableOutputDestination = .standard
         lastTranscription = text
         lastRawTranscription = rawText ?? ""
         lastWasEnhanced = wasEnhanced
 
-        if autoPasteEnabled, pasteManager.pasteText(text) == .cancelled {
+        if pasteManager.outputText(
+            text,
+            destination: outputDestination,
+            autoPasteEnabled: autoPasteEnabled
+        ) == .cancelled {
             if let (operationID, _) = captureOperation {
                 clearCaptureOperation(ifCurrent: operationID)
             }
-            presentPasteCancelledError()
+            presentPasteCancelledError(outputDestination: outputDestination)
             return
         }
 
-        overlayPanel.show(state: .done)
+        overlayPanel.show(state: outputDestination == .clipboard ? .copied : .done)
         do {
             try await Task.sleep(for: doneDisplayDuration)
         } catch is CancellationError {
@@ -1637,7 +1673,20 @@ final class AppViewModel {
         state = .ready
     }
 
-    private func presentPasteCancelledError() {
+    private func presentPasteCancelledError(outputDestination: RecordingOutputDestination = .standard) {
+        if outputDestination == .clipboard {
+            presentRuntimeError(
+                AppErrorPresentation(
+                    kind: .paste,
+                    title: "Clipboard Output Failed",
+                    message: pasteManager.lastError?.localizedDescription
+                        ?? "OpenWritr could not copy the transcript to the clipboard.",
+                    recoverySuggestion: "The transcript is retained in OpenWritr. Check the clipboard, then try again."
+                ),
+                overlayMessage: "Clipboard failed"
+            )
+            return
+        }
         presentRuntimeError(
             AppErrorPresentation(
                 kind: .paste,
@@ -1727,6 +1776,7 @@ final class AppViewModel {
         captureOperationID = nil
         captureHandle = nil
         captureTriggerMode = nil
+        captureOutputDestination = .standard
         releaseRequested = false
         pendingStartTask = nil
         clearActiveProcessingTask(ifCurrent: operationID)
@@ -1740,6 +1790,7 @@ final class AppViewModel {
         captureOperationID = nil
         captureHandle = nil
         captureTriggerMode = nil
+        captureOutputDestination = .standard
         releaseRequested = false
         pendingStartTask = nil
         activeProcessingTask = nil
@@ -1795,6 +1846,8 @@ final class AppViewModel {
         invalidateCaptureOperation()
         hotkeyManager.stop()
         pasteManager.flushPendingRestore()
+        recoverableRawTranscription = nil
+        recoverableOutputDestination = .standard
         overlayPanel.dismiss()
         updateManager.stopAutomaticChecks()
 
@@ -1809,6 +1862,7 @@ final class AppViewModel {
         hotkeyManager.onRecordingStarted = nil
         hotkeyManager.onRecordingModeChanged = nil
         hotkeyManager.onRecordingStopped = nil
+        pasteManager.onRestoreFailed = nil
 
         _ = audioEngine.shutdown()
     }

@@ -776,7 +776,7 @@ footer a:hover { color: var(--accent); }
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/></svg>
         </div>
         <h3>Auto-Paste</h3>
-        <p>Text appears at your cursor in whatever app is focused. TextEdit, browser, terminal, Slack&mdash;anywhere.</p>
+        <p>Text appears at your cursor in whatever app is focused. Hold Option with your recording hotkey to copy instead, without pasting.</p>
       </div>
       <div class="feature">
         <div class="feature-icon fi-green">
@@ -856,7 +856,7 @@ footer a:hover { color: var(--accent); }
       <div class="step reveal">
         <span class="step-num">01</span>
         <h3>Hold Fn</h3>
-        <p>Press and hold your configured hotkey. The mic activates instantly and the bottom waveform follows your voice. Purple Enhanced feedback confirms when cleanup will run.</p>
+        <p>Press and hold your configured hotkey. The mic activates instantly and the bottom waveform follows your voice. Add Option for clipboard-only output; when your hotkey is Right Option, add Left Option. Shift keeps its enhancement/bypass behavior. Purple feedback confirms when cleanup will run.</p>
       </div>
       <div class="step reveal">
         <span class="step-num">02</span>
@@ -865,8 +865,8 @@ footer a:hover { color: var(--accent); }
       </div>
       <div class="step reveal">
         <span class="step-num">03</span>
-        <h3>Pasted</h3>
-        <p>The local transcript&mdash;or the provider-cleaned text when Enhanced Mode is enabled&mdash;is placed on the clipboard and a Cmd+V is simulated. Text appears at your cursor. Your original clipboard is silently restored.</p>
+        <h3>Pasted or copied</h3>
+        <p>Auto-Paste inserts the final transcript at your cursor and restores your original clipboard, including an empty clipboard, unless you have copied something newer. Option selects clipboard-only output even with Auto-Paste off: the result replaces your clipboard without pasting, and the overlay confirms Copied. Pressing Option during recording keeps that choice even if Option is released first. Failed or cancelled processing does not change the clipboard.</p>
       </div>
     </div>
   </div>

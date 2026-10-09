@@ -3,10 +3,11 @@ import Observation
 import SwiftUI
 
 enum OverlayState: Sendable {
-    case listening(enhanced: Bool)
+    case listening(enhanced: Bool, destination: RecordingOutputDestination = .standard)
     case transcribing
     case enhancing
     case done
+    case copied
     case error(String)
 }
 
@@ -98,7 +99,12 @@ final class OverlayPresentation {
     }
 
     var isEnhancedListening: Bool {
-        if case .listening(let enhanced) = state { return enhanced }
+        if case .listening(let enhanced, _) = state { return enhanced }
+        return false
+    }
+
+    var isEnhancedClipboardListening: Bool {
+        if case .listening(true, .clipboard) = state { return true }
         return false
     }
 
@@ -163,7 +169,7 @@ struct OverlayContentView: View {
     private func capsule(phase: TimeInterval) -> some View {
         HStack(spacing: 12) {
             barField(phase: phase)
-                .frame(width: presentation.isError ? 48 : 108)
+                .frame(width: presentation.isError ? 48 : waveformWidth)
                 .clipped()
 
             HStack(spacing: 5) {
@@ -176,7 +182,7 @@ struct OverlayContentView: View {
             }
             .foregroundStyle(accentColor)
             .frame(
-                width: presentation.isError ? 138 : 78,
+                width: presentation.isError ? 138 : (presentation.isEnhancedClipboardListening ? 92 : 78),
                 alignment: .leading
             )
         }
@@ -197,10 +203,17 @@ struct OverlayContentView: View {
             ForEach(0..<Self.barCount, id: \.self) { index in
                 Capsule(style: .continuous)
                     .fill(barColor)
-                    .frame(width: 3, height: barHeight(at: index, phase: phase))
+                    .frame(
+                        width: (waveformWidth - CGFloat(Self.barCount - 1) * 2) / CGFloat(Self.barCount),
+                        height: barHeight(at: index, phase: phase)
+                    )
             }
         }
-        .frame(width: 108, height: 30)
+        .frame(width: waveformWidth, height: 30)
+    }
+
+    private var waveformWidth: CGFloat {
+        presentation.isEnhancedClipboardListening ? 94 : 108
     }
 
     private func barHeight(at index: Int, phase: TimeInterval) -> CGFloat {
@@ -217,7 +230,7 @@ struct OverlayContentView: View {
         case .enhancing:
             let shifted = phase * 1.08 + 0.7
             return max(4, envelope * shimmer(t: t, phase: shifted) * 25)
-        case .done:
+        case .done, .copied:
             let completionShape = 1 - abs(t - 0.5) * 0.9
             return max(4, envelope * completionShape * 15)
         case .error:
@@ -236,7 +249,7 @@ struct OverlayContentView: View {
 
     private var barColor: Color {
         switch presentation.state {
-        case .listening(let enhanced):
+        case .listening(let enhanced, _):
             return enhanced
                 ? Color(red: 0.70, green: 0.58, blue: 1)
                 : .white
@@ -244,7 +257,7 @@ struct OverlayContentView: View {
             return Color(red: 0.45, green: 0.86, blue: 1)
         case .enhancing:
             return Color(red: 0.70, green: 0.58, blue: 1)
-        case .done:
+        case .done, .copied:
             return Color(red: 0.42, green: 0.86, blue: 0.57).opacity(0.82)
         case .error:
             return Color(red: 1, green: 0.58, blue: 0.38).opacity(0.82)
@@ -253,7 +266,7 @@ struct OverlayContentView: View {
 
     private var accentColor: Color {
         switch presentation.state {
-        case .listening(let enhanced):
+        case .listening(let enhanced, _):
             return enhanced
                 ? Color(red: 0.78, green: 0.68, blue: 1)
                 : .white.opacity(0.82)
@@ -261,7 +274,7 @@ struct OverlayContentView: View {
             return Color(red: 0.60, green: 0.90, blue: 1)
         case .enhancing:
             return Color(red: 0.78, green: 0.68, blue: 1)
-        case .done:
+        case .done, .copied:
             return Color(red: 0.52, green: 0.92, blue: 0.64)
         case .error:
             return Color(red: 1, green: 0.65, blue: 0.48)
@@ -270,14 +283,16 @@ struct OverlayContentView: View {
 
     private var title: String {
         switch presentation.state {
-        case .listening(let enhanced):
-            return enhanced ? "Enhanced" : "Listening"
+        case .listening(let enhanced, let destination):
+            return destination == .clipboard ? "Clipboard" : (enhanced ? "Enhanced" : "Listening")
         case .transcribing:
             return "Writing"
         case .enhancing:
             return "Polishing"
         case .done:
             return "Ready"
+        case .copied:
+            return "Copied"
         case .error(let message):
             return message.isEmpty ? "Error" : message
         }
@@ -285,7 +300,10 @@ struct OverlayContentView: View {
 
     private var accessibilityLabel: String {
         switch presentation.state {
-        case .listening(let enhanced):
+        case .listening(let enhanced, let destination):
+            if destination == .clipboard {
+                return enhanced ? "Listening with enhancement for clipboard-only output" : "Listening for clipboard-only output"
+            }
             return enhanced ? "Listening with enhancement" : "Listening"
         case .transcribing:
             return "Transcribing"
@@ -293,6 +311,8 @@ struct OverlayContentView: View {
             return "Enhancing transcription"
         case .done:
             return "Transcription ready"
+        case .copied:
+            return "Transcription copied to clipboard"
         case .error:
             return "Transcription error"
         }
@@ -308,14 +328,25 @@ struct OverlayContentView: View {
     @ViewBuilder
     private var icon: some View {
         switch presentation.state {
-        case .listening(let enhanced):
-            Image(systemName: enhanced ? "sparkles" : "mic.fill")
+        case .listening(let enhanced, let destination):
+            if destination == .clipboard {
+                HStack(spacing: 2) {
+                    Image(systemName: "doc.on.clipboard")
+                    if enhanced {
+                        Image(systemName: "sparkles")
+                    }
+                }
+            } else {
+                Image(systemName: enhanced ? "sparkles" : "mic.fill")
+            }
         case .transcribing:
             Image(systemName: "waveform")
         case .enhancing:
             Image(systemName: "sparkles")
         case .done:
             Image(systemName: "checkmark")
+        case .copied:
+            Image(systemName: "clipboard.fill")
         case .error:
             Image(systemName: "exclamationmark")
         }

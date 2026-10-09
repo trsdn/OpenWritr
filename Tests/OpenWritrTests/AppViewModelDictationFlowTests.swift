@@ -22,6 +22,135 @@ struct AppViewModelDictationFlowTests {
         #expect(viewModel.state.isReady)
     }
 
+    @Test(arguments: [false, true])
+    func clipboardOnlyCopiesWithoutPasting(autoPasteEnabled: Bool) async {
+        let dependencies = makeDependencies(
+            samples: [audibleSamples(count: 16_000)],
+            transcriptions: [.success("  Synthetic copied transcript.  ")]
+        )
+        let viewModel = dependencies.makeViewModel()
+        defer { viewModel.shutdown() }
+        viewModel.autoPasteEnabled = autoPasteEnabled
+
+        await recordAndStop(viewModel, outputDestination: .clipboard)
+
+        #expect(dependencies.paster.copiedTexts == ["Synthetic copied transcript."])
+        #expect(dependencies.paster.pastedTexts.isEmpty)
+        #expect(dependencies.overlay.didShowCopied)
+        #expect(!dependencies.overlay.didShowDone)
+        #expect(viewModel.state.isReady)
+    }
+
+    @Test func enhancementRetryKeepsClipboardDestination() async {
+        let dependencies = makeDependencies(
+            samples: [audibleSamples(count: 16_000)],
+            transcriptions: [.success("Synthetic raw transcript.")],
+            enhancements: [
+                enhancement(text: "Synthetic raw transcript.", didSucceed: false),
+                enhancement(text: "Synthetic cleaned transcript.", didSucceed: true)
+            ]
+        )
+        let viewModel = dependencies.makeViewModel()
+        defer { viewModel.shutdown() }
+
+        await recordAndStop(viewModel, mode: .enhanced, outputDestination: .clipboard)
+        #expect(dependencies.paster.copiedTexts.isEmpty)
+        #expect(viewModel.recoverableOutputDestination == .clipboard)
+        await viewModel.retryEnhancement()
+
+        #expect(dependencies.paster.copiedTexts == ["Synthetic cleaned transcript."])
+        #expect(dependencies.paster.pastedTexts.isEmpty)
+        #expect(dependencies.overlay.didShowCopied)
+        #expect(viewModel.recoverableOutputDestination == .standard)
+    }
+
+    @Test func rawRecoveryKeepsClipboardDestination() async {
+        let dependencies = makeDependencies(
+            samples: [audibleSamples(count: 16_000)],
+            transcriptions: [.success("Synthetic raw transcript.")],
+            enhancements: [enhancement(text: "Synthetic raw transcript.", didSucceed: false)]
+        )
+        let viewModel = dependencies.makeViewModel()
+        defer { viewModel.shutdown() }
+
+        await recordAndStop(viewModel, mode: .enhanced, outputDestination: .clipboard)
+        await viewModel.useRawTranscription()
+
+        #expect(dependencies.paster.copiedTexts == ["Synthetic raw transcript."])
+        #expect(dependencies.paster.pastedTexts.isEmpty)
+        #expect(dependencies.overlay.didShowCopied)
+        #expect(viewModel.state.isReady)
+    }
+
+    @Test func alwaysEnhancedClipboardRespectsShiftBypass() async {
+        let dependencies = makeDependencies(
+            samples: [audibleSamples(count: 16_000)],
+            transcriptions: [.success("Synthetic bypass transcript.")]
+        )
+        let viewModel = dependencies.makeViewModel()
+        defer { viewModel.shutdown() }
+        viewModel.alwaysEnhancedEnabled = true
+
+        await recordAndStop(viewModel, mode: .enhanced, outputDestination: .clipboard)
+
+        #expect(dependencies.enhancer.receivedTexts.isEmpty)
+        #expect(dependencies.paster.copiedTexts == ["Synthetic bypass transcript."])
+        #expect(dependencies.paster.pastedTexts.isEmpty)
+    }
+
+    @Test func failedClipboardWriteDoesNotShowSuccess() async {
+        let dependencies = makeDependencies(
+            samples: [audibleSamples(count: 16_000)],
+            transcriptions: [.success("Synthetic retained transcript.")],
+            pasteOutcomes: [.cancelled]
+        )
+        let viewModel = dependencies.makeViewModel()
+        defer { viewModel.shutdown() }
+        dependencies.paster.lastError = .writeFailed
+
+        await recordAndStop(viewModel, outputDestination: .clipboard)
+
+        #expect(dependencies.paster.copiedTexts.isEmpty)
+        #expect(!dependencies.overlay.didShowCopied)
+        #expect(!dependencies.overlay.didShowDone)
+        #expect(isRuntimeError(viewModel.state, kind: .paste))
+        #expect(viewModel.lastTranscription == "Synthetic retained transcript.")
+    }
+
+    @Test func failedOrSilentClipboardRecordingDoesNotCopy() async {
+        for transcription in [FakeTranscriber.Behavior.failure(TestFailure.expected), .success("  ")] {
+            let dependencies = makeDependencies(
+                samples: [audibleSamples(count: 16_000)],
+                transcriptions: [transcription]
+            )
+            let viewModel = dependencies.makeViewModel()
+            await recordAndStop(viewModel, outputDestination: .clipboard)
+            #expect(dependencies.paster.copiedTexts.isEmpty)
+            #expect(dependencies.paster.pastedTexts.isEmpty)
+            viewModel.shutdown()
+        }
+    }
+
+    @Test func restoreWarningDoesNotInterruptRecording() async {
+        let dependencies = makeDependencies(
+            samples: [audibleSamples(count: 16_000)],
+            transcriptions: [.success("Synthetic transcript.")]
+        )
+        let viewModel = dependencies.makeViewModel()
+        defer { viewModel.shutdown() }
+        viewModel.soundEnabled = false
+        viewModel.startListening(outputDestination: .clipboard)
+        await waitUntil { isListening(viewModel.state) }
+        dependencies.paster.onRestoreFailed?(.restoreFailed)
+
+        #expect(isListening(viewModel.state))
+        #expect(viewModel.clipboardWarning != nil)
+        viewModel.dismissClipboardWarning()
+        #expect(viewModel.clipboardWarning == nil)
+        await viewModel.stopListeningAndTranscribe()
+        #expect(dependencies.paster.copiedTexts == ["Synthetic transcript."])
+    }
+
     @Test func enhancedFlowAndFallbacksPreserveRawTranscript() async {
         let success = makeDependencies(
             samples: [audibleSamples(count: 16_000)],
@@ -55,7 +184,7 @@ struct AppViewModelDictationFlowTests {
         #expect(isRuntimeError(failedViewModel.state, kind: .enhancement))
         #expect(failedViewModel.recoverableRawTranscription == "Synthetic fallback transcript.")
 
-        failedViewModel.useRawTranscription()
+        await failedViewModel.useRawTranscription()
 
         #expect(failure.paster.pastedTexts == ["Synthetic fallback transcript."])
         #expect(failedViewModel.state.isReady)
@@ -247,13 +376,14 @@ struct AppViewModelDictationFlowTests {
 
     private func recordAndStop(
         _ viewModel: AppViewModel,
-        mode: RecordingShortcutMode = .normal
+        mode: RecordingShortcutMode = .normal,
+        outputDestination: RecordingOutputDestination = .standard
     ) async {
         viewModel.soundEnabled = false
         if mode == .enhanced {
             viewModel.enhancedModeEnabled = true
         }
-        viewModel.startListening(triggerMode: mode)
+        viewModel.startListening(triggerMode: mode, outputDestination: outputDestination)
         await waitUntil { isListening(viewModel.state) }
         await viewModel.stopListeningAndTranscribe(triggerMode: mode)
     }
@@ -485,7 +615,10 @@ private final class FakeEnhancer: TranscriptEnhancing, @unchecked Sendable {
 
 @MainActor
 private final class FakeTextPaster: TextPasting {
+    var lastError: PasteManagerError?
+    var onRestoreFailed: ((PasteManagerError) -> Void)?
     private(set) var pastedTexts: [String] = []
+    private(set) var copiedTexts: [String] = []
     private var outcomes: [PasteOutcome]
 
     init(outcomes: [PasteOutcome]) {
@@ -496,6 +629,14 @@ private final class FakeTextPaster: TextPasting {
         let outcome = outcomes.isEmpty ? .pasted : outcomes.removeFirst()
         if outcome == .pasted {
             pastedTexts.append(text)
+        }
+        return outcome
+    }
+
+    func copyText(_ text: String) -> PasteOutcome {
+        let outcome = outcomes.isEmpty ? .copied : outcomes.removeFirst()
+        if outcome == .copied {
+            copiedTexts.append(text)
         }
         return outcome
     }
@@ -512,6 +653,13 @@ private final class FakeOverlayPresenter: OverlayPresenting {
             if case .done = $0 {
                 return true
             }
+            return false
+        }
+    }
+
+    var didShowCopied: Bool {
+        shownStates.contains {
+            if case .copied = $0 { return true }
             return false
         }
     }

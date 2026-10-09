@@ -5,13 +5,17 @@ All notable changes to OpenWritr will be documented in this file.
 Each release's notes on GitHub are generated from its section here, and the
 broker publication handoff fails when the section for a tag is missing or empty.
 
-## [1.6.6] — 2026-09-22
+## [1.7.0] — 2026-10-09
 
 ### Added
+- Clipboard-only dictation with Option + Fn or Option + Right Command, and Left Option + Right Option when Right Option is the recording key
+- Independent Option/Shift latching, Clipboard/Copied overlay feedback, and clipboard-only output even with Auto-Paste disabled
 - A Presence setting for choosing menu bar only, Dock only, or both, with changes applied immediately and restored at launch
 
 ### Fixed
-- Auto-paste cancellation now shows a recoverable error instead of success when OpenWritr cannot preserve the existing clipboard
+- Clipboard-only output retains its destination through enhancement retry and raw-transcript recovery, and cannot be overwritten by an older delayed clipboard restore
+- Delayed clipboard restoration failures are shown as a dismissible warning without interrupting a newer recording
+- Auto-paste cancellation now shows a recoverable error instead of success when OpenWritr cannot preserve the existing clipboard, including unreadable plain text
 
 ## [1.6.5] — 2026-09-20
 
