@@ -54,6 +54,8 @@ Each cleanup model has a visible bundled default tuned for that provider and mod
 
 Enhanced Mode can run on demand with **Shift + hotkey**, or **Always Enhance Recordings** can clean up every recording. In always-enhanced mode, holding Shift temporarily bypasses cleanup. The listening overlay immediately shows whether the current recording will be enhanced.
 
+Copilot cleanup explicitly uses **low reasoning effort for GPT-5.6 Luna**, independently of the CLI's saved reasoning preference. Other models keep their existing CLI defaults. Copilot requests have a bounded **90-second timeout** to accommodate CLI startup and slow provider responses; this does not guarantee that every request will finish. If cleanup fails or times out, OpenWritr retains the raw transcript for retry or raw-output recovery rather than silently claiming success.
+
 ### Clipboard-only recordings
 
 Hold **Option + Fn** or **Option + Right Command** to copy the final transcript without inserting it into the focused application. When **Right Option** is the configured push-to-talk key, use **Left Option + Right Option** instead; Right Option alone keeps its normal behavior.

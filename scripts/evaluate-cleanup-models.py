@@ -91,7 +91,7 @@ def parse_args():
     parser.add_argument("--runs", type=int, default=1)
     parser.add_argument("--case-limit", type=int)
     parser.add_argument("--case-ids", nargs="+")
-    parser.add_argument("--timeout", type=int, default=45)
+    parser.add_argument("--timeout", type=int, default=90)
     parser.add_argument("--workers", type=int, default=3)
     parser.add_argument("--judge-model")
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT)
@@ -215,6 +215,8 @@ def run_copilot(model, prompt, text, timeout):
         "--no-custom-instructions",
         "--disable-builtin-mcps",
     ]
+    if model == "gpt-5.6-luna":
+        command.extend(["--reasoning-effort", "low"])
     try:
         completed = subprocess.run(
             command,

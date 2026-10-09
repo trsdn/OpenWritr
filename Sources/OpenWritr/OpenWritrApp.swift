@@ -1868,7 +1868,14 @@ final class AppViewModel {
     }
 }
 
+final class OpenWritrApplicationDelegate: NSObject, NSApplicationDelegate {
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        false
+    }
+}
+
 struct OpenWritrApp: App {
+    @NSApplicationDelegateAdaptor(OpenWritrApplicationDelegate.self) private var applicationDelegate
     @State private var viewModel: AppViewModel
 
     init() {
@@ -1888,6 +1895,11 @@ struct OpenWritrApp: App {
 
         Settings {
             SettingsView(viewModel: viewModel)
+        }
+        .commands {
+            CommandGroup(replacing: .appSettings) {
+                OpenSettingsButton()
+            }
         }
 
         Window("About OpenWritr", id: "about") {

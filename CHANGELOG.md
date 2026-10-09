@@ -5,6 +5,12 @@ All notable changes to OpenWritr will be documented in this file.
 Each release's notes on GitHub are generated from its section here, and the
 broker publication handoff fails when the section for a tag is missing or empty.
 
+## [1.7.1] — 2026-10-09
+
+### Fixed
+- Copilot cleanup uses explicit low reasoning effort for GPT-5.6 Luna and a bounded 90-second timeout instead of 30 seconds, reducing premature failures during slow CLI startup or provider responses
+- Settings activates and comes to the foreground on every menu or Command-comma open, including when reopening an existing window; closing the last window keeps the utility running
+
 ## [1.7.0] — 2026-10-09
 
 ### Added

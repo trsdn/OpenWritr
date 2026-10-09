@@ -14,22 +14,54 @@ struct SettingsSnapshotConfiguration {
     let inputDevicePickerEnabled: Bool
 }
 
-/// Keeps the hosting window above other windows, including the floating
-/// recording overlay, and brings it to the front whenever it is shown.
-/// In menu-bar-only mode the app is not active on its own, so this also
-/// activates it here rather than in a tap gesture, which keyboard activation
-/// would skip.
+@MainActor
+enum SettingsWindowPresentation {
+    private(set) static weak var window: NSWindow?
+
+    static func attach(_ window: NSWindow) {
+        self.window = window
+        window.level = NSWindow.Level(rawValue: NSWindow.Level.floating.rawValue + 1)
+        window.collectionBehavior.insert(.moveToActiveSpace)
+    }
+
+    static func bringToFront() {
+        NSApplication.shared.activate(ignoringOtherApps: true)
+        window?.makeKeyAndOrderFront(nil)
+    }
+}
+
+struct OpenSettingsButton: View {
+    @Environment(\.openSettings) private var openSettings
+
+    var body: some View {
+        Button {
+            NSApplication.shared.activate(ignoringOtherApps: true)
+            openSettings()
+            DispatchQueue.main.async {
+                SettingsWindowPresentation.bringToFront()
+            }
+        } label: {
+            Label("Settings…", systemImage: "gearshape")
+        }
+        .keyboardShortcut(",", modifiers: .command)
+    }
+}
+
+final class SettingsWindowHostingView: NSView {
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        guard let window else { return }
+        SettingsWindowPresentation.attach(window)
+        DispatchQueue.main.async { [weak self, weak window] in
+            guard let window, self?.window === window else { return }
+            SettingsWindowPresentation.bringToFront()
+        }
+    }
+}
+
 private struct KeepWindowOnTop: NSViewRepresentable {
     func makeNSView(context: Context) -> NSView {
-        let view = NSView()
-        DispatchQueue.main.async { [weak view] in
-            guard let window = view?.window else { return }
-            window.level = NSWindow.Level(rawValue: NSWindow.Level.floating.rawValue + 1)
-            window.collectionBehavior.insert(.moveToActiveSpace)
-            NSApplication.shared.activate(ignoringOtherApps: true)
-            window.makeKeyAndOrderFront(nil)
-        }
-        return view
+        SettingsWindowHostingView()
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {}

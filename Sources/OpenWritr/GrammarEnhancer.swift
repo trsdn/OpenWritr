@@ -455,6 +455,7 @@ struct GrammarEnhancer: TranscriptEnhancing, Sendable {
     private static let pollInterval = Duration.milliseconds(20)
     private static let outputDrainTimeout = Duration.seconds(1)
     private static let maximumOutputBytes = 16 * 1_024 * 1_024
+    static let defaultCopilotTimeout = Duration.seconds(90)
 
     private let timeout: Duration
     private let terminationGracePeriod: Duration
@@ -462,7 +463,7 @@ struct GrammarEnhancer: TranscriptEnhancing, Sendable {
     private let processState: EnhancementProcessState
 
     init(
-        timeout: Duration = .seconds(30),
+        timeout: Duration = GrammarEnhancer.defaultCopilotTimeout,
         terminationGracePeriod: Duration = .seconds(1),
         forcedTerminationWait: Duration = .seconds(1)
     ) {
@@ -644,6 +645,21 @@ struct GrammarEnhancer: TranscriptEnhancing, Sendable {
 
     // MARK: - Process execution
 
+    static func copilotArguments(executablePath: String, requestPrompt: String, model: String) -> [String] {
+        var arguments = [
+            executablePath,
+            "-p", requestPrompt,
+            "-s",
+            "--model", model,
+            "--no-custom-instructions",
+            "--disable-builtin-mcps",
+        ]
+        if model == EnhancedModel.luna.rawValue {
+            arguments += ["--reasoning-effort", "low"]
+        }
+        return arguments
+    }
+
     private func runCopilot(text: String, model: String, prompt: String) async -> GrammarEnhancementResult {
         let operationID: UInt64
         switch processState.beginEnhancement(taskIsCancelled: Task.isCancelled) {
@@ -669,14 +685,11 @@ struct GrammarEnhancer: TranscriptEnhancing, Sendable {
         }
 
         let requestPrompt = "\(prompt)\n\n\(text)"
-        let arguments = [
-            installation.executablePath,
-            "-p", requestPrompt,
-            "-s",
-            "--model", model,
-            "--no-custom-instructions",
-            "--disable-builtin-mcps",
-        ]
+        let arguments = Self.copilotArguments(
+            executablePath: installation.executablePath,
+            requestPrompt: requestPrompt,
+            model: model
+        )
         let environment = installation.processEnvironment(
             basedOn: ProcessInfo.processInfo.environment
         )
