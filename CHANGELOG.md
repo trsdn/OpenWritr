@@ -20,6 +20,7 @@ broker publication handoff fails when the section for a tag is missing or empty.
 
 ### Added
 - Eight synthetic prompt-injection regression cases with strict text-preservation scoring and explicit per-model pass counts
+- Optional offline Waza grading, model/prompt comparisons, and must-pass injection regression gates for captured cleanup evaluations
 
 ## [1.7.0] — 2026-10-09
 

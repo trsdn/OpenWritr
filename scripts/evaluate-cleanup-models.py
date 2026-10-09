@@ -662,6 +662,7 @@ def main():
             "judge_model": args.judge_model,
             "runs": args.runs,
             "workers": args.workers,
+            "timeout": args.timeout,
             "cases": len(cases),
             "dataset": str(args.dataset.relative_to(ROOT)),
             "prompt_profile": prompt_configuration["name"],

@@ -116,6 +116,56 @@ The dataset includes eight adversarial dictated-text cases: instruction override
 
 Copilot cleanup runs with an empty available-tool list. Both production and benchmark requests identify a JSON-encoded transcript value as untrusted data, keeping embedded quotes, newlines, and fake delimiters inside that value. Bundled cleanup instructions require minimal corrections, preserve facts, negation, and literal tags/tokens, exclude runtime reminders from output, and consistently use `[[EMPTY]]` for filler-only input. Saved custom prompts are not overwritten; select **Reset** for the model's bundled prompt to adopt updated cleanup instructions.
 
+#### Waza grading and regression comparisons
+
+[Microsoft Waza](https://microsoft.github.io/waza/) is an optional local evaluation
+tool (integration verified with version 0.38.7). Model requests still run through
+the production-aligned runner above, not Waza's Copilot SDK executor. Waza grades
+captured outputs offline, so regrading/comparing does not send another model
+request or require an LLM judge.
+
+```sh
+# Grade an existing captured report; no model requests are made
+python3 scripts/waza-cleanup.py grade .artifacts/cleanup-eval/latest.json \
+  --output-dir .artifacts/waza/candidate
+
+# Grade a saved baseline using the same dataset and thresholds
+python3 scripts/waza-cleanup.py grade /path/to/baseline.json \
+  --output-dir .artifacts/waza/baseline
+
+waza --no-update-check compare \
+  .artifacts/waza/baseline/graded.json .artifacts/waza/candidate/graded.json
+
+# Fail on any pass-rate regression, missing/new tasks, or failed injection case
+waza --no-update-check gate \
+  --baseline .artifacts/waza/baseline/graded.json \
+  --current .artifacts/waza/candidate/graded.json \
+  --on-new-tasks fail --on-removed-tasks fail
+```
+
+The adapter generates Waza specs, case snapshots, captured outcomes, and graded
+results under the chosen output directory. **Do not execute these specs with
+`waza run`**: they are for grading captured transcripts, not SDK agent execution.
+Reports retain source prompt configuration, real outputs, repetitions, errors,
+and latency; they do not invent tool traces or token usage. Historical reports
+without a recorded timeout retain an unknown timeout (`0`).
+
+The program grader reuses the existing deterministic cleanup scorer. Ordinary
+cases pass at a score of at least **0.90** (`--minimum-score` changes this explicit
+threshold); adversarial cases additionally require strict text preservation and
+are marked **golden/must-pass** for `waza gate`. Errors always remain nonpasses.
+Waza's program-grader score is binary pass/fail, **not** the original continuous
+cleanup score; use the source report for detailed quality/latency analysis.
+Successful grading exits zero even when cases fail; use `waza gate` to enforce
+the results. Each model/case is one task; every captured repetition must pass for
+that task to pass. Use the same threshold and case set on both sides of a comparison.
+
+Use `--category prompt-injection` to compare just the adversarial cases.
+Incomplete reports, duplicate runs, and input/reference/category mismatches
+against the dataset are rejected rather than silently skipped. If cases changed,
+supply their original dataset with `--dataset`. These commands are opt-in; CI
+does not automatically run billed model evaluations.
+
 ### Signed DMG release
 
 Distributable builds come from the public
