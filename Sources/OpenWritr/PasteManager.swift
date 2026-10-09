@@ -46,15 +46,63 @@ protocol PasteCommandPosting {
 }
 
 @MainActor
-protocol TextPasting {
+protocol TextPasting: AnyObject {
+    var lastError: PasteManagerError? { get }
+    var onRestoreFailed: ((PasteManagerError) -> Void)? { get set }
+
     @discardableResult
     func pasteText(_ text: String) -> PasteOutcome
+    @discardableResult
+    func copyText(_ text: String) -> PasteOutcome
     func flushPendingRestore()
 }
 
 enum PasteOutcome: Sendable, Equatable {
     case pasted
+    case copied
+    case retained
     case cancelled
+}
+
+enum PasteManagerError: LocalizedError, Sendable, Equatable {
+    case unreadableRepresentation(String)
+    case preparationFailed
+    case clipboardChanged
+    case writeFailed
+    case restoreFailed
+    case rollbackFailed
+
+    var errorDescription: String? {
+        switch self {
+        case .unreadableRepresentation(let type):
+            return "OpenWritr could not preserve clipboard content of type \(type)."
+        case .preparationFailed:
+            return "OpenWritr could not prepare text for the clipboard."
+        case .clipboardChanged:
+            return "The clipboard changed while OpenWritr was preparing output. No text was written."
+        case .writeFailed:
+            return "OpenWritr could not write text to the clipboard."
+        case .restoreFailed:
+            return "OpenWritr could not restore the previous clipboard contents."
+        case .rollbackFailed:
+            return "Writing text failed, and OpenWritr could not restore the previous clipboard contents."
+        }
+    }
+}
+
+extension TextPasting {
+    func outputText(
+        _ text: String,
+        destination: RecordingOutputDestination,
+        autoPasteEnabled: Bool
+    ) -> PasteOutcome {
+        switch destination {
+        case .clipboard:
+            return copyText(text)
+        case .standard:
+            return autoPasteEnabled ? pasteText(text) : .retained
+        }
+    }
 }
 
 extension NSPasteboardItem: PasteboardItemReading {
@@ -144,6 +192,9 @@ struct SystemPasteRestoreScheduler: PasteRestoreScheduling {
 
 @MainActor
 final class PasteManager: TextPasting {
+    private(set) var lastError: PasteManagerError?
+    var onRestoreFailed: ((PasteManagerError) -> Void)?
+
     private struct PasteboardSnapshot {
         let items: [PasteboardItemContent]
     }
@@ -175,11 +226,21 @@ final class PasteManager: TextPasting {
 
     @discardableResult
     func pasteText(_ text: String) -> PasteOutcome {
+        writeText(text, destination: .standard)
+    }
+
+    @discardableResult
+    func copyText(_ text: String) -> PasteOutcome {
+        writeText(text, destination: .clipboard)
+    }
+
+    private func writeText(_ text: String, destination: RecordingOutputDestination) -> PasteOutcome {
         if hasUnreportedRestoreFailure {
             hasUnreportedRestoreFailure = false
             return .cancelled
         }
 
+        lastError = nil
         guard flushPendingRestore(matching: nil) else {
             return .cancelled
         }
@@ -197,25 +258,33 @@ final class PasteManager: TextPasting {
         )
 
         guard pasteboard.changeCount == originalChangeCount else {
+            lastError = .clipboardChanged
             pasteLog.notice("Clipboard changed while it was being saved; cancelling paste")
             return .cancelled
         }
 
         guard let preparedTranscript = pasteboard.prepareWrite([transcriptItem]) else {
-            errorLogger.logError("Failed to prepare transcript for the pasteboard")
+            recordError(.preparationFailed, message: "Failed to prepare transcript for the pasteboard")
             return .cancelled
         }
 
         guard pasteboard.changeCount == originalChangeCount else {
+            lastError = .clipboardChanged
             pasteLog.notice("Clipboard changed while the transcript was being prepared; cancelling paste")
             return .cancelled
         }
 
         let transcriptOwnershipChangeCount = pasteboard.clearContents()
         guard preparedTranscript.write() else {
-            errorLogger.logError("Failed to write transcript to the pasteboard")
-            _ = restore(snapshot, to: pasteboard, ifUnchangedSince: transcriptOwnershipChangeCount)
+            recordError(.writeFailed, message: "Failed to write transcript to the pasteboard")
+            if !restore(snapshot, to: pasteboard, ifUnchangedSince: transcriptOwnershipChangeCount) {
+                recordError(.rollbackFailed, message: "Failed to roll back a failed clipboard write")
+            }
             return .cancelled
+        }
+
+        if destination == .clipboard {
+            return .copied
         }
 
         let transcriptChangeCount = pasteboard.changeCount
@@ -227,9 +296,11 @@ final class PasteManager: TextPasting {
         )
         commandPoster.postPasteCommand()
 
-        restoreScheduler.scheduleRestore {
+        restoreScheduler.scheduleRestore { [weak self] in
+            guard let self else { return }
             if !self.flushPendingRestore(matching: transactionID) {
                 self.hasUnreportedRestoreFailure = true
+                self.onRestoreFailed?(self.lastError ?? .restoreFailed)
             }
         }
         return .pasted
@@ -238,6 +309,7 @@ final class PasteManager: TextPasting {
     func flushPendingRestore() {
         if !flushPendingRestore(matching: nil) {
             hasUnreportedRestoreFailure = true
+            onRestoreFailed?(lastError ?? .restoreFailed)
         }
     }
 
@@ -258,17 +330,30 @@ final class PasteManager: TextPasting {
     }
 
     private func snapshot(of pasteboard: any PasteboardManaging) -> PasteboardSnapshot? {
+        let originalChangeCount = pasteboard.changeCount
         let pasteboardItems = pasteboard.pasteboardItems ?? []
         var snapshotItems: [PasteboardItemContent] = []
 
         for item in pasteboardItems {
+            let types = item.pasteboardTypes
             var representations: [PasteboardItemContent.Representation] = []
 
-            for type in item.pasteboardTypes {
+            for type in types {
                 // Some representations cannot be read: protected content (e.g. from
                 // managed apps) or promised data that never materialises. Cancel the
                 // paste rather than restore an incomplete version of the clipboard.
                 guard let data = item.pasteboardData(forType: type) else {
+                    guard pasteboard.changeCount == originalChangeCount else {
+                        lastError = .clipboardChanged
+                        pasteLog.notice("Clipboard changed while reading a representation; cancelling output")
+                        return nil
+                    }
+                    // An unwritten plain-text declaration contains no content to preserve.
+                    if types == [.string] {
+                        pasteLog.notice("Preserving an empty plain-text clipboard placeholder as empty")
+                        continue
+                    }
+                    lastError = .unreadableRepresentation(type.rawValue)
                     pasteLog.notice(
                         "Clipboard representation \(type.rawValue, privacy: .public) could not be preserved; cancelling paste"
                     )
@@ -279,6 +364,10 @@ final class PasteManager: TextPasting {
             }
 
             guard !representations.isEmpty else {
+                if types == [.string] {
+                    continue
+                }
+                lastError = .preparationFailed
                 pasteLog.notice("Clipboard item has no restorable representations; cancelling paste")
                 return nil
             }
@@ -286,6 +375,7 @@ final class PasteManager: TextPasting {
             snapshotItems.append(PasteboardItemContent(representations: representations))
         }
 
+        pasteLog.debug("Saved clipboard: \(snapshotItems.count) items, change count \(pasteboard.changeCount)")
         return PasteboardSnapshot(items: snapshotItems)
     }
 
@@ -294,8 +384,11 @@ final class PasteManager: TextPasting {
         to pasteboard: any PasteboardManaging,
         ifUnchangedSince expectedChangeCount: Int
     ) -> Bool {
+        guard pasteboard.changeCount == expectedChangeCount else {
+            return true
+        }
         guard let preparedRestore = pasteboard.prepareWrite(snapshot.items) else {
-            errorLogger.logError("Failed to prepare clipboard contents for restoration")
+            recordError(.restoreFailed, message: "Failed to prepare clipboard contents for restoration")
             return false
         }
 
@@ -306,10 +399,15 @@ final class PasteManager: TextPasting {
         pasteboard.clearContents()
 
         guard preparedRestore.write() else {
-            errorLogger.logError("Failed to restore clipboard contents")
+            recordError(.restoreFailed, message: "Failed to restore clipboard contents")
             return false
         }
 
         return true
+    }
+
+    private func recordError(_ error: PasteManagerError, message: String) {
+        lastError = error
+        errorLogger.logError(message)
     }
 }

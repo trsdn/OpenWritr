@@ -1,4 +1,5 @@
 import Cocoa
+import IOKit.hidsystem
 
 enum HotkeyManagerError: LocalizedError, Sendable {
     case accessibilityPermissionRequired
@@ -24,28 +25,47 @@ enum HotkeyManagerError: LocalizedError, Sendable {
 enum RecordingShortcutMode: Sendable, Equatable {
     case normal
     case enhanced
+
+    func resolved(enhancementEnabled: Bool, alwaysEnhanced: Bool) -> Self {
+        guard enhancementEnabled else { return .normal }
+        if alwaysEnhanced {
+            return self == .enhanced ? .normal : .enhanced
+        }
+        return self
+    }
 }
 
-private enum RecordingShortcutAction: Sendable {
-    case started(RecordingShortcutMode)
-    case modeChanged(RecordingShortcutMode)
-    case stopped(RecordingShortcutMode)
+enum RecordingOutputDestination: Sendable, Equatable {
+    case standard
+    case clipboard
+}
+
+struct RecordingShortcut: Sendable, Equatable {
+    var mode: RecordingShortcutMode = .normal
+    var destination: RecordingOutputDestination = .standard
+}
+
+enum RecordingShortcutAction: Sendable, Equatable {
+    case started(RecordingShortcut)
+    case modeChanged(RecordingShortcut)
+    case stopped(RecordingShortcut)
 }
 
 @MainActor
 final class HotkeyManager {
-    var onRecordingStarted: (@Sendable (RecordingShortcutMode) -> Void)?
-    var onRecordingModeChanged: (@Sendable (RecordingShortcutMode) -> Void)?
-    var onRecordingStopped: (@Sendable (RecordingShortcutMode) -> Void)?
+    var onRecordingStarted: (@Sendable (RecordingShortcut) -> Void)?
+    var onRecordingModeChanged: (@Sendable (RecordingShortcut) -> Void)?
+    var onRecordingStopped: (@Sendable (RecordingShortcut) -> Void)?
 
     // Read from callback thread — use atomic-like access via nonisolated context
     nonisolated(unsafe) var activeFlag: UInt64 = 0x800000 // Fn key default
     nonisolated(unsafe) var activeKeyCode: Int64 = 63 // Fn key default
     nonisolated(unsafe) private var isKeyPressed = false
-    nonisolated(unsafe) private var currentMode: RecordingShortcutMode = .normal
+    nonisolated(unsafe) private var currentShortcut = RecordingShortcut()
     nonisolated(unsafe) private var primaryKeyDown = false
     nonisolated(unsafe) private var shiftKeyDown = false
     nonisolated(unsafe) private var sawShiftDuringCurrentPress = false
+    nonisolated(unsafe) private var sawOptionDuringCurrentPress = false
 
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
@@ -111,10 +131,15 @@ final class HotkeyManager {
         primaryKeyDown = false
         shiftKeyDown = false
         sawShiftDuringCurrentPress = false
+        sawOptionDuringCurrentPress = false
+        currentShortcut = RecordingShortcut()
     }
 
-    nonisolated fileprivate func processFlagsChanged(_ flags: CGEventFlags, keyCode: Int64) -> RecordingShortcutAction? {
+    nonisolated func processFlagsChanged(_ flags: CGEventFlags, keyCode: Int64) -> RecordingShortcutAction? {
         shiftKeyDown = flags.contains(.maskShift)
+        let optionKeyDown = activeKeyCode == 61
+            ? (flags.rawValue & UInt64(NX_DEVICELALTKEYMASK)) != 0
+            : flags.contains(.maskAlternate)
 
         if keyCode == activeKeyCode {
             primaryKeyDown = (flags.rawValue & activeFlag) != 0
@@ -123,24 +148,32 @@ final class HotkeyManager {
         if primaryKeyDown && !isKeyPressed {
             isKeyPressed = true
             sawShiftDuringCurrentPress = shiftKeyDown
-            currentMode = sawShiftDuringCurrentPress ? .enhanced : .normal
-            return .started(currentMode)
+            sawOptionDuringCurrentPress = optionKeyDown
+            currentShortcut = RecordingShortcut(
+                mode: sawShiftDuringCurrentPress ? .enhanced : .normal,
+                destination: sawOptionDuringCurrentPress ? .clipboard : .standard
+            )
+            return .started(currentShortcut)
         } else if primaryKeyDown && isKeyPressed {
             sawShiftDuringCurrentPress = sawShiftDuringCurrentPress || shiftKeyDown
-            let updatedMode: RecordingShortcutMode =
-                sawShiftDuringCurrentPress ? .enhanced : .normal
-            if updatedMode != currentMode {
-                currentMode = updatedMode
-                return .modeChanged(updatedMode)
+            sawOptionDuringCurrentPress = sawOptionDuringCurrentPress || optionKeyDown
+            let updatedShortcut = RecordingShortcut(
+                mode: sawShiftDuringCurrentPress ? .enhanced : .normal,
+                destination: sawOptionDuringCurrentPress ? .clipboard : .standard
+            )
+            if updatedShortcut != currentShortcut {
+                currentShortcut = updatedShortcut
+                return .modeChanged(updatedShortcut)
             }
         } else if !primaryKeyDown && isKeyPressed {
-            let finishedMode: RecordingShortcutMode = sawShiftDuringCurrentPress ? .enhanced : .normal
+            let finishedShortcut = currentShortcut
             isKeyPressed = false
-            currentMode = .normal
+            currentShortcut = RecordingShortcut()
             primaryKeyDown = false
             shiftKeyDown = false
             sawShiftDuringCurrentPress = false
-            return .stopped(finishedMode)
+            sawOptionDuringCurrentPress = false
+            return .stopped(finishedShortcut)
         }
 
         return nil

@@ -56,6 +56,14 @@ struct MenuBarView: View {
                     .padding(.horizontal, 4)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            if let warning = viewModel.clipboardWarning {
+                Text(warning)
+                    .font(.caption)
+                    .foregroundStyle(Color.warningText)
+                    .padding(.horizontal, 4)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button("Dismiss Clipboard Warning") { viewModel.dismissClipboardWarning() }
+            }
         }
 
         if viewModel.debugModeEnabled && !viewModel.lastTranscription.isEmpty {
@@ -140,8 +148,8 @@ struct MenuBarView: View {
             case .enhancement:
                 Button("Retry Enhancement") { Task { await viewModel.retryEnhancement() } }
                 if viewModel.recoverableRawTranscription != nil {
-                    Button(viewModel.autoPasteEnabled ? "Use & Paste Raw Transcript" : "Use Raw Transcript") {
-                        viewModel.useRawTranscription()
+                    Button(rawTranscriptActionTitle) {
+                        Task { await viewModel.useRawTranscription() }
                     }
                 }
                 Button("Dismiss Error") { viewModel.dismissRuntimeError() }
@@ -156,6 +164,13 @@ struct MenuBarView: View {
     private var isReady: Bool {
         if case .ready = viewModel.state { return true }
         return false
+    }
+
+    private var rawTranscriptActionTitle: String {
+        if viewModel.recoverableOutputDestination == .clipboard {
+            return "Use & Copy Raw Transcript"
+        }
+        return viewModel.autoPasteEnabled ? "Use & Paste Raw Transcript" : "Use Raw Transcript"
     }
 
     @ViewBuilder

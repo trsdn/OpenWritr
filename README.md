@@ -18,7 +18,7 @@
 
 1. **Hold the hotkey** — start a normal transcription, or hold `Shift + hotkey` for enhanced cleanup
 2. **Release** — audio is transcribed locally via NVIDIA Parakeet TDT v3 on the Neural Engine
-3. **Text appears** — the result is pasted into the focused app, with optional cleanup via Apple Intelligence, Copilot, or an OpenAI-compatible API
+3. **Text appears** — the result is pasted into the focused app, with optional cleanup via Apple Intelligence, Copilot, or an OpenAI-compatible API. Hold `Option + hotkey` to replace the clipboard instead, without pasting.
 
 The bottom-center recording indicator uses a live, voice-reactive waveform. Listening, transcription, enhancement, completion, and error states share the same compact borderless design.
 
@@ -53,6 +53,16 @@ When **System Default** is selected, OpenWritr follows macOS input-device change
 Each cleanup model has a visible bundled default tuned for that provider and model. Prompts are read-only until **Edit** is selected. Custom prompts are stored separately per provider/model, survive application updates, and are never silently discarded when switching models.
 
 Enhanced Mode can run on demand with **Shift + hotkey**, or **Always Enhance Recordings** can clean up every recording. In always-enhanced mode, holding Shift temporarily bypasses cleanup. The listening overlay immediately shows whether the current recording will be enhanced.
+
+### Clipboard-only recordings
+
+Hold **Option + Fn** or **Option + Right Command** to copy the final transcript without inserting it into the focused application. When **Right Option** is the configured push-to-talk key, use **Left Option + Right Option** instead; Right Option alone keeps its normal behavior.
+
+Option and Shift are independent: add Shift to use the existing enhancement/bypass behavior. Pressing Option at any point while holding the recording key latches clipboard-only output, even if Option is released first. The overlay shows **Clipboard** while listening (purple when enhanced), then **Copied** after a successful write.
+
+Clipboard-only works even with Auto-Paste off. Successful copying intentionally replaces the clipboard and keeps the result available for manual paste. Cancellation, silence, or processing failure leaves the clipboard unchanged; enhancement retry and raw-transcript recovery retain the chosen destination.
+
+Normal Auto-Paste restores the original clipboard, including an empty clipboard, unless another application or the user has changed it. Output errors are shown explicitly; delayed restoration errors appear as a dismissible menu warning. With Auto-Paste off, standard recordings remain inside OpenWritr and are not copied automatically.
 
 ## Install
 

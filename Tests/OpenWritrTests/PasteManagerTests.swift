@@ -21,6 +21,145 @@ struct PasteManagerTests {
         #expect(pasteboard.clearCount == 2)
     }
 
+    @Test func declaredButUnwrittenTextIsAnEmptyClipboard() {
+        let pasteboard = FakePasteboard(items: [.unreadable(type: .string)])
+        let poster = FakePasteCommandPoster()
+        let manager = makeManager(pasteboard: pasteboard, commandPoster: poster)
+
+        #expect(manager.pasteText("Synthetic transcript") == .pasted)
+        #expect(poster.postCount == 1)
+        manager.flushPendingRestore()
+        #expect(pasteboard.items.isEmpty)
+    }
+
+    @Test func actualAppKitEmptyTextPlaceholderPastesAndRestores() {
+        let pasteboard = NSPasteboard.withUniqueName()
+        defer { pasteboard.releaseGlobally() }
+        pasteboard.declareTypes([.string], owner: nil)
+        #expect(pasteboard.pasteboardItems?.count == 1)
+        #expect(pasteboard.data(forType: .string) == nil)
+        let poster = FakePasteCommandPoster()
+        let manager = makeManager(pasteboard: SystemPasteboard(pasteboard), commandPoster: poster)
+
+        #expect(manager.pasteText("Synthetic transcript") == .pasted)
+        manager.flushPendingRestore()
+        #expect(poster.postCount == 1)
+        #expect(pasteboard.pasteboardItems?.isEmpty == true)
+    }
+
+    @Test func emptyStringIsPreservedAsText() {
+        let pasteboard = FakePasteboard(items: [.text("")])
+        let manager = makeManager(pasteboard: pasteboard, commandPoster: FakePasteCommandPoster())
+
+        #expect(manager.pasteText("Synthetic transcript") == .pasted)
+        manager.flushPendingRestore()
+        #expect(pasteboard.text?.isEmpty == true)
+        #expect(pasteboard.items.count == 1)
+    }
+
+    @Test func allReadableItemsAndRepresentationsArePreserved() {
+        let first = FakePasteboardItem(PasteboardItemContent(representations: [
+            .init(type: .string, data: Data("Original".utf8)),
+            .init(type: .png, data: Data([0, 1, 2, 255]))
+        ]))
+        let pasteboard = FakePasteboard(items: [first, .text("Second item")])
+        let manager = makeManager(pasteboard: pasteboard, commandPoster: FakePasteCommandPoster())
+
+        #expect(manager.pasteText("Synthetic transcript") == .pasted)
+        manager.flushPendingRestore()
+        #expect(pasteboard.items.count == 2)
+        #expect(pasteboard.items[0].data == first.data)
+        #expect(pasteboard.items[1].data == [.string: Data("Second item".utf8)])
+    }
+
+    @Test(arguments: [false, true])
+    func clipboardOnlyIgnoresAutoPaste(autoPasteEnabled: Bool) {
+        let pasteboard = FakePasteboard(items: [.text("Original")])
+        let poster = FakePasteCommandPoster()
+        let manager = makeManager(pasteboard: pasteboard, commandPoster: poster)
+
+        #expect(manager.outputText("Copied result", destination: .clipboard, autoPasteEnabled: autoPasteEnabled) == .copied)
+        manager.flushPendingRestore()
+        #expect(pasteboard.text == "Copied result")
+        #expect(poster.postCount == 0)
+    }
+
+    @Test func standardOutputWithAutoPasteOffDoesNotTouchClipboard() {
+        let pasteboard = FakePasteboard(items: [.text("Original")])
+        let poster = FakePasteCommandPoster()
+        let manager = makeManager(pasteboard: pasteboard, commandPoster: poster)
+
+        #expect(manager.outputText("Retained result", destination: .standard, autoPasteEnabled: false) == .retained)
+        #expect(pasteboard.text == "Original")
+        #expect(pasteboard.clearCount == 0)
+        #expect(poster.postCount == 0)
+    }
+
+    @Test func oldDelayedRestoresCannotOverwriteCopyOrNewPaste() {
+        let pasteboard = FakePasteboard(items: [.text("Original")])
+        let scheduler = FakePasteRestoreScheduler()
+        let manager = makeManager(
+            pasteboard: pasteboard,
+            commandPoster: FakePasteCommandPoster(),
+            restoreScheduler: scheduler
+        )
+
+        #expect(manager.pasteText("First result") == .pasted)
+        #expect(manager.pasteText("Second result") == .pasted)
+        scheduler.runScheduledRestore()
+        #expect(pasteboard.text == "Second result")
+        #expect(manager.copyText("Copied result") == .copied)
+        scheduler.runScheduledRestore()
+        #expect(pasteboard.text == "Copied result")
+    }
+
+    @Test func copyPreparationFailureLeavesClipboardUntouched() {
+        let pasteboard = FakePasteboard(items: [.text("Original")])
+        let manager = makeManager(pasteboard: pasteboard, commandPoster: FakePasteCommandPoster())
+        pasteboard.failNextPreparation = true
+
+        #expect(manager.copyText("Copied result") == .cancelled)
+        #expect(manager.lastError == .preparationFailed)
+        #expect(pasteboard.text == "Original")
+        #expect(pasteboard.clearCount == 0)
+    }
+
+    @Test func failedWriteRollsBackOriginalAndReportsError() {
+        let pasteboard = FakePasteboard(items: [.text("Original")])
+        let manager = makeManager(pasteboard: pasteboard, commandPoster: FakePasteCommandPoster())
+        pasteboard.failedWritesRemaining = 1
+
+        #expect(manager.copyText("Copied result") == .cancelled)
+        #expect(manager.lastError == .writeFailed)
+        #expect(pasteboard.text == "Original")
+    }
+
+    @Test func failedRollbackIsReported() {
+        let pasteboard = FakePasteboard(items: [.text("Original")])
+        let manager = makeManager(pasteboard: pasteboard, commandPoster: FakePasteCommandPoster())
+        pasteboard.failedWritesRemaining = 2
+
+        #expect(manager.copyText("Copied result") == .cancelled)
+        #expect(manager.lastError == .rollbackFailed)
+    }
+
+    @Test func delayedRestoreFailureIsReportedImmediately() {
+        let pasteboard = FakePasteboard(items: [.text("Original")])
+        let scheduler = FakePasteRestoreScheduler()
+        let manager = makeManager(
+            pasteboard: pasteboard,
+            commandPoster: FakePasteCommandPoster(),
+            restoreScheduler: scheduler
+        )
+        var error: PasteManagerError?
+        manager.onRestoreFailed = { error = $0 }
+
+        #expect(manager.pasteText("Synthetic transcript") == .pasted)
+        pasteboard.failNextPreparation = true
+        scheduler.runScheduledRestore()
+        #expect(error == .restoreFailed)
+    }
+
     @Test func savesReplacesPastesAndRestoresClipboard() {
         let pasteboard = FakePasteboard(items: [.text("Original clipboard")])
         let poster = FakePasteCommandPoster()
@@ -229,16 +368,15 @@ private final class FakePasteCommandPoster: PasteCommandPosting {
 
 @MainActor
 private final class FakePasteRestoreScheduler: PasteRestoreScheduling {
-    private var scheduledAction: (@MainActor () -> Void)?
+    private var scheduledActions: [@MainActor () -> Void] = []
 
     func scheduleRestore(_ action: @escaping @MainActor () -> Void) {
-        scheduledAction = action
+        scheduledActions.append(action)
     }
 
     func runScheduledRestore() {
-        let action = scheduledAction
-        scheduledAction = nil
-        action?()
+        guard !scheduledActions.isEmpty else { return }
+        scheduledActions.removeFirst()()
     }
 }
 
@@ -249,6 +387,7 @@ private final class FakePasteboard: PasteboardManaging {
     private(set) var items: [FakePasteboardItem]
     var mutateWhenReading: [FakePasteboardItem]?
     var failNextPreparation = false
+    var failedWritesRemaining = 0
     private let returnsNilItemsWhenEmpty: Bool
 
     init(
@@ -298,6 +437,10 @@ private final class FakePasteboard: PasteboardManaging {
     }
 
     fileprivate func writeItems(_ items: [PasteboardItemContent]) -> Bool {
+        if failedWritesRemaining > 0 {
+            failedWritesRemaining -= 1
+            return false
+        }
         self.items = items.map(FakePasteboardItem.init)
         changeCount += 1
         return true

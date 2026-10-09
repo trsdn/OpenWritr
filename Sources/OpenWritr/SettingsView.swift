@@ -484,13 +484,19 @@ struct SettingsView: View {
     }
 
     private var recordingModeHelpText: String {
+        let clipboardHelp = viewModel.hotkeyChoice == .rightOption
+            ? "Hold Left Option + Right Option to copy without pasting."
+            : "Hold Option + \(viewModel.hotkeyChoice.shortLabel) to copy without pasting."
+        let enhancementHelp: String
         guard viewModel.enhancedModeEnabled else {
-            return "Enhanced Mode is off; all recordings use normal transcription."
+            return "Enhanced Mode is off; all recordings use normal transcription. \(clipboardHelp)"
         }
         if viewModel.alwaysEnhancedEnabled {
-            return "\(viewModel.hotkeyChoice.shortLabel) = enhanced, Shift + \(viewModel.hotkeyChoice.shortLabel) = normal"
+            enhancementHelp = "\(viewModel.hotkeyChoice.shortLabel) = enhanced, Shift + \(viewModel.hotkeyChoice.shortLabel) = normal"
+        } else {
+            enhancementHelp = "\(viewModel.hotkeyChoice.shortLabel) = normal, Shift + \(viewModel.hotkeyChoice.shortLabel) = enhanced"
         }
-        return "\(viewModel.hotkeyChoice.shortLabel) = normal, Shift + \(viewModel.hotkeyChoice.shortLabel) = enhanced"
+        return "\(enhancementHelp). \(clipboardHelp) Shift keeps the same enhancement behavior."
     }
 
     private var enhancementActivationHelpText: String {

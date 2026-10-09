@@ -24,10 +24,13 @@ struct UISnapshotPlanTests {
 
     @Test func filenamesAreUniqueAndStable() {
         let filenames = UISnapshotPlan.all.map(\.filename)
-        #expect(filenames.count == 16)
+        #expect(filenames.count == 22)
         #expect(Set(filenames).count == filenames.count)
         #expect(filenames.contains("settings-light.png"))
         #expect(filenames.contains("overlay-error-dark.png"))
+        #expect(filenames.contains("overlay-clipboard-light.png"))
+        #expect(filenames.contains("overlay-enhanced-clipboard-dark.png"))
+        #expect(filenames.contains("overlay-copied-dark.png"))
         #expect(filenames.contains("settings-light-accessibility-text.png"))
     }
 }

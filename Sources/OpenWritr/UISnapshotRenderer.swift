@@ -24,9 +24,12 @@ enum UISnapshotSurface: String, CaseIterable, Sendable {
     case settings
     case about
     case overlayListening = "overlay-listening"
+    case overlayClipboard = "overlay-clipboard"
+    case overlayEnhancedClipboard = "overlay-enhanced-clipboard"
     case overlayTranscribing = "overlay-transcribing"
     case overlayEnhancing = "overlay-enhancing"
     case overlayDone = "overlay-done"
+    case overlayCopied = "overlay-copied"
     case overlayError = "overlay-error"
 }
 
@@ -185,12 +188,18 @@ enum UISnapshotRenderer {
             )
         case .overlayListening:
             return overlayView(state: .listening(enhanced: false), audioLevel: 0.42)
+        case .overlayClipboard:
+            return overlayView(state: .listening(enhanced: false, destination: .clipboard), audioLevel: 0.42)
+        case .overlayEnhancedClipboard:
+            return overlayView(state: .listening(enhanced: true, destination: .clipboard), audioLevel: 0.42)
         case .overlayTranscribing:
             return overlayView(state: .transcribing)
         case .overlayEnhancing:
             return overlayView(state: .enhancing)
         case .overlayDone:
             return overlayView(state: .done)
+        case .overlayCopied:
+            return overlayView(state: .copied)
         case .overlayError:
             return overlayView(state: .error("Try again"))
         }
@@ -218,7 +227,8 @@ enum UISnapshotRenderer {
         case .settings:
             plan.accessibilityText ? accessibilitySettingsSize : settingsSize
         case .about: aboutSize
-        case .overlayListening, .overlayTranscribing, .overlayEnhancing, .overlayDone, .overlayError:
+        case .overlayListening, .overlayClipboard, .overlayEnhancedClipboard,
+             .overlayTranscribing, .overlayEnhancing, .overlayDone, .overlayCopied, .overlayError:
             overlaySize
         }
     }
