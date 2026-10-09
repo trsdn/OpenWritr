@@ -27,6 +27,10 @@ jobs:
       - name: Build (release, warnings as errors)
         run: swift build -c release -Xswiftc -warnings-as-errors
 
+      # An SDK older than macOS 26 compiles Apple Intelligence out without any build error.
+      - name: Verify Apple Intelligence is compiled in
+        run: bash scripts/verify-apple-intelligence-linked.sh .build/release/OpenWritr
+
       - name: Lint
         run: |
           command -v swiftlint >/dev/null || brew install swiftlint

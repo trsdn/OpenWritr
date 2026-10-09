@@ -43,6 +43,7 @@ fi
 echo "Building OpenWritr..."
 cd "$PROJECT_DIR"
 swift build -c release
+bash "$SCRIPT_DIR/verify-apple-intelligence-linked.sh" "$BUILD_DIR/OpenWritr"
 
 echo "Creating app bundle..."
 rm -rf "$APP"
