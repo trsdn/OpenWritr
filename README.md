@@ -54,7 +54,21 @@ Each cleanup model has a visible bundled default tuned for that provider and mod
 
 Enhanced Mode can run on demand with **Shift + hotkey**, or **Always Enhance Recordings** can clean up every recording. In always-enhanced mode, holding Shift temporarily bypasses cleanup. The listening overlay immediately shows whether the current recording will be enhanced.
 
-Copilot cleanup explicitly uses **low reasoning effort for GPT-5.6 Luna**, independently of the CLI's saved reasoning preference. Other models keep their existing CLI defaults. Copilot requests have a bounded **90-second timeout** to accommodate CLI startup and slow provider responses; this does not guarantee that every request will finish. If cleanup fails or times out, OpenWritr retains the raw transcript for retry or raw-output recovery rather than silently claiming success.
+Copilot cleanup explicitly uses **low reasoning effort for GPT-6 Luna**, independently of the CLI's saved reasoning preference. Other models keep their existing CLI defaults. Copilot requests have a bounded **90-second timeout** to accommodate CLI startup and slow provider responses; this does not guarantee that every request will finish. If cleanup fails or times out, OpenWritr retains the raw transcript for retry or raw-output recovery rather than silently claiming success.
+
+The Copilot picker uses GPT-6 Luna (default), Gemini 3.8 Flash, MAI Code 1.1 Flash, GPT-5.4 Mini, and Claude Haiku 5.5. Saved predecessor selections migrate within their model family. Custom Copilot prompts are copied to successor targets only when no successor customization exists; original prompts and OpenAI-compatible endpoint targets remain untouched. Availability depends on your account and Copilot CLI.
+
+Standard-context GitHub rates in USD per million tokens, checked on 2026-10-09:
+
+| Model | Input | Cached input | Cache write | Output |
+|---|---:|---:|---:|---:|
+| GPT-6 Luna | $0.10 | $0.01 | $0.125 | $0.50 |
+| Gemini 3.8 Flash | $0.75 | $0.075 | N/A | $3.75 |
+| MAI Code 1.1 Flash | $0.20 | $0.02 | N/A | $1.20 |
+| GPT-5.4 Mini | $0.75 | $0.075 | N/A | $4.50 |
+| Claude Haiku 5.5 | $0.10 | $0.01 | $0.125 | $0.50 |
+
+These are reference rates, not a per-recording quote; context tiers and actual usage affect cost. Check [GitHub's current pricing](https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing) for changes.
 
 ### Clipboard-only recordings
 
@@ -82,21 +96,21 @@ Each report also embeds GitHub's current input, cached-input, cache-write, and o
 ```sh
 # Fast smoke comparison
 python3 scripts/evaluate-cleanup-models.py \
-  --models apple-intelligence gpt-5.6-luna \
+  --models apple-intelligence gpt-6-luna \
   --case-limit 2
 
 # Full repeated comparison, including a blind quality judge
 python3 scripts/evaluate-cleanup-models.py \
   --runs 3 \
   --workers 3 \
-  --judge-model gpt-5.6-sol
+  --judge-model gpt-6.1-sol
 
 # Evaluate a candidate with model-specific prompt suffixes
 python3 scripts/evaluate-cleanup-models.py \
   --prompt-config Sources/OpenWritr/Resources/cleanup-prompt-profiles.json
 ```
 
-The default comparison covers Apple Intelligence, Luna, Gemini Flash, MAI Flash, GPT-5 Mini, and Claude Haiku. Reports are written to `.artifacts/cleanup-eval/` and are not committed. Add only synthetic or explicitly approved transcripts to `eval/cleanup-cases.json`; never add private dictation.
+The default comparison covers Apple Intelligence, GPT-6 Luna, Gemini 3.8 Flash, MAI Code 1.1 Flash, GPT-5.4 Mini, and Claude Haiku 5.5. Reports are written to `.artifacts/cleanup-eval/` and are not committed. Add only synthetic or explicitly approved transcripts to `eval/cleanup-cases.json`; never add private dictation.
 
 ### Signed DMG release
 

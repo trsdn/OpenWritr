@@ -32,11 +32,11 @@ APPLE_HELPER_BINARY = ROOT / ".build" / "cleanup-eval" / "apple-intelligence-eva
 APPLE_REQUEST_PATH = ROOT / ".build" / "cleanup-eval" / "requests.json"
 DEFAULT_MODELS = [
     "apple-intelligence",
-    "gpt-5.6-luna",
-    "gemini-3.7-flash",
+    "gpt-6-luna",
+    "gemini-3.8-flash",
     "mai-code-1.1-flash",
-    "gpt-5-mini",
-    "claude-haiku-4.5",
+    "gpt-5.4-mini",
+    "claude-haiku-5.5",
 ]
 GITHUB_PRICING_URL = (
     "https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing"
@@ -48,13 +48,13 @@ MODEL_PRICING = {
         "cache_write": 0.0,
         "output": 0.0,
     },
-    "gpt-5.6-luna": {
-        "input": 0.20,
-        "cached_input": 0.02,
-        "cache_write": 0.25,
-        "output": 1.20,
+    "gpt-6-luna": {
+        "input": 0.10,
+        "cached_input": 0.01,
+        "cache_write": 0.125,
+        "output": 0.50,
     },
-    "gemini-3.7-flash": {
+    "gemini-3.8-flash": {
         "input": 0.75,
         "cached_input": 0.075,
         "cache_write": None,
@@ -66,17 +66,17 @@ MODEL_PRICING = {
         "cache_write": None,
         "output": 1.20,
     },
-    "gpt-5-mini": {
-        "input": 0.25,
-        "cached_input": 0.025,
+    "gpt-5.4-mini": {
+        "input": 0.75,
+        "cached_input": 0.075,
         "cache_write": None,
-        "output": 2.00,
+        "output": 4.50,
     },
-    "claude-haiku-4.5": {
-        "input": 1.00,
-        "cached_input": 0.10,
-        "cache_write": 1.25,
-        "output": 5.00,
+    "claude-haiku-5.5": {
+        "input": 0.10,
+        "cached_input": 0.01,
+        "cache_write": 0.125,
+        "output": 0.50,
     },
 }
 
@@ -215,7 +215,7 @@ def run_copilot(model, prompt, text, timeout):
         "--no-custom-instructions",
         "--disable-builtin-mcps",
     ]
-    if model == "gpt-5.6-luna":
+    if model == "gpt-6-luna":
         command.extend(["--reasoning-effort", "low"])
     try:
         completed = subprocess.run(

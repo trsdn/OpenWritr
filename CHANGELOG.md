@@ -8,8 +8,13 @@ broker publication handoff fails when the section for a tag is missing or empty.
 ## [1.7.1] — 2026-10-09
 
 ### Fixed
-- Copilot cleanup uses explicit low reasoning effort for GPT-5.6 Luna and a bounded 90-second timeout instead of 30 seconds, reducing premature failures during slow CLI startup or provider responses
+- Copilot cleanup uses explicit low reasoning effort for GPT-6 Luna and a bounded 90-second timeout instead of 30 seconds, reducing premature failures during slow CLI startup or provider responses
 - Settings activates and comes to the foreground on every menu or Command-comma open, including when reopening an existing window; closing the last window keeps the utility running
+
+### Changed
+- Updated the Copilot model picker to GPT-6 Luna, Gemini 3.8 Flash, Claude Haiku 5.5, and GPT-5.4 Mini; MAI Code 1.1 Flash remains available
+- Refreshed standard-context pricing and price tiers from GitHub's October 9 model catalog
+- Migrated predecessor Copilot selections and custom prompts within each model family while retaining originals and existing successor customizations
 
 ## [1.7.0] — 2026-10-09
 

@@ -500,8 +500,11 @@ final class AppViewModel {
             defaults.removeObject(forKey: "enhancedOpenAIModelOverride")
         }
         if let raw = defaults.string(forKey: "enhancedModel"),
-           let model = EnhancedModel(rawValue: raw) {
+           let model = EnhancedModel.restored(from: raw) {
             enhancedModel = model
+            if raw != model.rawValue {
+                defaults.set(model.rawValue, forKey: "enhancedModel")
+            }
         }
         restoreCustomEnhancementPrompts(defaults: defaults)
         if defaults.object(forKey: "debugModeEnabled") != nil {
@@ -1185,6 +1188,12 @@ final class AppViewModel {
                 customEnhancementPrompts = legacyDictionary
                 persistCustomEnhancementPrompts()
             }
+        }
+
+        let migratedPrompts = EnhancedModel.migratingCopilotPrompts(customEnhancementPrompts)
+        if migratedPrompts != customEnhancementPrompts {
+            customEnhancementPrompts = migratedPrompts
+            persistCustomEnhancementPrompts()
         }
 
         guard let legacyPrompt = defaults.string(forKey: "enhancementPrompt") else { return }

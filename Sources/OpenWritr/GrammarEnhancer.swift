@@ -65,47 +65,70 @@ enum EnhancedProvider: String, CaseIterable, Identifiable {
 
 
 enum EnhancedModel: String, CaseIterable, Identifiable, Sendable {
-    case luna = "gpt-5.6-luna"
-    case geminiFlash = "gemini-3.7-flash"
+    case luna = "gpt-6-luna"
+    case geminiFlash = "gemini-3.8-flash"
     case maiFlash = "mai-code-1.1-flash"
-    case claudeHaiku = "claude-haiku-4.5"
-    case gptMini = "gpt-5-mini"
+    case claudeHaiku = "claude-haiku-5.5"
+    case gptMini = "gpt-5.4-mini"
+
+    var previousModelID: String? {
+        switch self {
+        case .luna: return "gpt-5.6-luna"
+        case .geminiFlash: return "gemini-3.7-flash"
+        case .claudeHaiku: return "claude-haiku-4.5"
+        case .gptMini: return "gpt-5-mini"
+        case .maiFlash: return nil
+        }
+    }
+
+    static func restored(from rawValue: String) -> EnhancedModel? {
+        EnhancedModel(rawValue: rawValue) ?? allCases.first { $0.previousModelID == rawValue }
+    }
+
+    static func migratingCopilotPrompts(_ prompts: [String: String]) -> [String: String] {
+        var migrated = prompts
+        for model in allCases {
+            guard let previousID = model.previousModelID,
+                  let prompt = prompts["copilot:\(previousID)"],
+                  migrated["copilot:\(model.rawValue)"] == nil else { continue }
+            migrated["copilot:\(model.rawValue)"] = prompt
+        }
+        return migrated
+    }
 
     var id: String { rawValue }
 
     var displayName: String {
         switch self {
-        case .luna: return "GPT-5.6 Luna"
-        case .geminiFlash: return "Gemini 3.7 Flash"
+        case .luna: return "GPT-6 Luna"
+        case .geminiFlash: return "Gemini 3.8 Flash"
         case .maiFlash: return "MAI Code 1.1 Flash"
-        case .claudeHaiku: return "Claude Haiku 4.5"
-        case .gptMini: return "GPT-5 Mini"
+        case .claudeHaiku: return "Claude Haiku 5.5"
+        case .gptMini: return "GPT-5.4 Mini"
         }
     }
 
     var priceIndicator: String {
         switch self {
-        case .luna, .maiFlash, .gptMini:
+        case .luna, .maiFlash, .claudeHaiku:
             return "$"
-        case .geminiFlash:
+        case .geminiFlash, .gptMini:
             return "$$"
-        case .claudeHaiku:
-            return "$$$"
         }
     }
 
     var pricingSummary: String {
         switch self {
         case .luna:
-            return "$0.20 input / $1.20 output"
+            return "$0.10 input / $0.50 output"
         case .geminiFlash:
             return "$0.75 input / $3.75 output"
         case .maiFlash:
             return "$0.20 input / $1.20 output"
         case .gptMini:
-            return "$0.25 input / $2.00 output"
+            return "$0.75 input / $4.50 output"
         case .claudeHaiku:
-            return "$1.00 input / $5.00 output"
+            return "$0.10 input / $0.50 output"
         }
     }
 
