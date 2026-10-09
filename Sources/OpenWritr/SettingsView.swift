@@ -189,7 +189,7 @@ struct SettingsView: View {
                         Text("\(viewModel.enhancedModel.pricingSummary) per 1M tokens")
                         Spacer()
                         Link(
-                            "GitHub pricing (Aug 14, 2026)",
+                            "GitHub pricing (Oct 9, 2026)",
                             destination: EnhancedModel.pricingURL
                         )
                     }
