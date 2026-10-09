@@ -146,6 +146,7 @@ swift test
 - Release identity comes from `Info.plist` (`CFBundleShortVersionString` and `CFBundleVersion`). Bump both in a `chore(release): bump version to X.Y.Z` change before tagging.
 - User-facing changes get an entry in `CHANGELOG.md` (`## [x.y.z] — date`). The secretless publication handoff publishes that section as the release notes and fails when it is missing or empty. The broker verifies the tagged bundle version.
 - Commit messages use Conventional Commits (`fix(settings): …`, `chore(release): …`).
+- Distributable builds must link `FoundationModels`: with an SDK older than macOS 26, `#if canImport(FoundationModels)` compiles Apple Intelligence out without a build error (v1.7.0 and v1.7.1 shipped that way). `scripts/verify-apple-intelligence-linked.sh` checks this in CI and in `scripts/build-app.sh`; the broker profile `openwritr` pins Xcode 26 and applies the same check.
 
 ## Do not do these
 

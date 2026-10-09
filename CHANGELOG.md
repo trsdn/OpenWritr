@@ -5,6 +5,15 @@ All notable changes to OpenWritr will be documented in this file.
 Each release's notes on GitHub are generated from its section here, and the
 broker publication handoff fails when the section for a tag is missing or empty.
 
+## [1.7.2] — 2026-10-09
+
+### Fixed
+- Apple Intelligence can be selected again. The 1.7.0 and 1.7.1 release builds were made with an SDK older than macOS 26, which compiled Apple Intelligence out, so Settings reported it as unavailable on every Mac
+
+### Changed
+- Settings now says when a build was compiled without Apple Intelligence support instead of blaming the macOS version
+- CI and the local build script fail when the executable does not link FoundationModels, and the notarization broker builds OpenWritr with Xcode 26 and applies the same check
+
 ## [1.7.1] — 2026-10-09
 
 ### Fixed

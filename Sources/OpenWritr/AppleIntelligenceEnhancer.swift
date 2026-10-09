@@ -33,7 +33,7 @@ struct AppleIntelligenceEnhancer: Sendable {
             return availabilityOnSupportedOS()
         }
         #endif
-        return .unavailable("Apple Intelligence cleanup requires macOS 26 or later.")
+        return .unavailable(unsupportedMessage)
     }
 
     func enhance(text: String, prompt: String) async -> EnhancementResult {
@@ -42,7 +42,18 @@ struct AppleIntelligenceEnhancer: Sendable {
             return await enhanceOnSupportedOS(text: text, prompt: prompt)
         }
         #endif
-        return failure(text: text, warning: "Apple Intelligence cleanup requires macOS 26 or later.")
+        return failure(text: text, warning: Self.unsupportedMessage)
+    }
+
+    // A build made with an SDK older than macOS 26 compiles the Apple Intelligence code out, so the
+    // OS version is not the reason on a macOS 26+ Mac.
+    private static var unsupportedMessage: String {
+        #if canImport(FoundationModels)
+        return "Apple Intelligence cleanup requires macOS 26 or later."
+        #else
+        return "This build of OpenWritr was compiled without Apple Intelligence support. "
+            + "Update OpenWritr or build it with Xcode 26 or later."
+        #endif
     }
 
     #if canImport(FoundationModels)
