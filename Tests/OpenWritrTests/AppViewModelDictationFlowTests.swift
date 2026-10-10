@@ -285,6 +285,7 @@ struct AppViewModelDictationFlowTests {
         #expect(
             dependencies.errorLogger.messages.contains {
                 $0.hasPrefix("Runtime audio failure invalidated capture generation 1:")
+                    && $0.hasSuffix(" [selection=explicit:42 synthetic]")
             }
         )
         viewModel.retryMicrophone()
@@ -473,7 +474,10 @@ private struct DictationDependencies {
             errorLogger: errorLogger,
             startsOperational: true,
             doneDisplayDuration: .milliseconds(1),
-            transientErrorDisplayDuration: transientErrorDisplayDuration
+            transientErrorDisplayDuration: transientErrorDisplayDuration,
+            audioDiagnostics: { selected in
+                "selection=\(selected.map { "explicit:\($0)" } ?? "system-default") synthetic"
+            }
         )
     }
 }
