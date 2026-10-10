@@ -11,6 +11,9 @@ broker publication handoff fails when the section for a tag is missing or empty.
 - Switching between Dock Only and Dock and Menu Bar no longer fails. macOS refuses to set an activation policy that is already in effect, and both Dock modes use the same one, so the change was rejected
 - OpenWritr no longer logs "Failed to restore app presence mode menuBarOnly" on every launch; applying the policy the app already has is no longer treated as a failure
 
+### Changed
+- Microphone error logs now include a privacy-safe device summary (how the microphone was chosen, transport such as Bluetooth or USB, channels, sample rate, whether another app is using it, and microphone permission) so Core Audio failures can be diagnosed without asking for details. Device names and identifiers are never logged
+
 ## [1.7.2] — 2026-10-09
 
 ### Fixed
