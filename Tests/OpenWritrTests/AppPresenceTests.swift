@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Testing
 @testable import OpenWritr
@@ -63,6 +64,37 @@ struct AppPresenceTests {
         #expect(dependencies.errorLogger.messages == [
             "Failed to apply app presence mode dockOnly",
         ])
+    }
+
+    @Test func policyAlreadyInEffectCountsAsSuccess() {
+        var attempts: [NSApplication.ActivationPolicy] = []
+        for policy in [NSApplication.ActivationPolicy.accessory, .regular] {
+            let applied = SystemApplicationPresenceController.applyPolicy(
+                policy, current: policy
+            ) { requested in
+                attempts.append(requested)
+                return false
+            }
+            #expect(applied)
+        }
+        #expect(attempts.isEmpty)
+    }
+
+    @Test func differentPolicyIsSetAndItsFailureReported() {
+        var attempts: [NSApplication.ActivationPolicy] = []
+        let succeeded = SystemApplicationPresenceController.applyPolicy(
+            .regular, current: .accessory
+        ) { requested in
+            attempts.append(requested)
+            return true
+        }
+        let failed = SystemApplicationPresenceController.applyPolicy(
+            .accessory, current: .regular
+        ) { _ in false }
+
+        #expect(succeeded)
+        #expect(attempts == [.regular])
+        #expect(!failed)
     }
 
     private func makeDependencies() -> PresenceDependencies {
