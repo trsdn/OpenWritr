@@ -74,9 +74,25 @@ protocol ApplicationPresenceControlling {
 
 @MainActor
 final class SystemApplicationPresenceController: ApplicationPresenceControlling {
+    /// `setActivationPolicy` returns false when the policy is already in effect, which is
+    /// the normal case at launch (an `LSUIElement` app starts as `.accessory`) and when
+    /// switching between the two Dock modes. That is not a failure.
+    static func applyPolicy(
+        _ policy: NSApplication.ActivationPolicy,
+        current: NSApplication.ActivationPolicy,
+        set: (NSApplication.ActivationPolicy) -> Bool
+    ) -> Bool {
+        current == policy || set(policy)
+    }
+
     func apply(_ presence: AppPresence, activate: Bool) -> Bool {
         let policy: NSApplication.ActivationPolicy = presence.showsDock ? .regular : .accessory
-        guard NSApplication.shared.setActivationPolicy(policy) else { return false }
+        let application = NSApplication.shared
+        guard Self.applyPolicy(
+            policy,
+            current: application.activationPolicy(),
+            set: application.setActivationPolicy
+        ) else { return false }
         if activate, presence.showsDock {
             NSApplication.shared.activate(ignoringOtherApps: true)
         }
