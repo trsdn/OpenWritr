@@ -80,6 +80,12 @@ Clipboard-only works even with Auto-Paste off. Successful copying intentionally 
 
 Normal Auto-Paste restores the original clipboard, including an empty clipboard, unless another application or the user has changed it. Output errors are shown explicitly; delayed restoration errors appear as a dismissible menu warning. With Auto-Paste off, standard recordings remain inside OpenWritr and are not copied automatically.
 
+### Remote desktop apps (experimental)
+
+Windows App copies the Mac clipboard to the remote PC only after you leave its window, even with clipboard redirection set to Bidirectional. A paste into the remote session can therefore insert old text. Turn on **Type Text in Remote Desktop Apps (Experimental)** in Settings: while Windows App is frontmost, Auto-Paste then types the text as keystrokes instead of pasting, and your clipboard is not touched. It applies only to Windows App (`com.microsoft.rdc.macos`), only with Auto-Paste on, and not to clipboard-only recordings (Option), which still copy.
+
+The option is off by default and was verified only against a native Mac text view; whether Windows App and the remote PC accept the keystrokes unchanged depends on the remote keyboard layout. Test it in a harmless text field first. Typing needs the same Accessibility permission as pasting.
+
 ## Install
 
 Download the latest signed app from [Releases](https://github.com/trsdn/OpenWritr/releases), unzip it, and move `OpenWritr.app` to `/Applications`.

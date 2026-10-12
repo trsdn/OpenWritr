@@ -54,7 +54,14 @@ protocol TextPasting: AnyObject {
     func pasteText(_ text: String) -> PasteOutcome
     @discardableResult
     func copyText(_ text: String) -> PasteOutcome
+    /// Types `text` instead of pasting when the frontmost app is a remote desktop client, or
+    /// returns nil so the caller falls back to pasting.
+    func typeTextIfRemoteDesktop(_ text: String) -> PasteOutcome?
     func flushPendingRestore()
+}
+
+extension TextPasting {
+    func typeTextIfRemoteDesktop(_ text: String) -> PasteOutcome? { nil }
 }
 
 enum PasteOutcome: Sendable, Equatable {
@@ -71,9 +78,12 @@ enum PasteManagerError: LocalizedError, Sendable, Equatable {
     case writeFailed
     case restoreFailed
     case rollbackFailed
+    case typingFailed
 
     var errorDescription: String? {
         switch self {
+        case .typingFailed:
+            return "OpenWritr could not type the text into the remote desktop app."
         case .unreadableRepresentation(let type):
             return "OpenWritr could not preserve clipboard content of type \(type)."
         case .preparationFailed:
@@ -94,13 +104,18 @@ extension TextPasting {
     func outputText(
         _ text: String,
         destination: RecordingOutputDestination,
-        autoPasteEnabled: Bool
+        autoPasteEnabled: Bool,
+        typeIntoRemoteDesktops: Bool = false
     ) -> PasteOutcome {
         switch destination {
         case .clipboard:
             return copyText(text)
         case .standard:
-            return autoPasteEnabled ? pasteText(text) : .retained
+            guard autoPasteEnabled else { return .retained }
+            if typeIntoRemoteDesktops, let outcome = typeTextIfRemoteDesktop(text) {
+                return outcome
+            }
+            return pasteText(text)
         }
     }
 }
@@ -211,17 +226,23 @@ final class PasteManager: TextPasting {
     private let commandPoster: any PasteCommandPosting
     private let restoreScheduler: any PasteRestoreScheduling
     private let errorLogger: any ErrorLogging
+    private let textTyper: any TextTyping
+    private let remoteDesktopDetector: any RemoteDesktopDetecting
 
     init(
         pasteboard: any PasteboardManaging = SystemPasteboard(),
         commandPoster: any PasteCommandPosting = SystemPasteCommandPoster(),
         restoreScheduler: any PasteRestoreScheduling = SystemPasteRestoreScheduler(),
-        errorLogger: any ErrorLogging = UnifiedErrorLogger(category: "PasteManager")
+        errorLogger: any ErrorLogging = UnifiedErrorLogger(category: "PasteManager"),
+        textTyper: any TextTyping = SystemTextTyper(),
+        remoteDesktopDetector: any RemoteDesktopDetecting = SystemRemoteDesktopDetector()
     ) {
         self.pasteboard = pasteboard
         self.commandPoster = commandPoster
         self.restoreScheduler = restoreScheduler
         self.errorLogger = errorLogger
+        self.textTyper = textTyper
+        self.remoteDesktopDetector = remoteDesktopDetector
     }
 
     @discardableResult
@@ -232,6 +253,19 @@ final class PasteManager: TextPasting {
     @discardableResult
     func copyText(_ text: String) -> PasteOutcome {
         writeText(text, destination: .clipboard)
+    }
+
+    func typeTextIfRemoteDesktop(_ text: String) -> PasteOutcome? {
+        guard remoteDesktopDetector.isRemoteDesktopFrontmost() else { return nil }
+
+        lastError = nil
+        // The clipboard is not used, but a restore left over from an earlier paste is still due.
+        flushPendingRestore()
+        guard textTyper.typeText(text) else {
+            recordError(.typingFailed, message: "Failed to type text into the remote desktop app")
+            return .cancelled
+        }
+        return .pasted
     }
 
     private func writeText(_ text: String, destination: RecordingOutputDestination) -> PasteOutcome {

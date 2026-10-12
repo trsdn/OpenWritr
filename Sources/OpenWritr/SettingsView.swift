@@ -114,6 +114,25 @@ struct SettingsView: View {
                     }
                 ))
 
+                Toggle("Type Text in Remote Desktop Apps (Experimental)", isOn: Binding(
+                    get: { viewModel.typeIntoRemoteDesktopsEnabled },
+                    set: {
+                        viewModel.typeIntoRemoteDesktopsEnabled = $0
+                        viewModel.savePreference("typeIntoRemoteDesktopsEnabled", value: $0)
+                    }
+                ))
+                .disabled(!viewModel.autoPasteEnabled)
+
+                Text(
+                    "Windows App copies your clipboard to the remote PC only after you leave its window, "
+                        + "so a paste can insert old text. When Windows App is frontmost, OpenWritr types "
+                        + "the text as keystrokes instead and leaves your clipboard untouched. "
+                        + "Check the result in a harmless text field first."
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
                 Toggle("Sound Effects", isOn: Binding(
                     get: { viewModel.soundEnabled },
                     set: {
