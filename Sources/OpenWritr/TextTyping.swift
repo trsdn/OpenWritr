@@ -178,8 +178,32 @@ struct SystemRemoteDesktopDetector: RemoteDesktopDetecting {
     }
 }
 
+/// One key press per group (Shift down, key down, key up, Shift up), so a group is never split.
 private struct EventBatch: @unchecked Sendable {
-    let events: [CGEvent]
+    let groups: [[CGEvent]]
+}
+
+enum TypingDelivery {
+    /// Posts each group in order, but only while `stillTargeted` holds before the group starts.
+    /// Returns how many whole groups were posted; a group is never posted partially.
+    @discardableResult
+    nonisolated static func deliver<Event>(
+        _ groups: [[Event]],
+        stillTargeted: () -> Bool,
+        post: (Event) -> Void,
+        pause: () -> Void
+    ) -> Int {
+        var delivered = 0
+        for group in groups {
+            guard stillTargeted() else { break }
+            for event in group {
+                post(event)
+                pause()
+            }
+            delivered += 1
+        }
+        return delivered
+    }
 }
 
 struct SystemTextTyper: TextTyping {
@@ -199,27 +223,42 @@ struct SystemTextTyper: TextTyping {
         }
         if plan.strokes.isEmpty { return text.isEmpty }
 
-        guard let source = CGEventSource(stateID: .hidSystemState),
-              let events = Self.events(for: plan.strokes, source: source)
+        guard let target = NSWorkspace.shared.frontmostApplication?.processIdentifier,
+              let source = CGEventSource(stateID: .hidSystemState),
+              let groups = Self.eventGroups(for: plan.strokes, source: source)
         else {
             typingLog.error("Could not create keyboard events for typing")
             return false
         }
 
-        // Posted off the main thread, in order, with a short pause between events.
-        let batch = EventBatch(events: events)
+        // Posted off the main thread, in order, with a short pause between events. Typing can take
+        // seconds, so it stops as soon as the target app is no longer frontmost: the rest of the
+        // transcript must never be typed into a different app.
+        let batch = EventBatch(groups: groups)
         Self.queue.async {
-            for event in batch.events {
-                event.post(tap: .cgAnnotatedSessionEventTap)
-                usleep(Self.eventSpacing)
+            let delivered = TypingDelivery.deliver(
+                batch.groups,
+                stillTargeted: { Self.isFrontmost(processIdentifier: target) },
+                post: { $0.post(tap: .cgAnnotatedSessionEventTap) },
+                pause: { usleep(Self.eventSpacing) }
+            )
+            if delivered < batch.groups.count {
+                typingLog.notice("Stopped typing after \(delivered) of \(batch.groups.count) keys: focus changed")
             }
         }
         return true
     }
 
-    private static func events(for strokes: [KeyStroke], source: CGEventSource) -> [CGEvent]? {
-        var events: [CGEvent] = []
+    private nonisolated static func isFrontmost(processIdentifier: pid_t) -> Bool {
+        DispatchQueue.main.sync {
+            NSWorkspace.shared.frontmostApplication?.processIdentifier == processIdentifier
+        }
+    }
+
+    private static func eventGroups(for strokes: [KeyStroke], source: CGEventSource) -> [[CGEvent]]? {
+        var groups: [[CGEvent]] = []
         for stroke in strokes {
+            var events: [CGEvent] = []
             let flags: CGEventFlags = stroke.shift ? .maskShift : []
             if stroke.shift {
                 guard let shiftDown = modifierEvent(source: source, down: true) else { return nil }
@@ -236,8 +275,9 @@ struct SystemTextTyper: TextTyping {
                 guard let shiftUp = modifierEvent(source: source, down: false) else { return nil }
                 events.append(shiftUp)
             }
+            groups.append(events)
         }
-        return events
+        return groups
     }
 
     /// Shift is sent as a real modifier key event, because a remote desktop client tracks modifier

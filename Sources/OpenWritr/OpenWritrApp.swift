@@ -1736,7 +1736,7 @@ final class AppViewModel {
                     title: "Typing Failed",
                     message: pasteManager.lastError?.localizedDescription
                         ?? "OpenWritr could not type the transcript.",
-                    recoverySuggestion: "The transcript is retained in OpenWritr. Check Accessibility access, then try again."
+                    recoverySuggestion: "The transcript is retained in OpenWritr. Check that your keyboard layout has keys for the text and that Accessibility access is granted, then try again."
                 ),
                 overlayMessage: "Typing failed"
             )

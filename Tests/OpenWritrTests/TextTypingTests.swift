@@ -79,6 +79,54 @@ struct TextTypingPlanTests {
     @Test func onlyTheWindowsAppIsTreatedAsRemoteDesktop() {
         #expect(SystemRemoteDesktopDetector.bundleIdentifiers == ["com.microsoft.rdc.macos"])
     }
+
+    @Test func deliveryPostsEveryGroupWhileTheTargetStaysFrontmost() {
+        var posted: [Int] = []
+        var pauses = 0
+
+        let delivered = TypingDelivery.deliver(
+            [[1, 2], [3], [4, 5, 6]],
+            stillTargeted: { true },
+            post: { posted.append($0) },
+            pause: { pauses += 1 }
+        )
+
+        #expect(delivered == 3)
+        #expect(posted == [1, 2, 3, 4, 5, 6])
+        #expect(pauses == 6)
+    }
+
+    @Test func deliveryStopsBeforeTheNextGroupWhenFocusMovesAway() {
+        var posted: [Int] = []
+        var checks = 0
+
+        let delivered = TypingDelivery.deliver(
+            [[1, 2], [3, 4], [5, 6]],
+            stillTargeted: {
+                checks += 1
+                return checks <= 2
+            },
+            post: { posted.append($0) },
+            pause: {}
+        )
+
+        #expect(delivered == 2)
+        #expect(posted == [1, 2, 3, 4], "no key of the third group may be typed into another app")
+    }
+
+    @Test func deliveryTypesNothingWhenFocusAlreadyMoved() {
+        var posted: [Int] = []
+
+        let delivered = TypingDelivery.deliver(
+            [[1, 2]],
+            stillTargeted: { false },
+            post: { posted.append($0) },
+            pause: {}
+        )
+
+        #expect(delivered == 0)
+        #expect(posted.isEmpty)
+    }
 }
 
 @MainActor
