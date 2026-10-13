@@ -5,11 +5,17 @@ import Testing
 
 @Suite("Input sample decoding")
 struct HALSampleDecodingTests {
-    private func format(bits: UInt32, flags: AudioFormatFlags, id: AudioFormatID = kAudioFormatLinearPCM)
-        -> AudioStreamBasicDescription {
+    private func format(
+        bits: UInt32,
+        flags: AudioFormatFlags,
+        id: AudioFormatID = kAudioFormatLinearPCM,
+        channels: UInt32 = 1,
+        bytesPerFrame: UInt32? = nil
+    ) -> AudioStreamBasicDescription {
         AudioStreamBasicDescription(
             mSampleRate: 48_000, mFormatID: id, mFormatFlags: flags, mBytesPerPacket: 0, mFramesPerPacket: 1,
-            mBytesPerFrame: 0, mChannelsPerFrame: 1, mBitsPerChannel: bits, mReserved: 0
+            mBytesPerFrame: bytesPerFrame ?? bits / 8 * channels, mChannelsPerFrame: channels,
+            mBitsPerChannel: bits, mReserved: 0
         )
     }
 
@@ -17,6 +23,15 @@ struct HALSampleDecodingTests {
         #expect(HALSampleKind(format(bits: 32, flags: kAudioFormatFlagIsFloat)) == .float32)
         #expect(HALSampleKind(format(bits: 16, flags: kAudioFormatFlagIsSignedInteger)) == .int16)
         #expect(HALSampleKind(format(bits: 32, flags: kAudioFormatFlagIsSignedInteger)) == .int32)
+        #expect(HALSampleKind(format(bits: 16, flags: kAudioFormatFlagIsSignedInteger, channels: 2)) == .int16)
+        let nonInterleaved = kAudioFormatFlagIsFloat | kAudioFormatFlagIsNonInterleaved
+        #expect(HALSampleKind(format(bits: 32, flags: nonInterleaved, channels: 2, bytesPerFrame: 4)) == .float32)
+    }
+
+    @Test func rejectsSamplesPaddedInsideAWiderFrame() {
+        #expect(HALSampleKind(format(bits: 16, flags: kAudioFormatFlagIsSignedInteger, bytesPerFrame: 4)) == nil)
+        #expect(HALSampleKind(format(bits: 32, flags: kAudioFormatFlagIsSignedInteger, bytesPerFrame: 8)) == nil)
+        #expect(HALSampleKind(format(bits: 16, flags: kAudioFormatFlagIsSignedInteger, bytesPerFrame: 0)) == nil)
     }
 
     @Test func rejectsUnreadableFormats() {

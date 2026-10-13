@@ -2,7 +2,7 @@
 import AudioToolbox
 import CoreAudio
 import Foundation
-import os.log
+import os
 
 private let captureLog = Logger(subsystem: "com.openwritr.app", category: "AudioEngine")
 
@@ -12,19 +12,25 @@ enum HALSampleKind: Equatable, Sendable {
     case int16
     case int32
 
-    /// Nil for formats OpenWritr cannot read: compressed, big-endian, or other bit depths.
+    /// Nil for formats OpenWritr cannot read: compressed, big-endian, other bit depths, or samples
+    /// padded or aligned inside a wider frame (the decoder assumes tightly packed samples).
     init?(_ format: AudioStreamBasicDescription) {
         guard format.mFormatID == kAudioFormatLinearPCM,
               format.mFormatFlags & kAudioFormatFlagIsBigEndian == 0
         else { return nil }
         let isFloat = format.mFormatFlags & kAudioFormatFlagIsFloat != 0
         let isSignedInteger = format.mFormatFlags & kAudioFormatFlagIsSignedInteger != 0
+        let kind: HALSampleKind
         switch (format.mBitsPerChannel, isFloat, isSignedInteger) {
-        case (32, true, _): self = .float32
-        case (16, false, true): self = .int16
-        case (32, false, true): self = .int32
+        case (32, true, _): kind = .float32
+        case (16, false, true): kind = .int16
+        case (32, false, true): kind = .int32
         default: return nil
         }
+        let isNonInterleaved = format.mFormatFlags & kAudioFormatFlagIsNonInterleaved != 0
+        let samplesPerFrame = isNonInterleaved ? 1 : Int(format.mChannelsPerFrame)
+        guard Int(format.mBytesPerFrame) == kind.bytesPerSample * samplesPerFrame else { return nil }
+        self = kind
     }
 
     var bytesPerSample: Int {
@@ -80,10 +86,11 @@ final class HALInputCapture: @unchecked Sendable {
     private let deviceLost: DeviceLostHandler
     private let queue = DispatchQueue(label: "com.openwritr.audio-input", qos: .userInteractive)
     private let lock = NSLock()
+    /// Separate from `lock` because the liveness callback runs on `queue` while `stop()` holds `lock`.
+    private let startedFlag = OSAllocatedUnfairLock(initialState: false)
 
     private var procID: AudioDeviceIOProcID?
     private var aliveListener: AudioObjectPropertyListenerBlock?
-    private var started = false
 
     init(deviceID: AudioDeviceID, handler: @escaping BufferHandler, deviceLost: @escaping DeviceLostHandler) {
         self.deviceID = deviceID
@@ -96,15 +103,13 @@ final class HALInputCapture: @unchecked Sendable {
     }
 
     var isRunning: Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        return started
+        startedFlag.withLock { $0 }
     }
 
     func start() throws {
         lock.lock()
         defer { lock.unlock() }
-        guard !started else { return }
+        guard !isRunning else { return }
 
         let format = try Self.inputStreamFormat(of: deviceID)
         guard HALSampleKind(format) != nil else {
@@ -128,7 +133,7 @@ final class HALInputCapture: @unchecked Sendable {
             procID = nil
             throw AudioEngineError.inputDeviceSelectionFailed(deviceID, startStatus)
         }
-        started = true
+        startedFlag.withLock { $0 = true }
         captureLog.notice(
             "started input capture on device \(self.deviceID) \(AudioDiagnostics.deviceFormatSummary(for: self.deviceID), privacy: .public)"
         )
@@ -138,7 +143,7 @@ final class HALInputCapture: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         guard let procID else { return }
-        started = false
+        startedFlag.withLock { $0 = false }
         removeAliveListener()
         AudioDeviceStop(deviceID, procID)
         AudioDeviceDestroyIOProcID(deviceID, procID)
@@ -194,6 +199,7 @@ final class HALInputCapture: @unchecked Sendable {
         )
         let block: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
             guard let self, !Self.isAlive(self.deviceID) else { return }
+            self.startedFlag.withLock { $0 = false }
             self.deviceLost()
         }
         if AudioObjectAddPropertyListenerBlock(deviceID, &address, queue, block) == noErr {

@@ -502,6 +502,25 @@ struct AppViewModelDictationFlowTests {
         #expect(dependencies.overlay.didShowListening)
     }
 
+    @Test func aSilentCaptureNeverAnnouncesListening() async {
+        let dependencies = makeDependencies(
+            samples: [audibleSamples(count: 16_000)],
+            transcriptions: [.success("Synthetic transcript.")]
+        )
+        dependencies.audio.firstAudioArrives = false
+        let viewModel = dependencies.makeViewModel()
+        defer { viewModel.shutdown() }
+        viewModel.soundEnabled = true
+
+        viewModel.startListening()
+        await waitUntil {
+            dependencies.errorLogger.messages.contains { $0.contains("No audio arrived") }
+        }
+
+        #expect(!isListening(viewModel.state))
+        #expect(!dependencies.overlay.didShowListening)
+    }
+
     @Test func releasingBeforeTheFirstAudioStillStopsAndTranscribes() async {
         let dependencies = makeDependencies(
             samples: [audibleSamples(count: 16_000)],
@@ -671,14 +690,15 @@ private final class FakeAudioCapture: AudioCapturing, @unchecked Sendable {
     }
 
     var holdFirstAudio = false
+    var firstAudioArrives = true
     private(set) var firstAudioWaitCount = 0
     private var firstAudioContinuation: CheckedContinuation<Void, Never>?
 
     func waitForFirstAudio(handle: CaptureHandle, timeout: Duration) async -> Bool {
         firstAudioWaitCount += 1
-        guard holdFirstAudio else { return true }
+        guard holdFirstAudio else { return firstAudioArrives }
         await withCheckedContinuation { firstAudioContinuation = $0 }
-        return true
+        return firstAudioArrives
     }
 
     func deliverFirstAudio() {

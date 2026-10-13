@@ -1470,15 +1470,7 @@ final class AppViewModel {
                   !Task.isCancelled,
                   case .preparingMicrophone = state
             else { return }
-            logAudioError("Microphone start failed: \(error.localizedDescription)")
-            if selectedInputDeviceID == nil {
-                scheduleSystemDefaultRecovery(showTransientError: true, initialError: error)
-            } else {
-                presentRuntimeError(
-                    errorPresentation(kind: .audio, title: "Microphone Preparation Failed", error: error),
-                    overlayMessage: "Microphone unavailable"
-                )
-            }
+            presentMicrophoneStartFailure(error)
 
         case .success(let handle):
             guard captureOperationID == operationID,
@@ -1509,7 +1501,7 @@ final class AppViewModel {
             // A Bluetooth headset delivers audio only after it has switched to its microphone
             // profile. The capture is already recording, so waiting loses nothing, and the tone and
             // the Listening overlay then mean that speech is actually being captured.
-            _ = await audioEngine.waitForFirstAudio(handle: handle, timeout: firstAudioTimeout)
+            let receivedAudio = await audioEngine.waitForFirstAudio(handle: handle, timeout: firstAudioTimeout)
             guard captureOperationID == operationID,
                   captureHandle?.generation == handle.generation,
                   isOperational,
@@ -1519,6 +1511,15 @@ final class AppViewModel {
             else {
                 clearPendingStartTask(ifCurrent: operationID)
                 _ = await stopCaptureOnce(handle)
+                return
+            }
+
+            // A capture that stays silent must not announce itself as listening.
+            guard receivedAudio else {
+                invalidateCaptureOperation(ifCurrent: operationID)
+                _ = await stopCaptureOnce(handle)
+                guard isOperational, !didShutdown, case .preparingMicrophone = state else { return }
+                presentMicrophoneStartFailure(.engineStartFailed("No audio arrived from the microphone."))
                 return
             }
 
@@ -1544,6 +1545,18 @@ final class AppViewModel {
             if soundEnabled {
                 soundManager.playStartSound()
             }
+        }
+    }
+
+    private func presentMicrophoneStartFailure(_ error: AudioEngineError) {
+        logAudioError("Microphone start failed: \(error.localizedDescription)")
+        if selectedInputDeviceID == nil {
+            scheduleSystemDefaultRecovery(showTransientError: true, initialError: error)
+        } else {
+            presentRuntimeError(
+                errorPresentation(kind: .audio, title: "Microphone Preparation Failed", error: error),
+                overlayMessage: "Microphone unavailable"
+            )
         }
     }
 

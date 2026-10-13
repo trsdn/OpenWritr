@@ -259,6 +259,8 @@ final class AudioEngine: AudioCapturing, @unchecked Sendable {
     private var activeGeneration: UInt64?
     private var returnedGeneration: UInt64?
     private var activeDeviceID: AudioDeviceID?
+    /// True when the active capture follows the System Default input rather than an explicit selection.
+    private var activeDeviceFollowsDefault = false
     private var recoveryAttemptCount = 0
     private var pendingConfigurationWork: DispatchWorkItem?
     private var selectedDeviceID: AudioDeviceID?
@@ -598,19 +600,28 @@ final class AudioEngine: AudioCapturing, @unchecked Sendable {
         }
 
         do {
-            guard let deviceID = activeDeviceID,
-                  try Self.isInputDeviceAvailable(deviceID)
-            else {
-                failActiveGenerationOnQueue(
-                    generation,
-                    error: .inputDeviceUnavailable(activeDeviceID ?? kAudioObjectUnknown)
-                )
-                return
+            // An explicit selection must stay available. A capture that follows the System Default
+            // moves to whatever the system resolves now, including when the old device went away.
+            let deviceID: AudioDeviceID
+            if activeDeviceFollowsDefault {
+                deviceID = try resolveCaptureDeviceOnQueue()
+            } else {
+                guard let active = activeDeviceID,
+                      try Self.isInputDeviceAvailable(active)
+                else {
+                    failActiveGenerationOnQueue(
+                        generation,
+                        error: .inputDeviceUnavailable(activeDeviceID ?? kAudioObjectUnknown)
+                    )
+                    return
+                }
+                deviceID = active
             }
 
             // A change of sample rate (for example a Bluetooth headset switching to its microphone
-            // profile) does not interrupt the input callback, so only a stopped capture needs work.
-            if capture?.isRunning == true {
+            // profile) does not interrupt the input callback, so only a stopped capture or a
+            // different resolved device needs work.
+            if deviceID == activeDeviceID, capture?.isRunning == true {
                 audioLog.debug("benign configuration change for generation \(generation)")
                 return
             }
@@ -1011,6 +1022,7 @@ final class AudioEngine: AudioCapturing, @unchecked Sendable {
                 throw AudioEngineError.captureCancelled
             }
             activeDeviceID = try resolveCaptureDeviceOnQueue()
+            activeDeviceFollowsDefault = selectedDeviceID == nil
             guard !shutdownWasRequested(), !cancellation.isCancelled, let deviceID = activeDeviceID else {
                 throw AudioEngineError.captureCancelled
             }
