@@ -162,6 +162,7 @@ final class AppViewModel {
     private let doneDisplayDuration: Duration
     private let transientErrorDisplayDuration: Duration
     private let errorLogger: any ErrorLogging
+    private let audioDiagnostics: (AudioDeviceID?) -> String
     private let applicationPresenceController: any ApplicationPresenceControlling
     private let appPresenceDefaults: UserDefaults
     private var didConfigure = false
@@ -199,7 +200,10 @@ final class AppViewModel {
         transientErrorDisplayDuration: Duration = AppViewModel.defaultTransientErrorDisplayDuration,
         applicationPresenceController: any ApplicationPresenceControlling =
             SystemApplicationPresenceController(),
-        appPresenceDefaults: UserDefaults = .standard
+        appPresenceDefaults: UserDefaults = .standard,
+        audioDiagnostics: @escaping (AudioDeviceID?) -> String = {
+            AudioDiagnostics.current(selectedDeviceID: $0).summary
+        }
     ) {
         appPresence = AppPresence.restored(
             from: appPresenceDefaults.string(forKey: "appPresence")
@@ -210,6 +214,7 @@ final class AppViewModel {
         self.pasteManager = pasteManager
         self.overlayPanel = overlayPanel
         self.errorLogger = errorLogger
+        self.audioDiagnostics = audioDiagnostics
         self.doneDisplayDuration = doneDisplayDuration
         self.transientErrorDisplayDuration = transientErrorDisplayDuration
         self.applicationPresenceController = applicationPresenceController
@@ -384,7 +389,7 @@ final class AppViewModel {
 
         state = .loading
         if case .failure(let error) = prepareAudioForStartup() {
-            errorLogger.logError("Audio initialization failed: \(error.localizedDescription)")
+            logAudioError("Audio initialization failed: \(error.localizedDescription)")
             presentInitializationError(
                 errorPresentation(kind: .audio, title: "Microphone Initialization Failed", error: error)
             )
@@ -761,6 +766,12 @@ final class AppViewModel {
         UserDefaults.standard.set(value, forKey: key)
     }
 
+    /// Audio failures are filed as public issues, so they carry a privacy-safe device summary
+    /// (transport, format, selection mode) rather than a bare Core Audio status.
+    private func logAudioError(_ message: String) {
+        errorLogger.logError("\(message) [\(audioDiagnostics(selectedInputDeviceID))]")
+    }
+
     func setAppPresence(_ presence: AppPresence) {
         guard presence != appPresence else { return }
         guard applicationPresenceController.apply(presence, activate: true) else {
@@ -840,7 +851,7 @@ final class AppViewModel {
                     state = .ready
                 }
             case .failure(let error):
-                errorLogger.logError("Input device validation failed: \(error.localizedDescription)")
+                logAudioError("Input device validation failed: \(error.localizedDescription)")
                 if device == nil {
                     scheduleSystemDefaultRecovery(showTransientError: true, initialError: error)
                 } else {
@@ -855,7 +866,7 @@ final class AppViewModel {
                 clearSelectedInputDevice()
                 inputDeviceStatusMessage = "The previous macOS system input could not be restored."
             }
-            errorLogger.logError("Input device selection failed: \(error.localizedDescription)")
+            logAudioError("Input device selection failed: \(error.localizedDescription)")
             if device == nil {
                 scheduleSystemDefaultRecovery(showTransientError: true, initialError: error)
             } else {
@@ -895,7 +906,7 @@ final class AppViewModel {
         guard !didShutdown, isOperational else { return }
 
         if let operationID = captureOperationID, captureHandle == nil {
-            errorLogger.logError(
+            logAudioError(
                 "Runtime audio failure invalidated pending capture: \(error.localizedDescription)"
             )
             pendingStartTask?.cancel()
@@ -914,7 +925,7 @@ final class AppViewModel {
         guard let operationID = captureOperationID,
               let handle = captureHandle
         else {
-            errorLogger.logError("Runtime audio failure: \(error.localizedDescription)")
+            logAudioError("Runtime audio failure: \(error.localizedDescription)")
             inputDeviceStatusMessage = "The microphone configuration failed: \(error.localizedDescription)"
             if selectedInputDeviceID == nil {
                 scheduleSystemDefaultRecovery(showTransientError: true, initialError: error)
@@ -927,7 +938,7 @@ final class AppViewModel {
             return
         }
 
-        errorLogger.logError(
+        logAudioError(
             "Runtime audio failure invalidated capture generation \(handle.generation): \(error.localizedDescription)"
         )
         activeProcessingTask?.cancel()
@@ -966,7 +977,7 @@ final class AppViewModel {
             overlayPanel.dismiss()
             state = .ready
         case .failure(let error):
-            errorLogger.logError("Microphone retry validation failed: \(error.localizedDescription)")
+            logAudioError("Microphone retry validation failed: \(error.localizedDescription)")
             if selectedInputDeviceID == nil {
                 scheduleSystemDefaultRecovery(showTransientError: true, initialError: error)
             } else {
@@ -1403,7 +1414,7 @@ final class AppViewModel {
                   !Task.isCancelled,
                   case .preparingMicrophone = state
             else { return }
-            errorLogger.logError("Microphone start failed: \(error.localizedDescription)")
+            logAudioError("Microphone start failed: \(error.localizedDescription)")
             if selectedInputDeviceID == nil {
                 scheduleSystemDefaultRecovery(showTransientError: true, initialError: error)
             } else {
