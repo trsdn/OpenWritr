@@ -6,6 +6,62 @@ import os.log
 
 private let captureLog = Logger(subsystem: "com.openwritr.app", category: "AudioEngine")
 
+/// The sample types input devices deliver through a Core Audio I/O callback.
+enum HALSampleKind: Equatable, Sendable {
+    case float32
+    case int16
+    case int32
+
+    /// Nil for formats OpenWritr cannot read: compressed, big-endian, or other bit depths.
+    init?(_ format: AudioStreamBasicDescription) {
+        guard format.mFormatID == kAudioFormatLinearPCM,
+              format.mFormatFlags & kAudioFormatFlagIsBigEndian == 0
+        else { return nil }
+        let isFloat = format.mFormatFlags & kAudioFormatFlagIsFloat != 0
+        let isSignedInteger = format.mFormatFlags & kAudioFormatFlagIsSignedInteger != 0
+        switch (format.mBitsPerChannel, isFloat, isSignedInteger) {
+        case (32, true, _): self = .float32
+        case (16, false, true): self = .int16
+        case (32, false, true): self = .int32
+        default: return nil
+        }
+    }
+
+    var bytesPerSample: Int {
+        switch self {
+        case .float32, .int32: return 4
+        case .int16: return 2
+        }
+    }
+}
+
+enum HALSampleConverter {
+    /// The first channel of an interleaved (or single-channel) buffer as Float samples in -1...1.
+    static func firstChannel(
+        of raw: UnsafeRawPointer,
+        byteCount: Int,
+        channels: Int,
+        kind: HALSampleKind
+    ) -> [Float] {
+        guard channels > 0 else { return [] }
+        let frames = byteCount / (kind.bytesPerSample * channels)
+        guard frames > 0 else { return [] }
+        var samples = [Float](repeating: 0, count: frames)
+        switch kind {
+        case .float32:
+            let source = raw.assumingMemoryBound(to: Float.self)
+            for frame in 0..<frames { samples[frame] = source[frame * channels] }
+        case .int16:
+            let source = raw.assumingMemoryBound(to: Int16.self)
+            for frame in 0..<frames { samples[frame] = Float(source[frame * channels]) / 32_768 }
+        case .int32:
+            let source = raw.assumingMemoryBound(to: Int32.self)
+            for frame in 0..<frames { samples[frame] = Float(source[frame * channels]) / 2_147_483_648 }
+        }
+        return samples
+    }
+}
+
 /// Captures audio from one input device without `AVAudioEngine`.
 ///
 /// `AVAudioEngine` couples input and output in a single I/O unit, so a capture depends on the
@@ -51,11 +107,8 @@ final class HALInputCapture: @unchecked Sendable {
         guard !started else { return }
 
         let format = try Self.inputStreamFormat(of: deviceID)
-        guard format.mFormatID == kAudioFormatLinearPCM,
-              format.mFormatFlags & kAudioFormatFlagIsFloat != 0,
-              format.mBitsPerChannel == 32
-        else {
-            throw AudioEngineError.engineStartFailed("The input device does not provide 32-bit float audio.")
+        guard HALSampleKind(format) != nil else {
+            throw AudioEngineError.engineStartFailed("The input device uses an audio format OpenWritr cannot read.")
         }
 
         var newProcID: AudioDeviceIOProcID?
@@ -95,36 +148,39 @@ final class HALInputCapture: @unchecked Sendable {
     // MARK: - Audio callback
 
     /// Runs on `queue`. Takes the first channel of the first buffer, which is the microphone for
-    /// the mono and interleaved layouts input devices use, and hands it on as a mono buffer at the
-    /// device's current sample rate (which can change while capturing, for example when a Bluetooth
-    /// headset switches to its microphone profile).
+    /// the mono and interleaved layouts input devices use, and hands it on as a mono Float32 buffer
+    /// at the device's current sample rate. The device's format is read for every callback, so a
+    /// change while capturing is followed: a Bluetooth headset switching to its microphone profile
+    /// changes the rate, and a device may change its sample type.
     private func handleInput(_ input: UnsafePointer<AudioBufferList>) {
         let list = UnsafeMutableAudioBufferListPointer(UnsafeMutablePointer(mutating: input))
         guard let first = list.first,
-              let data = first.mData?.assumingMemoryBound(to: Float.self),
+              let data = first.mData,
               first.mDataByteSize > 0,
               first.mNumberChannels > 0,
-              let sampleRate = Self.nominalSampleRate(of: deviceID), sampleRate > 0
+              let streamFormat = try? Self.inputStreamFormat(of: deviceID),
+              let kind = HALSampleKind(streamFormat)
         else { return }
 
-        let channels = Int(first.mNumberChannels)
-        let frames = Int(first.mDataByteSize) / (MemoryLayout<Float>.size * channels)
-        guard frames > 0,
+        let samples = HALSampleConverter.firstChannel(
+            of: UnsafeRawPointer(data),
+            byteCount: Int(first.mDataByteSize),
+            channels: Int(first.mNumberChannels),
+            kind: kind
+        )
+        guard !samples.isEmpty,
               let format = AVAudioFormat(
-                  commonFormat: .pcmFormatFloat32, sampleRate: sampleRate, channels: 1, interleaved: false
+                  commonFormat: .pcmFormatFloat32,
+                  sampleRate: streamFormat.mSampleRate,
+                  channels: 1,
+                  interleaved: false
               ),
-              let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(frames)),
+              let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(samples.count)),
               let destination = buffer.floatChannelData?[0]
         else { return }
 
-        if channels == 1 {
-            destination.update(from: data, count: frames)
-        } else {
-            for frame in 0..<frames {
-                destination[frame] = data[frame * channels]
-            }
-        }
-        buffer.frameLength = AVAudioFrameCount(frames)
+        destination.update(from: samples, count: samples.count)
+        buffer.frameLength = AVAudioFrameCount(samples.count)
         handler(buffer)
     }
 
@@ -171,20 +227,6 @@ final class HALInputCapture: @unchecked Sendable {
             throw AudioEngineError.inputDeviceAvailabilityCheckFailed(deviceID, status)
         }
         return format
-    }
-
-    private static func nominalSampleRate(of deviceID: AudioDeviceID) -> Float64? {
-        var address = AudioObjectPropertyAddress(
-            mSelector: kAudioDevicePropertyNominalSampleRate,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
-        var rate: Float64 = 0
-        var size = UInt32(MemoryLayout<Float64>.size)
-        guard AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, &rate) == noErr else {
-            return nil
-        }
-        return rate
     }
 
     private static func isAlive(_ deviceID: AudioDeviceID) -> Bool {

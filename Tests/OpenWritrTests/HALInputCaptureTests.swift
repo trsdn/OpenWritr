@@ -3,6 +3,70 @@ import Foundation
 import Testing
 @testable import OpenWritr
 
+@Suite("Input sample decoding")
+struct HALSampleDecodingTests {
+    private func format(bits: UInt32, flags: AudioFormatFlags, id: AudioFormatID = kAudioFormatLinearPCM)
+        -> AudioStreamBasicDescription {
+        AudioStreamBasicDescription(
+            mSampleRate: 48_000, mFormatID: id, mFormatFlags: flags, mBytesPerPacket: 0, mFramesPerPacket: 1,
+            mBytesPerFrame: 0, mChannelsPerFrame: 1, mBitsPerChannel: bits, mReserved: 0
+        )
+    }
+
+    @Test func recognisesSupportedSampleTypes() {
+        #expect(HALSampleKind(format(bits: 32, flags: kAudioFormatFlagIsFloat)) == .float32)
+        #expect(HALSampleKind(format(bits: 16, flags: kAudioFormatFlagIsSignedInteger)) == .int16)
+        #expect(HALSampleKind(format(bits: 32, flags: kAudioFormatFlagIsSignedInteger)) == .int32)
+    }
+
+    @Test func rejectsUnreadableFormats() {
+        #expect(HALSampleKind(format(bits: 24, flags: kAudioFormatFlagIsSignedInteger)) == nil)
+        #expect(HALSampleKind(format(bits: 64, flags: kAudioFormatFlagIsFloat)) == nil)
+        #expect(HALSampleKind(format(bits: 16, flags: kAudioFormatFlagIsSignedInteger | kAudioFormatFlagIsBigEndian)) == nil)
+        #expect(HALSampleKind(format(bits: 0, flags: 0, id: kAudioFormatMPEG4AAC)) == nil)
+    }
+
+    @Test func decodesMonoFloat() {
+        let input: [Float] = [0.25, -0.5, 1]
+        let output = input.withUnsafeBytes {
+            HALSampleConverter.firstChannel(of: $0.baseAddress!, byteCount: $0.count, channels: 1, kind: .float32)
+        }
+        #expect(output == input)
+    }
+
+    @Test func decodesFirstChannelOfInterleavedInt16() {
+        let input: [Int16] = [16_384, 1, -16_384, 2, -32_768, 3]
+        let output = input.withUnsafeBytes {
+            HALSampleConverter.firstChannel(of: $0.baseAddress!, byteCount: $0.count, channels: 2, kind: .int16)
+        }
+        #expect(output == [0.5, -0.5, -1])
+    }
+
+    @Test func decodesFirstChannelOfInterleavedInt32() {
+        let input: [Int32] = [1_073_741_824, 7, -1_073_741_824, 8]
+        let output = input.withUnsafeBytes {
+            HALSampleConverter.firstChannel(of: $0.baseAddress!, byteCount: $0.count, channels: 2, kind: .int32)
+        }
+        #expect(output == [0.5, -0.5])
+    }
+
+    @Test func ignoresATrailingPartialFrame() {
+        let input: [Int16] = [100, 200, 300]
+        let output = input.withUnsafeBytes {
+            HALSampleConverter.firstChannel(of: $0.baseAddress!, byteCount: $0.count, channels: 2, kind: .int16)
+        }
+        #expect(output.count == 1)
+    }
+
+    @Test func emptyInputYieldsNoSamples() {
+        let byte: UInt8 = 0
+        let output = withUnsafeBytes(of: byte) {
+            HALSampleConverter.firstChannel(of: $0.baseAddress!, byteCount: 0, channels: 1, kind: .float32)
+        }
+        #expect(output.isEmpty)
+    }
+}
+
 @Suite("Input-only capture")
 struct HALInputCaptureTests {
     @Test func startingOnAMissingDeviceFailsAndLeavesNothingRunning() {
