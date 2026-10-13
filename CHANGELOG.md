@@ -10,6 +10,7 @@ broker publication handoff fails when the section for a tag is missing or empty.
 ### Fixed
 - Dictation works with Bluetooth headsets such as AirPods Pro and AirPods Max. The microphone is now captured through an input-only Core Audio callback instead of `AVAudioEngine`, which tied the capture to the output device: a headset switching to its microphone profile stopped the engine and lost the start of the recording, and selecting the built-in microphone while a headset was the output could deliver no audio at all
 - Recording starts faster (about 70 ms instead of about 250 ms on the built-in microphone)
+- The start tone and the Listening overlay now wait for the first audio, so with a Bluetooth headset they appear when speech is actually being captured. Before, the tone played as soon as the capture was requested, while the headset was still switching its output profile, and was not heard. The capture records the whole time, so nothing is lost while waiting
 
 ### Changed
 - Microphone capture no longer depends on the output device

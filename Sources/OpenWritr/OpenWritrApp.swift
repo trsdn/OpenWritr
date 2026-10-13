@@ -161,6 +161,7 @@ final class AppViewModel {
 
     private let captureDrainIdleDuration: Duration = .milliseconds(70)
     private let captureDrainTimeout: Duration = .milliseconds(350)
+    private let firstAudioTimeout: Duration = .seconds(2)
     private let doneDisplayDuration: Duration
     private let transientErrorDisplayDuration: Duration
     private let errorLogger: any ErrorLogging
@@ -1288,7 +1289,7 @@ final class AppViewModel {
         }
     }
 
-    private func startProcessingStoppedRecording(shortcut: RecordingShortcut) {
+    func startProcessingStoppedRecording(shortcut: RecordingShortcut) {
         guard isOperational,
               !didShutdown,
               let operationID = captureOperationID
@@ -1443,6 +1444,22 @@ final class AppViewModel {
             }
 
             captureHandle = handle
+            guard captureOperationID == operationID,
+                  captureHandle?.generation == handle.generation,
+                  isOperational,
+                  !didShutdown,
+                  !Task.isCancelled,
+                  case .preparingMicrophone = state
+            else {
+                clearPendingStartTask(ifCurrent: operationID)
+                _ = await stopCaptureOnce(handle)
+                return
+            }
+
+            // A Bluetooth headset delivers audio only after it has switched to its microphone
+            // profile. The capture is already recording, so waiting loses nothing, and the tone and
+            // the Listening overlay then mean that speech is actually being captured.
+            _ = await audioEngine.waitForFirstAudio(handle: handle, timeout: firstAudioTimeout)
             guard captureOperationID == operationID,
                   captureHandle?.generation == handle.generation,
                   isOperational,

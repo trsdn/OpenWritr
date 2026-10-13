@@ -223,6 +223,10 @@ protocol AudioCapturing: AnyObject, Sendable {
     func setInputDevice(_ deviceID: AudioDeviceID?) -> Result<Void, AudioEngineError>
     func prepare() -> Result<Void, AudioEngineError>
     func startCapture() async -> Result<CaptureHandle, AudioEngineError>
+    /// Waits until the capture has delivered its first audio, which a Bluetooth headset does only
+    /// after it has switched to its microphone profile. Returns false if none arrived in time or
+    /// the capture ended; the capture itself keeps recording the whole time.
+    func waitForFirstAudio(handle: CaptureHandle, timeout: Duration) async -> Bool
     func waitForCaptureToSettle(
         handle: CaptureHandle,
         idleWindow: Duration,
@@ -231,6 +235,10 @@ protocol AudioCapturing: AnyObject, Sendable {
     ) async
     func stopCapture(handle: CaptureHandle) async -> [Float]?
     func shutdown() -> Result<Void, AudioEngineError>
+}
+
+extension AudioCapturing {
+    func waitForFirstAudio(handle: CaptureHandle, timeout: Duration) async -> Bool { true }
 }
 
 final class AudioEngine: AudioCapturing, @unchecked Sendable {
@@ -1026,6 +1034,28 @@ final class AudioEngine: AudioCapturing, @unchecked Sendable {
             cleanupGenerationOnQueue(generation, discardSamples: true, finalState: .failed(typedError))
             return .failure(typedError)
         }
+    }
+
+    func waitForFirstAudio(handle: CaptureHandle, timeout: Duration = .seconds(2)) async -> Bool {
+        let startedAt = captureClock.now
+        while captureClock.now - startedAt < timeout {
+            if Task.isCancelled { return false }
+            let snapshot = captureBuffer.snapshot()
+            guard snapshot.isCapturing, snapshot.generation == handle.generation else { return false }
+            if snapshot.sampleCount > 0 {
+                let parts = (captureClock.now - startedAt).components
+                let milliseconds = Int(parts.seconds) * 1000 + Int(parts.attoseconds / 1_000_000_000_000_000)
+                audioLog.notice("first audio for generation \(handle.generation) after \(milliseconds) ms")
+                return true
+            }
+            do {
+                try await Task.sleep(for: .milliseconds(10))
+            } catch {
+                return false
+            }
+        }
+        audioLog.notice("no audio arrived for generation \(handle.generation) within the timeout")
+        return false
     }
 
     func waitForCaptureToSettle(
