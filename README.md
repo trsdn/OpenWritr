@@ -310,7 +310,8 @@ Sources/OpenWritr/
 ├── OpenWritrApp.swift          # App entry, presence modes, state machine
 ├── MenuBarView.swift           # Menu bar dropdown UI
 ├── SettingsView.swift          # Dedicated settings window
-├── AudioEngine.swift           # AVAudioEngine, 16kHz capture, realtime-safe
+├── AudioEngine.swift           # Capture lifecycle, 16kHz conversion, device selection
+├── HALInputCapture.swift       # Input-only Core Audio capture (no AVAudioEngine)
 ├── TranscriptionManager.swift  # FluidAudio model loading + transcription
 ├── GrammarEnhancer.swift       # Cleanup provider routing and remote providers
 ├── AppleIntelligenceEnhancer.swift # macOS 26+ on-device cleanup
@@ -331,7 +332,7 @@ Sources/OpenWritr/
 - **FluidAudio** — CoreML-optimized ASR framework
 - **NVIDIA Parakeet TDT 0.6B v3** — non-autoregressive transducer, 25 languages
 - **Apple Neural Engine** — hardware-accelerated inference via CoreML
-- **AVAudioEngine** — low-latency microphone capture at 16kHz
+- **Core Audio** — low-latency, input-only microphone capture, converted to 16kHz
 - **CGEventTap** — global Fn key detection (requires Accessibility permission)
 - **AppUpdater** — signed, in-app update checks against GitHub Releases
 

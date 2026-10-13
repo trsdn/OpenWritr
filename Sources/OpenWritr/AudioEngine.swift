@@ -2,7 +2,6 @@
 import AudioToolbox
 import CoreAudio
 import Foundation
-import ObjCExceptionCatcher
 import os.log
 
 private let audioLog = Logger(subsystem: "com.openwritr.app", category: "AudioEngine")
@@ -36,8 +35,6 @@ enum AudioEngineError: LocalizedError, Sendable {
     case inputDeviceAvailabilityCheckFailed(AudioDeviceID, OSStatus)
     case inputDeviceSelectionFailed(AudioDeviceID, OSStatus)
     case deviceMonitoringFailed(OSStatus)
-    case tapInstallationFailed(String)
-    case enginePreparationFailed(String)
     case engineStartFailed(String)
     case unexpectedFailure(String)
 
@@ -57,10 +54,6 @@ enum AudioEngineError: LocalizedError, Sendable {
             return "OpenWritr could not select the requested microphone (\(Self.describe(status)))."
         case .deviceMonitoringFailed(let status):
             return "OpenWritr could not monitor microphone changes (\(Self.describe(status)))."
-        case .tapInstallationFailed(let reason):
-            return "OpenWritr could not access microphone audio: \(reason)"
-        case .enginePreparationFailed(let reason):
-            return "OpenWritr could not prepare microphone capture: \(reason)"
         case .engineStartFailed(let reason):
             return "OpenWritr could not start microphone capture: \(reason)"
         case .unexpectedFailure(let reason):
@@ -72,7 +65,7 @@ enum AudioEngineError: LocalizedError, Sendable {
         switch self {
         case .captureCancelled:
             return nil
-        case .tapInstallationFailed, .enginePreparationFailed, .engineStartFailed:
+        case .engineStartFailed:
             return "Check Microphone access in System Settings > Privacy & Security, then retry."
         case .inputDeviceAvailabilityCheckFailed:
             return "Retry the microphone change."
@@ -251,9 +244,7 @@ final class AudioEngine: AudioCapturing, @unchecked Sendable {
     private let callbackLock = NSLock()
 
     private var lifecycleState: AudioEngineLifecycleState = .idle
-    private var engine: AVAudioEngine?
-    private var isRunning = false
-    private var tapInstalled = false
+    private var capture: HALInputCapture?
     private var isShuttingDown = false
     private var shutdownRequested = false
     private var nextGeneration: UInt64 = 0
@@ -263,7 +254,6 @@ final class AudioEngine: AudioCapturing, @unchecked Sendable {
     private var recoveryAttemptCount = 0
     private var pendingConfigurationWork: DispatchWorkItem?
     private var selectedDeviceID: AudioDeviceID?
-    private var configObserver: Any?
     private var deviceListListenerBlock: AudioObjectPropertyListenerBlock?
     private var defaultInputListenerBlock: AudioObjectPropertyListenerBlock?
     private var devicesChangedCallback: (@Sendable () -> Void)?
@@ -461,114 +451,41 @@ final class AudioEngine: AudioCapturing, @unchecked Sendable {
         audioLog.debug("lifecycle \(stateName, privacy: .public), generation \(generationText, privacy: .public)")
     }
 
-    private func constructFreshEngineOnQueue(generation: UInt64) throws {
-        guard case .starting = lifecycleState else {
-            throw AudioEngineError.captureCancelled
-        }
-        let newEngine = AVAudioEngine()
-        let tapFormat = try bindSelectedInputDeviceOnQueue(to: newEngine)
-        engine = newEngine
-        try installTapOnQueue(engine: newEngine, generation: generation, format: tapFormat)
+    private func startInputCaptureOnQueue(deviceID: AudioDeviceID, generation: UInt64) throws {
+        let newCapture = HALInputCapture(
+            deviceID: deviceID,
+            handler: makeBufferHandler(generation: generation),
+            deviceLost: { [weak self] in
+                self?.lifecycleQueue.async { [weak self] in
+                    self?.scheduleConfigurationDecisionOnQueue(generation: generation)
+                }
+            }
+        )
+        try newCapture.start()
+        capture = newCapture
     }
 
-    private func bindSelectedInputDeviceOnQueue(to engine: AVAudioEngine) throws -> AVAudioFormat? {
-        guard let selectedDeviceID else { return nil }
-        guard try Self.isInputDeviceAvailable(selectedDeviceID) else {
-            throw AudioEngineError.inputDeviceUnavailable(selectedDeviceID)
-        }
-        guard let audioUnit = engine.inputNode.audioUnit else {
-            throw AudioEngineError.inputDeviceSelectionFailed(
-                selectedDeviceID,
-                kAudio_ParamError
-            )
-        }
-
-        var deviceID = selectedDeviceID
-        let status = AudioUnitSetProperty(
-            audioUnit,
-            kAudioOutputUnitProperty_CurrentDevice,
-            kAudioUnitScope_Global,
-            0,
-            &deviceID,
-            UInt32(MemoryLayout<AudioDeviceID>.size)
-        )
-        guard status == noErr else {
-            throw AudioEngineError.inputDeviceSelectionFailed(selectedDeviceID, status)
-        }
-
-        var streamDescription = AudioStreamBasicDescription()
-        var streamDescriptionSize = UInt32(MemoryLayout<AudioStreamBasicDescription>.size)
-        let hardwareFormatStatus = AudioUnitGetProperty(
-            audioUnit,
-            kAudioUnitProperty_StreamFormat,
-            kAudioUnitScope_Input,
-            1,
-            &streamDescription,
-            &streamDescriptionSize
-        )
-        guard hardwareFormatStatus == noErr,
-              streamDescription.mSampleRate > 0,
-              streamDescription.mChannelsPerFrame > 0
-        else {
-            throw AudioEngineError.inputDeviceAvailabilityCheckFailed(
-                selectedDeviceID,
-                hardwareFormatStatus
-            )
-        }
-
-        let clientFormatStatus = AudioUnitSetProperty(
-            audioUnit,
-            kAudioUnitProperty_StreamFormat,
-            kAudioUnitScope_Output,
-            1,
-            &streamDescription,
-            streamDescriptionSize
-        )
-        guard clientFormatStatus == noErr,
-              let format = AVAudioFormat(streamDescription: &streamDescription)
-        else {
-            throw AudioEngineError.inputDeviceSelectionFailed(
-                selectedDeviceID,
-                clientFormatStatus
-            )
-        }
-        audioLog.notice(
-            "bound capture input directly to device \(selectedDeviceID) at \(format.sampleRate) Hz"
-        )
-        return format
+    private func stopInputCaptureOnQueue() {
+        capture?.stop()
+        capture = nil
     }
 
-    private func recoverEngineOnQueue(generation: UInt64) throws {
+    /// Moves the running capture to the device the system now resolves, for example when the
+    /// System Default input changes while recording.
+    private func recoverCaptureOnQueue(generation: UInt64, deviceID: AudioDeviceID) throws {
         guard case .recovering = lifecycleState else {
             throw AudioEngineError.captureCancelled
         }
-        removeConfigObserverOnQueue()
-        stopEngineOnQueue()
+        stopInputCaptureOnQueue()
         guard !shutdownWasRequested() else {
             throw AudioEngineError.captureCancelled
         }
-        activeDeviceID = try resolveCaptureDeviceOnQueue()
-        guard !shutdownWasRequested() else {
-            throw AudioEngineError.captureCancelled
-        }
-        let recoveredEngine = AVAudioEngine()
-        let tapFormat = try bindSelectedInputDeviceOnQueue(to: recoveredEngine)
-        engine = recoveredEngine
-        try installTapOnQueue(
-            engine: recoveredEngine,
-            generation: generation,
-            format: tapFormat
-        )
-        try prepareAndStartEngineOnQueue(recoveredEngine)
-        addConfigObserverOnQueue(engine: recoveredEngine, generation: generation)
+        activeDeviceID = deviceID
+        try startInputCaptureOnQueue(deviceID: deviceID, generation: generation)
     }
 
-    private func installTapOnQueue(
-        engine: AVAudioEngine,
-        generation: UInt64,
-        format: AVAudioFormat? = nil
-    ) throws {
-        let inputNode = engine.inputNode
+    /// Converts each buffer to mono 16 kHz, appends it to the capture, and reports its level.
+    private func makeBufferHandler(generation: UInt64) -> HALInputCapture.BufferHandler {
         let state = captureBuffer
         let target = desiredFormat
         let clock = captureClock
@@ -578,7 +495,7 @@ final class AudioEngine: AudioCapturing, @unchecked Sendable {
             self.notifyAudioLevel(Self.rawRMSLevel(samples), generation: generation)
         }
 
-        let tapBlock: AVAudioNodeTapBlock = { buffer, _ in
+        return { buffer in
             let bufferFormat = buffer.format
             if bufferFormat.sampleRate == target.sampleRate && bufferFormat.channelCount == 1 {
                 guard let channel = buffer.floatChannelData else { return }
@@ -614,69 +531,6 @@ final class AudioEngine: AudioCapturing, @unchecked Sendable {
             state.append(samples, generation: generation, at: clock.now)
             levelHandler(samples)
         }
-
-        var tapError: NSError?
-        guard ObjCTryCatch({
-            inputNode.installTap(onBus: 0, bufferSize: 4096, format: format, block: tapBlock)
-        }, &tapError) else {
-            throw AudioEngineError.tapInstallationFailed(
-                tapError?.localizedDescription ?? "The audio input rejected the capture format."
-            )
-        }
-        tapInstalled = true
-    }
-
-    private func prepareAndStartEngineOnQueue(_ engine: AVAudioEngine) throws {
-        guard !shutdownWasRequested() else {
-            throw AudioEngineError.captureCancelled
-        }
-        var preparationError: NSError?
-        guard ObjCTryCatch({ engine.prepare() }, &preparationError) else {
-            throw AudioEngineError.enginePreparationFailed(
-                preparationError?.localizedDescription ?? "The audio engine rejected its configuration."
-            )
-        }
-
-        guard !shutdownWasRequested() else {
-            throw AudioEngineError.captureCancelled
-        }
-        do {
-            try engine.start()
-            isRunning = true
-        } catch {
-            throw AudioEngineError.engineStartFailed(error.localizedDescription)
-        }
-    }
-
-    private func stopEngineOnQueue() {
-        guard let engine else {
-            isRunning = false
-            tapInstalled = false
-            return
-        }
-        if isRunning || engine.isRunning {
-            var stopError: NSError?
-            if !ObjCTryCatch({ engine.stop() }, &stopError) {
-                audioLog.error(
-                    "failed to stop audio engine: \(stopError?.localizedDescription ?? "unknown error", privacy: .public)"
-                )
-            }
-        }
-        isRunning = false
-        removeInstalledTapOnQueue()
-        self.engine = nil
-    }
-
-    private func removeInstalledTapOnQueue() {
-        guard tapInstalled, let engine else { return }
-        tapInstalled = false
-        let inputNode = engine.inputNode
-        var removeError: NSError?
-        if !ObjCTryCatch({ inputNode.removeTap(onBus: 0) }, &removeError) {
-            audioLog.error(
-                "failed to remove audio tap: \(removeError?.localizedDescription ?? "unknown error", privacy: .public)"
-            )
-        }
     }
 
     private func cleanupGenerationOnQueue(
@@ -691,8 +545,7 @@ final class AudioEngine: AudioCapturing, @unchecked Sendable {
                 audioLog.notice("discarded capture generation \(generation)")
             }
         }
-        removeConfigObserverOnQueue()
-        stopEngineOnQueue()
+        stopInputCaptureOnQueue()
         if activeGeneration == generation {
             activeGeneration = nil
             activeDeviceID = nil
@@ -707,26 +560,6 @@ final class AudioEngine: AudioCapturing, @unchecked Sendable {
     }
 
     // MARK: - Configuration changes
-
-    private func addConfigObserverOnQueue(engine: AVAudioEngine, generation: UInt64) {
-        removeConfigObserverOnQueue()
-        configObserver = NotificationCenter.default.addObserver(
-            forName: .AVAudioEngineConfigurationChange,
-            object: engine,
-            queue: nil
-        ) { [weak self] _ in
-            self?.lifecycleQueue.async { [weak self] in
-                self?.scheduleConfigurationDecisionOnQueue(generation: generation)
-            }
-        }
-    }
-
-    private func removeConfigObserverOnQueue() {
-        if let configObserver {
-            NotificationCenter.default.removeObserver(configObserver)
-            self.configObserver = nil
-        }
-    }
 
     private func scheduleConfigurationDecisionOnQueue(generation: UInt64) {
         guard !isShuttingDown, activeGeneration == generation else { return }
@@ -767,7 +600,9 @@ final class AudioEngine: AudioCapturing, @unchecked Sendable {
                 return
             }
 
-            if let engine, isRunning, engine.isRunning {
+            // A change of sample rate (for example a Bluetooth headset switching to its microphone
+            // profile) does not interrupt the input callback, so only a stopped capture needs work.
+            if capture?.isRunning == true {
                 audioLog.debug("benign configuration change for generation \(generation)")
                 return
             }
@@ -775,14 +610,14 @@ final class AudioEngine: AudioCapturing, @unchecked Sendable {
             guard recoveryAttemptCount < Self.maximumRecoveryAttempts else {
                 failActiveGenerationOnQueue(
                     generation,
-                    error: .engineStartFailed("The audio engine stopped repeatedly during microphone recovery.")
+                    error: .engineStartFailed("The microphone stopped repeatedly during recovery.")
                 )
                 return
             }
 
             recoveryAttemptCount += 1
             transitionOnQueue(to: .recovering, generation: generation)
-            try recoverEngineOnQueue(generation: generation)
+            try recoverCaptureOnQueue(generation: generation, deviceID: deviceID)
             guard !shutdownWasRequested(), activeGeneration == generation else {
                 cleanupGenerationOnQueue(generation, discardSamples: true, finalState: .idle)
                 return
@@ -1168,16 +1003,14 @@ final class AudioEngine: AudioCapturing, @unchecked Sendable {
                 throw AudioEngineError.captureCancelled
             }
             activeDeviceID = try resolveCaptureDeviceOnQueue()
-            try constructFreshEngineOnQueue(generation: generation)
-            guard !shutdownWasRequested(), !cancellation.isCancelled, let engine else {
+            guard !shutdownWasRequested(), !cancellation.isCancelled, let deviceID = activeDeviceID else {
                 throw AudioEngineError.captureCancelled
             }
             captureBuffer.activate(generation: generation)
-            try prepareAndStartEngineOnQueue(engine)
+            try startInputCaptureOnQueue(deviceID: deviceID, generation: generation)
             guard !shutdownWasRequested(), !cancellation.isCancelled else {
                 throw AudioEngineError.captureCancelled
             }
-            addConfigObserverOnQueue(engine: engine, generation: generation)
             transitionOnQueue(to: .capturing, generation: generation)
             audioLog.notice("capture generation \(generation) started on device \(self.activeDeviceID ?? 0)")
             return .success(CaptureHandle(generation: generation))
@@ -1245,8 +1078,7 @@ final class AudioEngine: AudioCapturing, @unchecked Sendable {
                 transitionOnQueue(to: .stopping, generation: handle.generation)
                 pendingConfigurationWork?.cancel()
                 pendingConfigurationWork = nil
-                removeConfigObserverOnQueue()
-                stopEngineOnQueue()
+                stopInputCaptureOnQueue()
                 activeGeneration = nil
                 returnedGeneration = nil
                 activeDeviceID = nil
@@ -1277,8 +1109,7 @@ final class AudioEngine: AudioCapturing, @unchecked Sendable {
             returnedGeneration = nil
             activeDeviceID = nil
             recoveryAttemptCount = 0
-            removeConfigObserverOnQueue()
-            stopEngineOnQueue()
+            stopInputCaptureOnQueue()
             removeDeviceListListenersOnQueue()
             selectedDeviceID = nil
             transitionOnQueue(to: .idle)
@@ -1307,10 +1138,9 @@ final class AudioEngine: AudioCapturing, @unchecked Sendable {
         lifecycleQueue.async { [weak self] in
             guard let self,
                   self.returnedGeneration == handle.generation,
-                  let engine = self.engine
+                  let capture = self.capture
             else { return }
-            engine.stop()
-            self.isRunning = false
+            capture.stop()
             self.scheduleConfigurationDecisionOnQueue(generation: handle.generation)
         }
     }

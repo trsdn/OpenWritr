@@ -5,6 +5,15 @@ All notable changes to OpenWritr will be documented in this file.
 Each release's notes on GitHub are generated from its section here, and the
 broker publication handoff fails when the section for a tag is missing or empty.
 
+## [1.7.4] — 2026-10-13
+
+### Fixed
+- Dictation works with Bluetooth headsets such as AirPods Pro and AirPods Max. The microphone is now captured through an input-only Core Audio callback instead of `AVAudioEngine`, which tied the capture to the output device: a headset switching to its microphone profile stopped the engine and lost the start of the recording, and selecting the built-in microphone while a headset was the output could deliver no audio at all
+- Recording starts faster (about 70 ms instead of about 250 ms on the built-in microphone)
+
+### Changed
+- Microphone capture no longer depends on the output device
+
 ## [1.7.3] — 2026-10-13
 
 ### Fixed

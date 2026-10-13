@@ -79,6 +79,13 @@ struct AudioDiagnostics: Equatable, Sendable {
         )
     }
 
+    /// Transport, channels and sample rate of one device, for logs. Never includes its name or UID.
+    static func deviceFormatSummary(for deviceID: AudioDeviceID) -> String {
+        let rate = (property(of: deviceID, selector: kAudioDevicePropertyNominalSampleRate) as Float64?)
+            .map { String(Int($0.rounded())) } ?? "unknown"
+        return "transport=\(transportName(of: deviceID)) channels=\(inputChannelCount(of: deviceID)) rate=\(rate)"
+    }
+
     static func transportName(forCode code: UInt32) -> String {
         switch code {
         case kAudioDeviceTransportTypeBuiltIn: return "built-in"

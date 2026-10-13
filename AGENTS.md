@@ -51,7 +51,7 @@ Full flow:
 
 Key files:
 
-- `AudioEngine.swift` wraps `AVAudioEngine`. It follows System Default route changes with bounded recovery and binds explicit microphone selections directly to the capture input audio unit.
+- `AudioEngine.swift` captures the microphone through `HALInputCapture` (a Core Audio input callback on the chosen device), not `AVAudioEngine`. `AVAudioEngine` couples input and output in one I/O unit, so a Bluetooth headset switching profile stopped the capture and a built-in microphone selected while a headset was the output delivered no samples. The capture follows the System Default at start and, with an explicit selection, uses that device; a sample-rate change does not interrupt it, and only a stopped capture is rebuilt, with bounded retries.
 - `GrammarEnhancer.swift` spawns the `copilot` CLI as a subprocess; `EnhancedModel` holds the evaluated cleanup models and loads model-specific prompt profiles.
 - `OverlayPanel.swift` is a borderless `NSPanel` with one waveform design shared by `.listening`, `.transcribing`, `.enhancing`, `.done`, and `.error`.
 - `UpdateManager.swift` wraps [AppUpdater](https://github.com/mxcl/AppUpdater) to check GitHub Releases, validate Developer ID signatures, and install and relaunch in place.
