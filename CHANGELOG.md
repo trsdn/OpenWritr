@@ -5,6 +5,19 @@ All notable changes to OpenWritr will be documented in this file.
 Each release's notes on GitHub are generated from its section here, and the
 broker publication handoff fails when the section for a tag is missing or empty.
 
+## [1.7.4] — 2026-10-13
+
+### Fixed
+- Dictation works with Bluetooth headsets such as AirPods Pro and AirPods Max. The microphone is now captured through an input-only Core Audio callback instead of `AVAudioEngine`, which tied the capture to the output device: a headset switching to its microphone profile stopped the engine and lost the start of the recording, and selecting the built-in microphone while a headset was the output could deliver no audio at all
+- Recording starts faster (about 70 ms instead of about 250 ms on the built-in microphone)
+- The start tone and the Listening overlay now wait for the first audio, so with a Bluetooth headset they appear when speech is actually being captured. Before, the tone played as soon as the capture was requested, while the headset was still switching its output profile, and was not heard. The capture records the whole time, so nothing is lost while waiting
+
+### Added
+- **Keep Last Dictation** in the menu bar menu. When it is on, OpenWritr keeps the text of the last dictation in memory only, never on disk or in the logs, and **Paste Last Dictation** pastes it again into the app in front. Use it when a long dictation could not be pasted because the target window was gone. It follows the same rules as a fresh dictation (typing in Windows App when that setting is on), pastes even with Auto-Paste off, and applies to clipboard-only recordings too. Turning the setting off or quitting discards the text. Off by default
+
+### Changed
+- Microphone capture no longer depends on the output device
+
 ## [1.7.3] — 2026-10-13
 
 ### Fixed

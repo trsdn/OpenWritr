@@ -22,6 +22,111 @@ struct AppViewModelDictationFlowTests {
         #expect(viewModel.state.isReady)
     }
 
+    @Test func lastDictationIsNotKeptUnlessEnabled() async {
+        let dependencies = makeDependencies(
+            samples: [audibleSamples(count: 16_000)],
+            transcriptions: [.success("Synthetic transcript.")]
+        )
+        let viewModel = dependencies.makeViewModel()
+        defer { viewModel.shutdown() }
+
+        await recordAndStop(viewModel)
+        await viewModel.pasteLastDictation()
+
+        #expect(viewModel.lastDictation == nil)
+        #expect(!viewModel.canPasteLastDictation)
+        #expect(dependencies.paster.pastedTexts == ["Synthetic transcript."])
+    }
+
+    @Test(arguments: [false, true])
+    func keptDictationCanBePastedAgain(autoPasteEnabled: Bool) async {
+        let dependencies = makeDependencies(
+            samples: [audibleSamples(count: 16_000)],
+            transcriptions: [.success("Synthetic transcript.")]
+        )
+        let viewModel = dependencies.makeViewModel()
+        defer { viewModel.shutdown() }
+        viewModel.keepLastDictationEnabled = true
+        viewModel.autoPasteEnabled = autoPasteEnabled
+
+        await recordAndStop(viewModel)
+        #expect(viewModel.canPasteLastDictation)
+        await viewModel.pasteLastDictation()
+
+        let expectedFirstPaste = autoPasteEnabled ? ["Synthetic transcript."] : []
+        #expect(dependencies.paster.pastedTexts == expectedFirstPaste + ["Synthetic transcript."])
+        #expect(viewModel.state.isReady)
+    }
+
+    @Test func dictationIsKeptWhenThePasteFailed() async {
+        let dependencies = makeDependencies(
+            samples: [audibleSamples(count: 16_000)],
+            transcriptions: [.success("Synthetic transcript.")],
+            pasteOutcomes: [.cancelled]
+        )
+        let viewModel = dependencies.makeViewModel()
+        defer { viewModel.shutdown() }
+        viewModel.keepLastDictationEnabled = true
+
+        await recordAndStop(viewModel)
+        #expect(dependencies.paster.pastedTexts.isEmpty)
+        viewModel.dismissRuntimeError()
+        await waitUntil { viewModel.state.isReady }
+        await viewModel.pasteLastDictation()
+
+        #expect(dependencies.paster.pastedTexts == ["Synthetic transcript."])
+    }
+
+    @Test func turningTheSettingOffDiscardsTheKeptDictation() async {
+        let dependencies = makeDependencies(
+            samples: [audibleSamples(count: 16_000)],
+            transcriptions: [.success("Synthetic transcript.")]
+        )
+        let viewModel = dependencies.makeViewModel()
+        defer { viewModel.shutdown() }
+        viewModel.setKeepLastDictation(true)
+        defer { viewModel.setKeepLastDictation(false) }
+
+        await recordAndStop(viewModel)
+        #expect(viewModel.lastDictation == "Synthetic transcript.")
+        viewModel.setKeepLastDictation(false)
+
+        #expect(viewModel.lastDictation == nil)
+        #expect(!viewModel.canPasteLastDictation)
+    }
+
+    @Test func shuttingDownDiscardsTheKeptDictation() async {
+        let dependencies = makeDependencies(
+            samples: [audibleSamples(count: 16_000)],
+            transcriptions: [.success("Synthetic transcript.")]
+        )
+        let viewModel = dependencies.makeViewModel()
+        viewModel.keepLastDictationEnabled = true
+
+        await recordAndStop(viewModel)
+        viewModel.shutdown()
+
+        #expect(viewModel.lastDictation == nil)
+    }
+
+    @Test(arguments: [false, true])
+    func clipboardOnlyDictationIsKeptForPastingToo(autoPasteEnabled: Bool) async {
+        let dependencies = makeDependencies(
+            samples: [audibleSamples(count: 16_000)],
+            transcriptions: [.success("Synthetic copied transcript.")]
+        )
+        let viewModel = dependencies.makeViewModel()
+        defer { viewModel.shutdown() }
+        viewModel.keepLastDictationEnabled = true
+        viewModel.autoPasteEnabled = autoPasteEnabled
+
+        await recordAndStop(viewModel, outputDestination: .clipboard)
+        await viewModel.pasteLastDictation()
+
+        #expect(dependencies.paster.copiedTexts == ["Synthetic copied transcript."])
+        #expect(dependencies.paster.pastedTexts == ["Synthetic copied transcript."])
+    }
+
     @Test(arguments: [false, true])
     func clipboardOnlyCopiesWithoutPasting(autoPasteEnabled: Bool) async {
         let dependencies = makeDependencies(
@@ -375,6 +480,68 @@ struct AppViewModelDictationFlowTests {
         await waitUntil { viewModel.state.isReady }
     }
 
+    @Test func listeningWaitsForTheFirstAudioBeforeShowingTheOverlay() async {
+        let dependencies = makeDependencies(
+            samples: [audibleSamples(count: 16_000)],
+            transcriptions: [.success("Synthetic transcript.")]
+        )
+        dependencies.audio.holdFirstAudio = true
+        let viewModel = dependencies.makeViewModel()
+        defer { viewModel.shutdown() }
+        viewModel.soundEnabled = false
+
+        viewModel.startListening()
+        await waitUntil { dependencies.audio.firstAudioWaitCount == 1 }
+
+        #expect(!isListening(viewModel.state), "A Bluetooth headset may not deliver audio yet")
+        #expect(!dependencies.overlay.didShowListening)
+
+        dependencies.audio.deliverFirstAudio()
+        await waitUntil { isListening(viewModel.state) }
+
+        #expect(dependencies.overlay.didShowListening)
+    }
+
+    @Test func aSilentCaptureNeverAnnouncesListening() async {
+        let dependencies = makeDependencies(
+            samples: [audibleSamples(count: 16_000)],
+            transcriptions: [.success("Synthetic transcript.")]
+        )
+        dependencies.audio.firstAudioArrives = false
+        let viewModel = dependencies.makeViewModel()
+        defer { viewModel.shutdown() }
+        viewModel.soundEnabled = true
+
+        viewModel.startListening()
+        await waitUntil {
+            dependencies.errorLogger.messages.contains { $0.contains("No audio arrived") }
+        }
+
+        #expect(!isListening(viewModel.state))
+        #expect(!dependencies.overlay.didShowListening)
+    }
+
+    @Test func releasingBeforeTheFirstAudioStillStopsAndTranscribes() async {
+        let dependencies = makeDependencies(
+            samples: [audibleSamples(count: 16_000)],
+            transcriptions: [.success("Synthetic transcript.")]
+        )
+        dependencies.audio.holdFirstAudio = true
+        let viewModel = dependencies.makeViewModel()
+        defer { viewModel.shutdown() }
+        viewModel.soundEnabled = false
+
+        viewModel.startListening()
+        await waitUntil { dependencies.audio.firstAudioWaitCount == 1 }
+        viewModel.startProcessingStoppedRecording(shortcut: RecordingShortcut())
+        dependencies.audio.deliverFirstAudio()
+        await waitUntil { dependencies.paster.pastedTexts.count == 1 }
+        await waitUntil { viewModel.state.isReady }
+
+        #expect(dependencies.paster.pastedTexts == ["Synthetic transcript."])
+        #expect(viewModel.state.isReady)
+    }
+
     private func recordAndStop(
         _ viewModel: AppViewModel,
         mode: RecordingShortcutMode = .normal,
@@ -474,6 +641,7 @@ private struct DictationDependencies {
             errorLogger: errorLogger,
             startsOperational: true,
             doneDisplayDuration: .milliseconds(1),
+            pasteAgainDelay: .milliseconds(1),
             transientErrorDisplayDuration: transientErrorDisplayDuration,
             audioDiagnostics: { selected in
                 "selection=\(selected.map { "explicit:\($0)" } ?? "system-default") synthetic"
@@ -519,6 +687,23 @@ private final class FakeAudioCapture: AudioCapturing, @unchecked Sendable {
     func startCapture() async -> Result<CaptureHandle, AudioEngineError> {
         nextGeneration += 1
         return .success(CaptureHandle(generation: nextGeneration))
+    }
+
+    var holdFirstAudio = false
+    var firstAudioArrives = true
+    private(set) var firstAudioWaitCount = 0
+    private var firstAudioContinuation: CheckedContinuation<Void, Never>?
+
+    func waitForFirstAudio(handle: CaptureHandle, timeout: Duration) async -> Bool {
+        firstAudioWaitCount += 1
+        guard holdFirstAudio else { return firstAudioArrives }
+        await withCheckedContinuation { firstAudioContinuation = $0 }
+        return firstAudioArrives
+    }
+
+    func deliverFirstAudio() {
+        firstAudioContinuation?.resume()
+        firstAudioContinuation = nil
     }
 
     func waitForCaptureToSettle(
@@ -664,6 +849,13 @@ private final class FakeOverlayPresenter: OverlayPresenting {
     var didShowCopied: Bool {
         shownStates.contains {
             if case .copied = $0 { return true }
+            return false
+        }
+    }
+
+    var didShowListening: Bool {
+        shownStates.contains {
+            if case .listening = $0 { return true }
             return false
         }
     }
