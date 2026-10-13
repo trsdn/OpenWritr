@@ -80,6 +80,14 @@ Clipboard-only works even with Auto-Paste off. Successful copying intentionally 
 
 Normal Auto-Paste restores the original clipboard, including an empty clipboard, unless another application or the user has changed it. Output errors are shown explicitly; delayed restoration errors appear as a dismissible menu warning. With Auto-Paste off, standard recordings remain inside OpenWritr and are not copied automatically.
 
+### Remote desktop apps (experimental)
+
+Windows App copies the Mac clipboard to the remote PC only after you leave its window, even with clipboard redirection set to Bidirectional. A paste into the remote session can therefore insert old text. Turn on **Type Text in Remote Desktop Apps (Experimental)** in Settings: while Windows App is frontmost, Auto-Paste then types the text key by key instead of pasting, and your clipboard is not touched. It applies only to Windows App (`com.microsoft.rdc.macos`), only with Auto-Paste on, and not to clipboard-only recordings (Option), which still copy.
+
+Windows App sends physical key codes and ignores the Unicode text of a key event, so OpenWritr presses the keys that produce each character on your **current Mac keyboard layout**. The remote PC must use the same keyboard layout, otherwise accents and symbols come out wrong. Only characters on the two base layers (no modifier, Shift) are typed: typographic quotes, dashes, and ellipses are replaced by their plain equivalents, and characters that need Option (such as `@`, `€`, or brackets on a German layout), dead keys, or emoji have no equivalent on the remote PC's layout and are skipped. The number of skipped characters is logged; the full text stays available in OpenWritr. Typing runs in the background and stops as soon as another app becomes frontmost, so the rest of the text is never typed into a different app.
+
+The option is off by default. It was verified by the maintainer against a real Windows 365 Cloud PC session through Windows App 11.4.0 with matching German keyboard layouts; other remote layouts, clients, and character sets have not been tested. Test it in a harmless text field first. Typing needs the same Accessibility permission as pasting.
+
 ## Install
 
 Download the latest signed app from [Releases](https://github.com/trsdn/OpenWritr/releases), unzip it, and move `OpenWritr.app` to `/Applications`.

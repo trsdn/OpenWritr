@@ -128,6 +128,8 @@ final class AppViewModel {
     var debugModeEnabled: Bool = false
     var soundEnabled: Bool = true
     var autoPasteEnabled: Bool = true
+    /// Experimental: type instead of paste when a remote desktop app is frontmost.
+    var typeIntoRemoteDesktopsEnabled: Bool = false
     var launchAtLogin: Bool = false
     var appPresence: AppPresence
     var hotkeyChoice: HotkeyChoice = .fn
@@ -483,6 +485,9 @@ final class AppViewModel {
         }
         if defaults.object(forKey: "autoPasteEnabled") != nil {
             autoPasteEnabled = defaults.bool(forKey: "autoPasteEnabled")
+        }
+        if defaults.object(forKey: "typeIntoRemoteDesktopsEnabled") != nil {
+            typeIntoRemoteDesktopsEnabled = defaults.bool(forKey: "typeIntoRemoteDesktopsEnabled")
         }
         if let raw = defaults.string(forKey: "hotkeyChoice"),
            let choice = HotkeyChoice(rawValue: raw) {
@@ -1671,7 +1676,8 @@ final class AppViewModel {
         if pasteManager.outputText(
             text,
             destination: outputDestination,
-            autoPasteEnabled: autoPasteEnabled
+            autoPasteEnabled: autoPasteEnabled,
+            typeIntoRemoteDesktops: typeIntoRemoteDesktopsEnabled
         ) == .cancelled {
             if let (operationID, _) = captureOperation {
                 clearCaptureOperation(ifCurrent: operationID)
@@ -1720,6 +1726,19 @@ final class AppViewModel {
                     recoverySuggestion: "The transcript is retained in OpenWritr. Check the clipboard, then try again."
                 ),
                 overlayMessage: "Clipboard failed"
+            )
+            return
+        }
+        if pasteManager.lastError == .typingFailed {
+            presentRuntimeError(
+                AppErrorPresentation(
+                    kind: .paste,
+                    title: "Typing Failed",
+                    message: pasteManager.lastError?.localizedDescription
+                        ?? "OpenWritr could not type the transcript.",
+                    recoverySuggestion: "The transcript is retained in OpenWritr. Check that your keyboard layout has keys for the text and that Accessibility access is granted, then try again."
+                ),
+                overlayMessage: "Typing failed"
             )
             return
         }

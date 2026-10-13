@@ -5,7 +5,7 @@ All notable changes to OpenWritr will be documented in this file.
 Each release's notes on GitHub are generated from its section here, and the
 broker publication handoff fails when the section for a tag is missing or empty.
 
-## [1.7.3] — 2026-10-10
+## [1.7.3] — 2026-10-13
 
 ### Fixed
 - Switching between Dock Only and Dock and Menu Bar no longer fails. macOS refuses to set an activation policy that is already in effect, and both Dock modes use the same one, so the change was rejected
@@ -13,6 +13,9 @@ broker publication handoff fails when the section for a tag is missing or empty.
 
 ### Changed
 - Microphone error logs now include a privacy-safe device summary (how the microphone was chosen, transport such as Bluetooth or USB, channels, sample rate, whether another app is using it, and microphone permission) so Core Audio failures can be diagnosed without asking for details. Device names and identifiers are never logged
+
+### Added
+- Experimental setting **Type Text in Remote Desktop Apps**. Windows App copies the Mac clipboard to the remote PC only after you leave its window, so an automatic paste could insert old text. With the setting on, and Windows App frontmost, OpenWritr types the text key by key using your current Mac keyboard layout instead and leaves the clipboard untouched. The remote PC needs the same layout; characters without a plain key (emoji, Option-layer symbols) are skipped. Off by default
 
 ## [1.7.2] — 2026-10-09
 
