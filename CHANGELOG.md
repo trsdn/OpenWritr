@@ -5,6 +5,14 @@ All notable changes to OpenWritr will be documented in this file.
 Each release's notes on GitHub are generated from its section here, and the
 broker publication handoff fails when the section for a tag is missing or empty.
 
+## [1.7.4] — 2026-10-13
+
+### Fixed
+- Dictation with Bluetooth headsets such as AirPods Max no longer fails after the audio engine restarts a few times while the headset switches to its microphone profile. The microphone recovery now waits longer between attempts, allows more of them, and counts them per burst of changes instead of per recording
+
+### Changed
+- Microphone recovery logs each configuration change with the engine state, attempt count, and the device's transport, channels, and sample rate, so a failure can be diagnosed from the log
+
 ## [1.7.3] — 2026-10-13
 
 ### Fixed

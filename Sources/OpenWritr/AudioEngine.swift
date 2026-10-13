@@ -241,7 +241,7 @@ protocol AudioCapturing: AnyObject, Sendable {
 }
 
 final class AudioEngine: AudioCapturing, @unchecked Sendable {
-    private static let maximumRecoveryAttempts = 3
+    private static let recoveryPolicy = MicrophoneRecoveryPolicy()
     private let targetSampleRate: Double = 16_000
     private let captureClock = ContinuousClock()
     private let captureBuffer = CaptureBufferState()
@@ -261,6 +261,7 @@ final class AudioEngine: AudioCapturing, @unchecked Sendable {
     private var returnedGeneration: UInt64?
     private var activeDeviceID: AudioDeviceID?
     private var recoveryAttemptCount = 0
+    private var lastRecoveryAt: ContinuousClock.Instant?
     private var pendingConfigurationWork: DispatchWorkItem?
     private var selectedDeviceID: AudioDeviceID?
     private var configObserver: Any?
@@ -701,7 +702,7 @@ final class AudioEngine: AudioCapturing, @unchecked Sendable {
             returnedGeneration = nil
         }
         if case .idle = finalState {
-            recoveryAttemptCount = 0
+            resetRecoveryTracking()
         }
         transitionOnQueue(to: finalState, generation: generation)
     }
@@ -728,6 +729,23 @@ final class AudioEngine: AudioCapturing, @unchecked Sendable {
         }
     }
 
+    /// Recoveries are counted per burst of configuration changes: once a recovered engine has run
+    /// steadily, the next change starts a fresh count.
+    private func countedRecoveryAttemptsOnQueue() -> Int {
+        let elapsed = lastRecoveryAt.map { captureClock.now - $0 }
+        let counted = Self.recoveryPolicy.attemptsCounted(recoveryAttemptCount, sinceLastRecovery: elapsed)
+        if counted != recoveryAttemptCount {
+            recoveryAttemptCount = counted
+            lastRecoveryAt = nil
+        }
+        return counted
+    }
+
+    private func resetRecoveryTracking() {
+        recoveryAttemptCount = 0
+        lastRecoveryAt = nil
+    }
+
     private func scheduleConfigurationDecisionOnQueue(generation: UInt64) {
         guard !isShuttingDown, activeGeneration == generation else { return }
         switch lifecycleState {
@@ -742,8 +760,9 @@ final class AudioEngine: AudioCapturing, @unchecked Sendable {
             self?.handleConfigurationDecisionOnQueue(generation: generation)
         }
         pendingConfigurationWork = item
+        let delayMilliseconds = Self.recoveryPolicy.delayMilliseconds(afterAttempts: countedRecoveryAttemptsOnQueue())
         audioLog.debug("debounced configuration change for generation \(generation)")
-        lifecycleQueue.asyncAfter(deadline: .now() + .milliseconds(250), execute: item)
+        lifecycleQueue.asyncAfter(deadline: .now() + .milliseconds(delayMilliseconds), execute: item)
     }
 
     private func handleConfigurationDecisionOnQueue(generation: UInt64) {
@@ -767,12 +786,21 @@ final class AudioEngine: AudioCapturing, @unchecked Sendable {
                 return
             }
 
+            let attempts = countedRecoveryAttemptsOnQueue()
+            audioLog.notice(
+                """
+                configuration change for generation \(generation): \
+                engineRunning=\(self.engine?.isRunning ?? false) running=\(self.isRunning) \
+                attempts=\(attempts) \(AudioDiagnostics.deviceFormatSummary(for: deviceID))
+                """
+            )
+
             if let engine, isRunning, engine.isRunning {
                 audioLog.debug("benign configuration change for generation \(generation)")
                 return
             }
 
-            guard recoveryAttemptCount < Self.maximumRecoveryAttempts else {
+            guard Self.recoveryPolicy.allowsAnotherAttempt(after: attempts) else {
                 failActiveGenerationOnQueue(
                     generation,
                     error: .engineStartFailed("The audio engine stopped repeatedly during microphone recovery.")
@@ -780,13 +808,14 @@ final class AudioEngine: AudioCapturing, @unchecked Sendable {
                 return
             }
 
-            recoveryAttemptCount += 1
+            recoveryAttemptCount = attempts + 1
             transitionOnQueue(to: .recovering, generation: generation)
             try recoverEngineOnQueue(generation: generation)
             guard !shutdownWasRequested(), activeGeneration == generation else {
                 cleanupGenerationOnQueue(generation, discardSamples: true, finalState: .idle)
                 return
             }
+            lastRecoveryAt = captureClock.now
             transitionOnQueue(to: .capturing, generation: generation)
             audioLog.notice(
                 "recovered capture generation \(generation), attempt \(self.recoveryAttemptCount)"
@@ -1150,7 +1179,7 @@ final class AudioEngine: AudioCapturing, @unchecked Sendable {
         let generation = nextGeneration
         activeGeneration = generation
         returnedGeneration = nil
-        recoveryAttemptCount = 0
+        resetRecoveryTracking()
         transitionOnQueue(to: .starting, generation: generation)
 
         do {
@@ -1250,7 +1279,7 @@ final class AudioEngine: AudioCapturing, @unchecked Sendable {
                 activeGeneration = nil
                 returnedGeneration = nil
                 activeDeviceID = nil
-                recoveryAttemptCount = 0
+                resetRecoveryTracking()
                 transitionOnQueue(to: .idle, generation: handle.generation)
                 audioLog.notice("capture generation \(handle.generation) stopped with \(samples.count) samples")
                 continuation.resume(returning: samples)
@@ -1276,7 +1305,7 @@ final class AudioEngine: AudioCapturing, @unchecked Sendable {
             activeGeneration = nil
             returnedGeneration = nil
             activeDeviceID = nil
-            recoveryAttemptCount = 0
+            resetRecoveryTracking()
             removeConfigObserverOnQueue()
             stopEngineOnQueue()
             removeDeviceListListenersOnQueue()
