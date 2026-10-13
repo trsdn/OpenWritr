@@ -5,7 +5,7 @@ All notable changes to OpenWritr will be documented in this file.
 Each release's notes on GitHub are generated from its section here, and the
 broker publication handoff fails when the section for a tag is missing or empty.
 
-## [1.7.3] — 2026-10-10
+## [1.7.3] — 2026-10-13
 
 ### Fixed
 - Switching between Dock Only and Dock and Menu Bar no longer fails. macOS refuses to set an activation policy that is already in effect, and both Dock modes use the same one, so the change was rejected
