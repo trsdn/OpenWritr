@@ -126,8 +126,8 @@ struct SettingsView: View {
                 Text(
                     "Windows App copies your clipboard to the remote PC only after you leave its window, "
                         + "so a paste can insert old text. When Windows App is frontmost, OpenWritr types "
-                        + "the text as keystrokes instead and leaves your clipboard untouched. "
-                        + "Check the result in a harmless text field first."
+                        + "the text key by key instead and leaves your clipboard untouched. The remote PC "
+                        + "needs the same keyboard layout as this Mac. Emoji and symbols without a key are skipped."
                 )
                 .font(.caption)
                 .foregroundStyle(.secondary)

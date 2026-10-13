@@ -82,9 +82,11 @@ Normal Auto-Paste restores the original clipboard, including an empty clipboard,
 
 ### Remote desktop apps (experimental)
 
-Windows App copies the Mac clipboard to the remote PC only after you leave its window, even with clipboard redirection set to Bidirectional. A paste into the remote session can therefore insert old text. Turn on **Type Text in Remote Desktop Apps (Experimental)** in Settings: while Windows App is frontmost, Auto-Paste then types the text as keystrokes instead of pasting, and your clipboard is not touched. It applies only to Windows App (`com.microsoft.rdc.macos`), only with Auto-Paste on, and not to clipboard-only recordings (Option), which still copy.
+Windows App copies the Mac clipboard to the remote PC only after you leave its window, even with clipboard redirection set to Bidirectional. A paste into the remote session can therefore insert old text. Turn on **Type Text in Remote Desktop Apps (Experimental)** in Settings: while Windows App is frontmost, Auto-Paste then types the text key by key instead of pasting, and your clipboard is not touched. It applies only to Windows App (`com.microsoft.rdc.macos`), only with Auto-Paste on, and not to clipboard-only recordings (Option), which still copy.
 
-The option is off by default and was verified only against a native Mac text view; whether Windows App and the remote PC accept the keystrokes unchanged depends on the remote keyboard layout. Test it in a harmless text field first. Typing needs the same Accessibility permission as pasting.
+Windows App sends physical key codes and ignores the Unicode text of a key event, so OpenWritr presses the keys that produce each character on your **current Mac keyboard layout**. The remote PC must use the same keyboard layout, otherwise accents and symbols come out wrong. Only characters on the two base layers (no modifier, Shift) are typed: typographic quotes, dashes, and ellipses are replaced by their plain equivalents, and characters that need Option (such as `@`, `€`, or brackets on a German layout), dead keys, or emoji have no equivalent on the remote PC's layout and are skipped. The number of skipped characters is logged; the full text stays available in OpenWritr.
+
+The option is off by default and has not been verified against a real remote session by the author. Test it in a harmless text field first. Typing needs the same Accessibility permission as pasting.
 
 ## Install
 

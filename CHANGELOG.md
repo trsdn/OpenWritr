@@ -15,7 +15,7 @@ broker publication handoff fails when the section for a tag is missing or empty.
 - Microphone error logs now include a privacy-safe device summary (how the microphone was chosen, transport such as Bluetooth or USB, channels, sample rate, whether another app is using it, and microphone permission) so Core Audio failures can be diagnosed without asking for details. Device names and identifiers are never logged
 
 ### Added
-- Experimental setting **Type Text in Remote Desktop Apps**. Windows App copies the Mac clipboard to the remote PC only after you leave its window, so an automatic paste could insert old text. With the setting on, and Windows App frontmost, OpenWritr types the text as keystrokes instead and leaves the clipboard untouched. Off by default
+- Experimental setting **Type Text in Remote Desktop Apps**. Windows App copies the Mac clipboard to the remote PC only after you leave its window, so an automatic paste could insert old text. With the setting on, and Windows App frontmost, OpenWritr types the text key by key using your current Mac keyboard layout instead and leaves the clipboard untouched. The remote PC needs the same layout; characters without a plain key (emoji, Option-layer symbols) are skipped. Off by default
 
 ## [1.7.2] — 2026-10-09
 

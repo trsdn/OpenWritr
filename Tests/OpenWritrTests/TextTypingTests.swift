@@ -4,56 +4,115 @@ import Testing
 
 @Suite("Text typing plan")
 struct TextTypingPlanTests {
-    @Test func plainTextIsOneChunk() {
-        #expect(TextTypingPlan.units(for: "Hello world.") == [.text("Hello world.")])
-        #expect(TextTypingPlan.units(for: "").isEmpty)
+    private let layout: [Character: KeyStroke] = {
+        var map: [Character: KeyStroke] = [:]
+        map["a"] = KeyStroke(keyCode: 0, shift: false)
+        map["A"] = KeyStroke(keyCode: 0, shift: true)
+        map["b"] = KeyStroke(keyCode: 11, shift: false)
+        map["ä"] = KeyStroke(keyCode: 39, shift: false)
+        map[" "] = KeyStroke(keyCode: 49, shift: false)
+        map["\""] = KeyStroke(keyCode: 19, shift: true)
+        map["'"] = KeyStroke(keyCode: 42, shift: true)
+        map["-"] = KeyStroke(keyCode: 44, shift: false)
+        map["."] = KeyStroke(keyCode: 47, shift: false)
+        return map
+    }()
+
+    @Test func charactersMapToTheirKeysInOrder() {
+        let plan = TextTypingPlanner.plan(for: "aAb ä", layout: layout)
+
+        #expect(plan.strokes == [
+            KeyStroke(keyCode: 0, shift: false),
+            KeyStroke(keyCode: 0, shift: true),
+            KeyStroke(keyCode: 11, shift: false),
+            KeyStroke(keyCode: 49, shift: false),
+            KeyStroke(keyCode: 39, shift: false),
+        ])
+        #expect(plan.skippedCharacters == 0)
     }
 
     @Test func newlinesAndTabsBecomeKeyPresses() {
-        #expect(TextTypingPlan.units(for: "a\nb\r\nc\rd\te") == [
-            .text("a"), .returnKey, .text("b"), .returnKey, .text("c"), .returnKey,
-            .text("d"), .tabKey, .text("e"),
-        ])
-        #expect(TextTypingPlan.units(for: "\n\n") == [.returnKey, .returnKey])
+        let plan = TextTypingPlanner.plan(for: "a\nb\r\nc\rd\te", layout: layout)
+
+        #expect(plan.strokes.filter { $0 == TextTypingPlanner.returnStroke }.count == 3)
+        #expect(plan.strokes.filter { $0 == TextTypingPlanner.tabStroke }.count == 1)
+        #expect(plan.skippedCharacters == 3, "c, d and e are not in the synthetic layout")
     }
 
-    @Test func longTextIsSplitWithoutLosingOrReorderingCharacters() {
-        let text = "Ein längerer Satz mit Umlauten: äöü ß, and some English words."
-        let units = TextTypingPlan.units(for: text)
+    @Test func typographicCharactersAreReplacedByPlainOnes() {
+        let plan = TextTypingPlanner.plan(for: "\u{201E}a\u{201C} \u{2013} \u{2019}\u{2026}", layout: layout)
+        let quote = layout["\""]!
+        let apostrophe = layout["'"]!
+        let dash = layout["-"]!
+        let dot = layout["."]!
+        let space = layout[" "]!
+        let a = layout["a"]!
 
-        #expect(units.count > 1)
-        var rebuilt = ""
-        for unit in units {
-            guard case .text(let chunk) = unit else {
-                Issue.record("Unexpected key press in plain text")
-                return
-            }
-            #expect(chunk.utf16.count <= TextTypingPlan.maximumChunkUTF16Units)
-            rebuilt += chunk
-        }
-        #expect(rebuilt == text)
+        #expect(plan.strokes == [quote, a, quote, space, dash, space, apostrophe, dot, dot, dot])
+        #expect(plan.skippedCharacters == 0)
     }
 
-    @Test func chunksNeverSplitEmojiOrCombiningCharacters() {
-        let family = "👨‍👩‍👧‍👦"
-        let combining = "e\u{0301}"
-        let text = String(repeating: "x", count: 14) + family + combining + "tail"
-        let chunks = TextTypingPlan.units(for: text).compactMap { unit -> String? in
-            if case .text(let chunk) = unit { return chunk }
-            return nil
-        }
+    @Test func untypeableCharactersAreSkippedAndCounted() {
+        let plan = TextTypingPlanner.plan(for: "a😀b€", layout: layout)
 
-        #expect(chunks.joined() == text)
-        #expect(chunks.contains { $0.contains(family) })
-        #expect(chunks.contains { $0.contains(combining) })
-        for chunk in chunks {
-            #expect(chunk.utf16.count <= TextTypingPlan.maximumChunkUTF16Units
-                || chunk.count == 1)
-        }
+        #expect(plan.strokes == [layout["a"]!, layout["b"]!])
+        #expect(plan.skippedCharacters == 2)
+    }
+
+    @Test func replacementIsSkippedWhenTheLayoutLacksItsCharacters() {
+        var small = layout
+        small["\""] = nil
+
+        let plan = TextTypingPlanner.plan(for: "\u{201C}", layout: small)
+
+        #expect(plan.strokes.isEmpty)
+        #expect(plan.skippedCharacters == 1)
+    }
+
+    @Test func decomposedAccentsAreComposedBeforeMapping() {
+        let plan = TextTypingPlanner.plan(for: "a\u{0308}", layout: layout)
+
+        #expect(plan.strokes == [layout["ä"]!])
+        #expect(plan.skippedCharacters == 0)
     }
 
     @Test func onlyTheWindowsAppIsTreatedAsRemoteDesktop() {
         #expect(SystemRemoteDesktopDetector.bundleIdentifiers == ["com.microsoft.rdc.macos"])
+    }
+}
+
+@MainActor
+@Suite("System keyboard layout")
+struct SystemKeyboardLayoutTests {
+    @Test func everyMappedCharacterRoundTripsThroughTheRealLayout() throws {
+        let map = try #require(SystemKeyboardLayout.currentCharacterMap())
+
+        #expect(map.count > 40)
+        for (character, stroke) in map {
+            #expect(
+                SystemKeyboardLayout.character(forKeyCode: stroke.keyCode, shift: stroke.shift) == character,
+                "Key \(stroke.keyCode) shift \(stroke.shift) does not type \(character)"
+            )
+        }
+    }
+
+    @Test func lettersUseTheUnshiftedKeyAndCapitalsAddShift() throws {
+        let map = try #require(SystemKeyboardLayout.currentCharacterMap())
+        let lower = try #require(map["e"])
+        let upper = try #require(map["E"])
+
+        #expect(!lower.shift)
+        #expect(upper.shift)
+        #expect(lower.keyCode == upper.keyCode)
+    }
+
+    @Test func controlCharactersAreNeverMapped() throws {
+        let map = try #require(SystemKeyboardLayout.currentCharacterMap())
+
+        for character in map.keys {
+            let value = try #require(character.unicodeScalars.first?.value)
+            #expect(value >= 0x20 && value != 0x7F)
+        }
     }
 }
 
