@@ -77,7 +77,7 @@ final class HALInputCapture: @unchecked Sendable {
         }
         started = true
         captureLog.notice(
-            "started input capture on device \(self.deviceID) \(AudioDiagnostics.deviceFormatSummary(for: self.deviceID))"
+            "started input capture on device \(self.deviceID) \(AudioDiagnostics.deviceFormatSummary(for: self.deviceID), privacy: .public)"
         )
     }
 
