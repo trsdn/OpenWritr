@@ -22,6 +22,111 @@ struct AppViewModelDictationFlowTests {
         #expect(viewModel.state.isReady)
     }
 
+    @Test func lastDictationIsNotKeptUnlessEnabled() async {
+        let dependencies = makeDependencies(
+            samples: [audibleSamples(count: 16_000)],
+            transcriptions: [.success("Synthetic transcript.")]
+        )
+        let viewModel = dependencies.makeViewModel()
+        defer { viewModel.shutdown() }
+
+        await recordAndStop(viewModel)
+        await viewModel.pasteLastDictation()
+
+        #expect(viewModel.lastDictation == nil)
+        #expect(!viewModel.canPasteLastDictation)
+        #expect(dependencies.paster.pastedTexts == ["Synthetic transcript."])
+    }
+
+    @Test(arguments: [false, true])
+    func keptDictationCanBePastedAgain(autoPasteEnabled: Bool) async {
+        let dependencies = makeDependencies(
+            samples: [audibleSamples(count: 16_000)],
+            transcriptions: [.success("Synthetic transcript.")]
+        )
+        let viewModel = dependencies.makeViewModel()
+        defer { viewModel.shutdown() }
+        viewModel.keepLastDictationEnabled = true
+        viewModel.autoPasteEnabled = autoPasteEnabled
+
+        await recordAndStop(viewModel)
+        #expect(viewModel.canPasteLastDictation)
+        await viewModel.pasteLastDictation()
+
+        let expectedFirstPaste = autoPasteEnabled ? ["Synthetic transcript."] : []
+        #expect(dependencies.paster.pastedTexts == expectedFirstPaste + ["Synthetic transcript."])
+        #expect(viewModel.state.isReady)
+    }
+
+    @Test func dictationIsKeptWhenThePasteFailed() async {
+        let dependencies = makeDependencies(
+            samples: [audibleSamples(count: 16_000)],
+            transcriptions: [.success("Synthetic transcript.")],
+            pasteOutcomes: [.cancelled]
+        )
+        let viewModel = dependencies.makeViewModel()
+        defer { viewModel.shutdown() }
+        viewModel.keepLastDictationEnabled = true
+
+        await recordAndStop(viewModel)
+        #expect(dependencies.paster.pastedTexts.isEmpty)
+        viewModel.dismissRuntimeError()
+        await waitUntil { viewModel.state.isReady }
+        await viewModel.pasteLastDictation()
+
+        #expect(dependencies.paster.pastedTexts == ["Synthetic transcript."])
+    }
+
+    @Test func turningTheSettingOffDiscardsTheKeptDictation() async {
+        let dependencies = makeDependencies(
+            samples: [audibleSamples(count: 16_000)],
+            transcriptions: [.success("Synthetic transcript.")]
+        )
+        let viewModel = dependencies.makeViewModel()
+        defer { viewModel.shutdown() }
+        viewModel.setKeepLastDictation(true)
+        defer { viewModel.setKeepLastDictation(false) }
+
+        await recordAndStop(viewModel)
+        #expect(viewModel.lastDictation == "Synthetic transcript.")
+        viewModel.setKeepLastDictation(false)
+
+        #expect(viewModel.lastDictation == nil)
+        #expect(!viewModel.canPasteLastDictation)
+    }
+
+    @Test func shuttingDownDiscardsTheKeptDictation() async {
+        let dependencies = makeDependencies(
+            samples: [audibleSamples(count: 16_000)],
+            transcriptions: [.success("Synthetic transcript.")]
+        )
+        let viewModel = dependencies.makeViewModel()
+        viewModel.keepLastDictationEnabled = true
+
+        await recordAndStop(viewModel)
+        viewModel.shutdown()
+
+        #expect(viewModel.lastDictation == nil)
+    }
+
+    @Test(arguments: [false, true])
+    func clipboardOnlyDictationIsKeptForPastingToo(autoPasteEnabled: Bool) async {
+        let dependencies = makeDependencies(
+            samples: [audibleSamples(count: 16_000)],
+            transcriptions: [.success("Synthetic copied transcript.")]
+        )
+        let viewModel = dependencies.makeViewModel()
+        defer { viewModel.shutdown() }
+        viewModel.keepLastDictationEnabled = true
+        viewModel.autoPasteEnabled = autoPasteEnabled
+
+        await recordAndStop(viewModel, outputDestination: .clipboard)
+        await viewModel.pasteLastDictation()
+
+        #expect(dependencies.paster.copiedTexts == ["Synthetic copied transcript."])
+        #expect(dependencies.paster.pastedTexts == ["Synthetic copied transcript."])
+    }
+
     @Test(arguments: [false, true])
     func clipboardOnlyCopiesWithoutPasting(autoPasteEnabled: Bool) async {
         let dependencies = makeDependencies(
@@ -517,6 +622,7 @@ private struct DictationDependencies {
             errorLogger: errorLogger,
             startsOperational: true,
             doneDisplayDuration: .milliseconds(1),
+            pasteAgainDelay: .milliseconds(1),
             transientErrorDisplayDuration: transientErrorDisplayDuration,
             audioDiagnostics: { selected in
                 "selection=\(selected.map { "explicit:\($0)" } ?? "system-default") synthetic"

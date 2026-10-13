@@ -12,6 +12,9 @@ broker publication handoff fails when the section for a tag is missing or empty.
 - Recording starts faster (about 70 ms instead of about 250 ms on the built-in microphone)
 - The start tone and the Listening overlay now wait for the first audio, so with a Bluetooth headset they appear when speech is actually being captured. Before, the tone played as soon as the capture was requested, while the headset was still switching its output profile, and was not heard. The capture records the whole time, so nothing is lost while waiting
 
+### Added
+- **Keep Last Dictation** in the menu bar menu. When it is on, OpenWritr keeps the text of the last dictation in memory only, never on disk or in the logs, and **Paste Last Dictation** pastes it again into the app in front. Use it when a long dictation could not be pasted because the target window was gone. It follows the same rules as a fresh dictation (typing in Windows App when that setting is on), pastes even with Auto-Paste off, and applies to clipboard-only recordings too. Turning the setting off or quitting discards the text. Off by default
+
 ### Changed
 - Microphone capture no longer depends on the output device
 

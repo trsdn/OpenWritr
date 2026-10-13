@@ -199,6 +199,20 @@ struct MenuBarView: View {
             }
         ))
         .disabled(!isReady)
+
+        Toggle("Keep Last Dictation", isOn: Binding(
+            get: { viewModel.keepLastDictationEnabled },
+            set: { viewModel.setKeepLastDictation($0) }
+        ))
+        .help("Keeps the last dictated text in memory only, so you can paste it again.")
+        .disabled(!isReady)
+
+        if viewModel.keepLastDictationEnabled {
+            Button("Paste Last Dictation") {
+                Task { await viewModel.pasteLastDictation() }
+            }
+            .disabled(!viewModel.canPasteLastDictation)
+        }
     }
 
     @ViewBuilder

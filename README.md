@@ -80,6 +80,10 @@ Clipboard-only works even with Auto-Paste off. Successful copying intentionally 
 
 Normal Auto-Paste restores the original clipboard, including an empty clipboard, unless another application or the user has changed it. Output errors are shown explicitly; delayed restoration errors appear as a dismissible menu warning. With Auto-Paste off, standard recordings remain inside OpenWritr and are not copied automatically.
 
+### Keep Last Dictation
+
+If a long dictation could not be pasted because the target window was gone, turn on **Keep Last Dictation** in the menu bar menu. OpenWritr then keeps the text of the last dictation in memory only: it is never written to disk or the logs, turning the setting off or quitting discards it, and it is kept even when pasting failed. **Paste Last Dictation** (shown while the setting is on) pastes it again into the app in front, with the same routing as a fresh dictation, including typing in Windows App when that setting is on. It pastes even with Auto-Paste off, and it also covers clipboard-only recordings. The setting is off by default.
+
 ### Remote desktop apps (experimental)
 
 Windows App copies the Mac clipboard to the remote PC only after you leave its window, even with clipboard redirection set to Bidirectional. A paste into the remote session can therefore insert old text. Turn on **Type Text in Remote Desktop Apps (Experimental)** in Settings: while Windows App is frontmost, Auto-Paste then types the text key by key instead of pasting, and your clipboard is not touched. It applies only to Windows App (`com.microsoft.rdc.macos`), only with Auto-Paste on, and not to clipboard-only recordings (Option), which still copy.

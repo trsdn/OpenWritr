@@ -113,6 +113,8 @@ final class AppViewModel {
     private static let customPromptsPreferenceKey = "enhancementCustomPromptsV1"
     private static let customPromptsStoreVersion = 1
     static let defaultDoneDisplayDuration: Duration = .milliseconds(600)
+    /// Lets the menu bar menu close so the paste reaches the app that was frontmost.
+    static let defaultPasteAgainDelay: Duration = .milliseconds(350)
     static let defaultTransientErrorDisplayDuration: Duration = .seconds(2.5)
     var state: AppState = .idle
     var lastTranscription: String = ""
@@ -130,6 +132,9 @@ final class AppViewModel {
     var autoPasteEnabled: Bool = true
     /// Experimental: type instead of paste when a remote desktop app is frontmost.
     var typeIntoRemoteDesktopsEnabled: Bool = false
+    /// Keeps the last dictated text in memory so it can be pasted again. Never persisted or logged.
+    var keepLastDictationEnabled: Bool = false
+    private(set) var lastDictation: String?
     var launchAtLogin: Bool = false
     var appPresence: AppPresence
     var hotkeyChoice: HotkeyChoice = .fn
@@ -163,6 +168,7 @@ final class AppViewModel {
     private let captureDrainTimeout: Duration = .milliseconds(350)
     private let firstAudioTimeout: Duration = .seconds(2)
     private let doneDisplayDuration: Duration
+    private let pasteAgainDelay: Duration
     private let transientErrorDisplayDuration: Duration
     private let errorLogger: any ErrorLogging
     private let audioDiagnostics: (AudioDeviceID?) -> String
@@ -200,6 +206,7 @@ final class AppViewModel {
         errorLogger: any ErrorLogging = UnifiedErrorLogger(category: "AppViewModel"),
         startsOperational: Bool = false,
         doneDisplayDuration: Duration = AppViewModel.defaultDoneDisplayDuration,
+        pasteAgainDelay: Duration = AppViewModel.defaultPasteAgainDelay,
         transientErrorDisplayDuration: Duration = AppViewModel.defaultTransientErrorDisplayDuration,
         applicationPresenceController: any ApplicationPresenceControlling =
             SystemApplicationPresenceController(),
@@ -219,6 +226,7 @@ final class AppViewModel {
         self.errorLogger = errorLogger
         self.audioDiagnostics = audioDiagnostics
         self.doneDisplayDuration = doneDisplayDuration
+        self.pasteAgainDelay = pasteAgainDelay
         self.transientErrorDisplayDuration = transientErrorDisplayDuration
         self.applicationPresenceController = applicationPresenceController
         self.appPresenceDefaults = appPresenceDefaults
@@ -490,6 +498,7 @@ final class AppViewModel {
         if defaults.object(forKey: "typeIntoRemoteDesktopsEnabled") != nil {
             typeIntoRemoteDesktopsEnabled = defaults.bool(forKey: "typeIntoRemoteDesktopsEnabled")
         }
+        keepLastDictationEnabled = defaults.bool(forKey: "keepLastDictationEnabled")
         if let raw = defaults.string(forKey: "hotkeyChoice"),
            let choice = HotkeyChoice(rawValue: raw) {
             hotkeyChoice = choice
@@ -731,6 +740,47 @@ final class AppViewModel {
 
     func dismissClipboardWarning() {
         clipboardWarning = nil
+    }
+
+    // MARK: - Last dictation
+
+    var canPasteLastDictation: Bool {
+        guard keepLastDictationEnabled, isOperational, !didShutdown,
+              let lastDictation, !lastDictation.isEmpty,
+              case .ready = state
+        else { return false }
+        return true
+    }
+
+    /// Turning the setting off discards the kept text immediately.
+    func setKeepLastDictation(_ enabled: Bool) {
+        keepLastDictationEnabled = enabled
+        savePreference("keepLastDictationEnabled", value: enabled)
+        if !enabled {
+            lastDictation = nil
+        }
+    }
+
+    /// Pastes the kept dictation into the frontmost app again, using the same routing as a
+    /// fresh dictation (typing for remote desktop apps, otherwise paste) regardless of Auto-Paste,
+    /// because the user asked for it explicitly.
+    func pasteLastDictation() async {
+        guard canPasteLastDictation else { return }
+        do {
+            try await Task.sleep(for: pasteAgainDelay)
+        } catch {
+            return
+        }
+        guard canPasteLastDictation, let text = lastDictation else { return }
+
+        if pasteManager.outputText(
+            text,
+            destination: .standard,
+            autoPasteEnabled: true,
+            typeIntoRemoteDesktops: typeIntoRemoteDesktopsEnabled
+        ) == .cancelled {
+            presentPasteCancelledError()
+        }
     }
 
     private func handleClipboardRestoreFailure(_ error: PasteManagerError) {
@@ -1689,6 +1739,9 @@ final class AppViewModel {
         lastTranscription = text
         lastRawTranscription = rawText ?? ""
         lastWasEnhanced = wasEnhanced
+        if keepLastDictationEnabled {
+            lastDictation = text
+        }
 
         if pasteManager.outputText(
             text,
@@ -1920,6 +1973,7 @@ final class AppViewModel {
         pasteManager.flushPendingRestore()
         recoverableRawTranscription = nil
         recoverableOutputDestination = .standard
+        lastDictation = nil
         overlayPanel.dismiss()
         updateManager.stopAutomaticChecks()
 
