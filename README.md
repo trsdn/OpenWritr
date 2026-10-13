@@ -86,7 +86,7 @@ Windows App copies the Mac clipboard to the remote PC only after you leave its w
 
 Windows App sends physical key codes and ignores the Unicode text of a key event, so OpenWritr presses the keys that produce each character on your **current Mac keyboard layout**. The remote PC must use the same keyboard layout, otherwise accents and symbols come out wrong. Only characters on the two base layers (no modifier, Shift) are typed: typographic quotes, dashes, and ellipses are replaced by their plain equivalents, and characters that need Option (such as `@`, `€`, or brackets on a German layout), dead keys, or emoji have no equivalent on the remote PC's layout and are skipped. The number of skipped characters is logged; the full text stays available in OpenWritr.
 
-The option is off by default and has not been verified against a real remote session by the author. Test it in a harmless text field first. Typing needs the same Accessibility permission as pasting.
+The option is off by default. It was verified by the maintainer against a real Windows 365 Cloud PC session through Windows App 11.4.0 with matching German keyboard layouts; other remote layouts, clients, and character sets have not been tested. Test it in a harmless text field first. Typing needs the same Accessibility permission as pasting.
 
 ## Install
 
