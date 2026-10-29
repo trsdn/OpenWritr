@@ -1,6 +1,7 @@
 import Carbon.HIToolbox
 import Cocoa
 import CoreGraphics
+import IOKit.hidsystem
 import os.log
 
 private let typingLog = Logger(subsystem: "com.openwritr.app", category: "TextTyping")
@@ -208,6 +209,10 @@ enum TypingDelivery {
 
 struct SystemTextTyper: TextTyping {
     private static let shiftKeyCode: CGKeyCode = 0x38
+    // Remote clients can track left/right modifiers using the device-dependent flags.
+    private static let shiftFlags = CGEventFlags.maskShift.union(
+        CGEventFlags(rawValue: UInt64(NX_DEVICELSHIFTKEYMASK))
+    )
     /// Remote desktop clients can drop key events that arrive faster than they are forwarded.
     private nonisolated static let eventSpacing: useconds_t = 3_000
     private nonisolated static let queue = DispatchQueue(label: "com.openwritr.text-typing")
@@ -255,11 +260,11 @@ struct SystemTextTyper: TextTyping {
         }
     }
 
-    private static func eventGroups(for strokes: [KeyStroke], source: CGEventSource) -> [[CGEvent]]? {
+    static func eventGroups(for strokes: [KeyStroke], source: CGEventSource) -> [[CGEvent]]? {
         var groups: [[CGEvent]] = []
         for stroke in strokes {
             var events: [CGEvent] = []
-            let flags: CGEventFlags = stroke.shift ? .maskShift : []
+            let flags: CGEventFlags = stroke.shift ? shiftFlags : []
             if stroke.shift {
                 guard let shiftDown = modifierEvent(source: source, down: true) else { return nil }
                 events.append(shiftDown)
@@ -283,10 +288,10 @@ struct SystemTextTyper: TextTyping {
     /// Shift is sent as a real modifier key event, because a remote desktop client tracks modifier
     /// changes rather than trusting the flags of a key event.
     private static func modifierEvent(source: CGEventSource, down: Bool) -> CGEvent? {
-        guard let event = CGEvent(source: source) else { return nil }
+        guard let event = CGEvent(keyboardEventSource: source, virtualKey: shiftKeyCode, keyDown: down)
+        else { return nil }
         event.type = .flagsChanged
-        event.setIntegerValueField(.keyboardEventKeycode, value: Int64(shiftKeyCode))
-        event.flags = down ? .maskShift : []
+        event.flags = down ? shiftFlags : []
         return event
     }
 }
