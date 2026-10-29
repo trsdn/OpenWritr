@@ -130,6 +130,41 @@ struct TextTypingPlanTests {
 }
 
 @MainActor
+@Suite("Remote keyboard events")
+struct RemoteKeyboardEventTests {
+    @Test func germanQuestionMarkAndCapitalsCarryLeftShiftUntilKeyRelease() throws {
+        let layout: [Character: KeyStroke] = [
+            "?": KeyStroke(keyCode: 0x1B, shift: true),
+            "ß": KeyStroke(keyCode: 0x1B, shift: false),
+            "A": KeyStroke(keyCode: 0, shift: true),
+            "a": KeyStroke(keyCode: 0, shift: false),
+        ]
+        let plan = TextTypingPlanner.plan(for: "?ßAa", layout: layout)
+        let source = try #require(CGEventSource(stateID: .privateState))
+        let groups = try #require(SystemTextTyper.eventGroups(for: plan.strokes, source: source))
+
+        #expect(groups.count == 4)
+        for index in [0, 2] {
+            let events = groups[index]
+            #expect(events.map(\.type) == [.flagsChanged, .keyDown, .keyUp, .flagsChanged])
+            #expect(events.map { $0.getIntegerValueField(.keyboardEventKeycode) } == [
+                0x38, Int64(plan.strokes[index].keyCode), Int64(plan.strokes[index].keyCode), 0x38,
+            ])
+            for event in events.prefix(3) {
+                #expect(event.flags.contains(.maskShift))
+                #expect(event.flags.rawValue & 0x00000002 != 0, "The left Shift flag must reach the remote client")
+                #expect(event.flags.rawValue & 0x00000004 == 0, "Right Shift is not pressed")
+            }
+            #expect(events[3].flags.isEmpty, "Release Shift after the character's key-up")
+        }
+        for index in [1, 3] {
+            #expect(groups[index].map(\.type) == [.keyDown, .keyUp])
+            #expect(groups[index].allSatisfy { $0.flags.isEmpty })
+        }
+    }
+}
+
+@MainActor
 @Suite("System keyboard layout")
 struct SystemKeyboardLayoutTests {
     @Test func everyMappedCharacterRoundTripsThroughTheRealLayout() throws {

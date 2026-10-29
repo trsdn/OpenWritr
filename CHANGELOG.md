@@ -5,6 +5,11 @@ All notable changes to OpenWritr will be documented in this file.
 Each release's notes on GitHub are generated from its section here, and the
 broker publication handoff fails when the section for a tag is missing or empty.
 
+## [1.7.5] — 2026-10-29
+
+### Fixed
+- Typing into Windows App (**Type Text in Remote Desktop Apps**) now produces shifted characters correctly. OpenWritr's simulated Shift key did not mark which Shift key was pressed, so the remote PC could receive the unshifted key instead: on a German layout `?` arrived as `ß`. Shift is now sent as the left Shift key, like a real key press
+
 ## [1.7.4] — 2026-10-13
 
 ### Fixed
