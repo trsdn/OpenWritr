@@ -22,4 +22,4 @@ permissions:
 
 jobs:
   conformance:
-    uses: trsdn/.github/.github/workflows/conformance.yml@7ae40970501223b3ea4e97ca8056cff627ffab79 # trsdn/.github#77
+    uses: trsdn/.github/.github/workflows/conformance.yml@91e111bd0f462be7d5f817ec306cbc457066107b # trsdn/.github#77
