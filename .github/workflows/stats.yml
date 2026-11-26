@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   stats:
-    uses: trsdn/.github/.github/workflows/repo-stats.yml@56a792f661ea87ecd98fbe7b11e292690e8fc721 # v1.21.0
+    uses: trsdn/.github/.github/workflows/repo-stats.yml@91e111bd0f462be7d5f817ec306cbc457066107b # v1.28.2
     with:
       generator-ref: 56a792f661ea87ecd98fbe7b11e292690e8fc721
       output-dir: .github/stats
